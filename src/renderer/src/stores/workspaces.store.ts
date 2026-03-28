@@ -6,7 +6,7 @@ interface WorkspacesState {
   workspaces: Workspace[]
 
   loadWorkspaces: (projectId: string) => Promise<void>
-  createWorkspace: (input: CreateWorkspaceInput) => Promise<void>
+  createWorkspace: (input: CreateWorkspaceInput) => Promise<Workspace>
   archiveWorkspace: (id: string) => Promise<void>
 }
 
@@ -21,6 +21,7 @@ export const useWorkspacesStore = create<WorkspacesState>((set) => ({
   createWorkspace: async (input) => {
     const workspace = await workspacesApi.create(input)
     set((state) => ({ workspaces: [...state.workspaces, workspace] }))
+    return workspace
   },
 
   archiveWorkspace: async (id) => {

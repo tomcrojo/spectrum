@@ -178,6 +178,38 @@ dev-browser http://localhost:5173/
 
 If you get stuck on implementation issues, use the **codex** CLI to ask for help.
 
+## QA Protocol for AI Agents
+
+**After completing any task or phase, launch a subagent to perform a QA report.** This ensures quality and catches regressions before handing off to the next person.
+
+### QA Checklist Template
+
+When launching the QA subagent, include:
+
+1. **Builds without errors** — `npm run build` completes successfully
+2. **App launches** — `ELECTRON_RUN_AS_NODE= ./node_modules/.bin/electron .` runs without crashes
+3. **Visual inspection** — Use `dev-browser http://localhost:5173/` to screenshot key UI screens
+4. **Feature verification** — Test the specific features added in the task
+5. **Regression check** — Verify existing features still work (project CRUD, task list, sidebar nav)
+6. **Database integrity** — Check that SQLite schema is correct and migrations applied
+7. **Console errors** — No TypeScript errors, no React warnings, no runtime exceptions in dev tools
+8. **File structure** — New files are in the right places, imports are correct
+
+### Example QA Subagent Prompt
+
+```
+Run a QA report for Phase 1 completion:
+1. Build the project and verify no errors
+2. Start npm run dev, use dev-browser to screenshot the app
+3. Create a new project via the modal, verify it appears in sidebar
+4. Add tasks to the project, verify they persist
+5. Check the SQLite database was created with correct schema
+6. Verify no console errors or TypeScript issues
+Provide a detailed report of pass/fail for each item.
+```
+
+This keeps the codebase stable and catches issues early.
+
 ## Database Schema
 
 ```sql

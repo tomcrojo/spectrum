@@ -1,5 +1,6 @@
 import { cn } from '@renderer/lib/cn'
 import { ProgressIcon } from '@renderer/components/shared/ProgressIcon'
+import { useUiStore } from '@renderer/stores/ui.store'
 import type { Project } from '@shared/project.types'
 
 interface ProjectCardProps {
@@ -11,6 +12,20 @@ interface ProjectCardProps {
 const progressLabels = ['Starting', 'In Progress', 'Almost Done', 'Complete'] as const
 
 export function ProjectCard({ project, active, onClick }: ProjectCardProps) {
+  const { showProjectPage, toggleProjectPage } = useUiStore()
+
+  const handleArrowClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!active) {
+      // If clicking arrow on inactive project, first select it then show project page
+      onClick()
+      // Small delay to let the project become active, then show project page
+      setTimeout(() => useUiStore.getState().setShowProjectPage(true), 0)
+    } else {
+      toggleProjectPage()
+    }
+  }
+
   return (
     <button
       onClick={onClick}
@@ -27,16 +42,24 @@ export function ProjectCard({ project, active, onClick }: ProjectCardProps) {
         <span className="text-sm font-medium text-text-primary truncate flex-1">
           {project.name}
         </span>
-        <svg
+        <div
+          onClick={handleArrowClick}
           className={cn(
-            'w-3 h-3 text-text-muted transition-opacity',
+            'no-drag p-0.5 rounded transition-all hover:bg-bg-hover',
             active ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'
           )}
-          viewBox="0 0 12 12"
-          fill="none"
         >
-          <path d="M4.5 3L7.5 6L4.5 9" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+          <svg
+            className={cn(
+              'w-3 h-3 text-text-muted transition-transform duration-200',
+              active && showProjectPage && 'rotate-180'
+            )}
+            viewBox="0 0 12 12"
+            fill="none"
+          >
+            <path d="M4.5 3L7.5 6L4.5 9" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
       </div>
       <div className="mt-0.5 ml-5 text-xs text-text-muted truncate">
         {progressLabels[project.progress]}

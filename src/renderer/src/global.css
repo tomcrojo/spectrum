@@ -51,3 +51,10 @@ textarea,
 [contenteditable] {
   user-select: text;
 }
+
+/* Dotted grid canvas background */
+.canvas-grid {
+  background-image: radial-gradient(circle, var(--color-border) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-color: var(--color-bg);
+}

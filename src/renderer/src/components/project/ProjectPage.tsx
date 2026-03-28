@@ -8,7 +8,7 @@ import type { Project } from '@shared/project.types'
 import { projectsApi } from '@renderer/lib/ipc'
 
 export function ProjectPage() {
-  const { activeProjectId } = useUiStore()
+  const { activeProjectId, showProjectPage, setShowProjectPage } = useUiStore()
   const [project, setProject] = useState<Project | null>(null)
   const { projects } = useProjectsStore()
 
@@ -20,64 +20,73 @@ export function ProjectPage() {
     projectsApi.get(activeProjectId).then((p) => setProject(p))
   }, [activeProjectId, projects])
 
-  if (!activeProjectId || !project) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-4xl mb-4 opacity-20">🐛</div>
-          <p className="text-sm text-text-muted">
-            Select a project or create a new one
-          </p>
-        </div>
-      </div>
-    )
+  if (!showProjectPage || !activeProjectId || !project) {
+    return null
   }
 
   return (
-    <div className="flex-1 overflow-y-auto">
-      <div className="max-w-2xl mx-auto px-6 py-8">
-        <ProjectHeader project={project} />
+    <div className="w-[420px] flex-shrink-0 bg-bg-surface border-l border-border-subtle flex flex-col h-full">
+      {/* Header with close button */}
+      <div className="flex items-center justify-between px-4 pt-4 pb-2">
+        <h2 className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+          Project Details
+        </h2>
+        <button
+          onClick={() => setShowProjectPage(false)}
+          className="text-text-muted hover:text-text-primary transition-colors p-1 rounded hover:bg-bg-hover"
+        >
+          <svg className="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none">
+            <path d="M3 3L11 11M11 3L3 11" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+          </svg>
+        </button>
+      </div>
 
-        <div className="space-y-8">
-          {/* Open Workspaces */}
-          <section className="pb-6 border-b border-border-subtle">
-            <WorkspaceList projectId={project.id} />
-          </section>
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="px-4 py-4">
+          <ProjectHeader project={project} />
 
-          {/* Tasks */}
-          <section className="pb-6 border-b border-border-subtle">
-            <TaskList projectId={project.id} />
-          </section>
+          <div className="space-y-8">
+            {/* Open Workspaces */}
+            <section className="pb-6 border-b border-border-subtle">
+              <WorkspaceList projectId={project.id} />
+            </section>
 
-          {/* Variables & Secrets — placeholder */}
-          <section className="pb-6 border-b border-border-subtle">
-            <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">
-              Variables & Secrets
-            </h3>
-            <p className="text-xs text-text-muted">
-              Coming in Phase 4
-            </p>
-          </section>
+            {/* Tasks */}
+            <section className="pb-6 border-b border-border-subtle">
+              <TaskList projectId={project.id} />
+            </section>
 
-          {/* Decisions — placeholder */}
-          <section className="pb-6 border-b border-border-subtle">
-            <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">
-              Decisions
-            </h3>
-            <p className="text-xs text-text-muted">
-              Coming in Phase 4
-            </p>
-          </section>
+            {/* Variables & Secrets — placeholder */}
+            <section className="pb-6 border-b border-border-subtle">
+              <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">
+                Variables & Secrets
+              </h3>
+              <p className="text-xs text-text-muted">
+                Coming in Phase 4
+              </p>
+            </section>
 
-          {/* Notes — placeholder */}
-          <section className="pb-6">
-            <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">
-              Notes
-            </h3>
-            <p className="text-xs text-text-muted">
-              Coming in Phase 4
-            </p>
-          </section>
+            {/* Decisions — placeholder */}
+            <section className="pb-6 border-b border-border-subtle">
+              <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">
+                Decisions
+              </h3>
+              <p className="text-xs text-text-muted">
+                Coming in Phase 4
+              </p>
+            </section>
+
+            {/* Notes — placeholder */}
+            <section className="pb-6">
+              <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">
+                Notes
+              </h3>
+              <p className="text-xs text-text-muted">
+                Coming in Phase 4
+              </p>
+            </section>
+          </div>
         </div>
       </div>
     </div>

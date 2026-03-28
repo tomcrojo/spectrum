@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import { createMainWindow } from './windows'
 import { initDatabase, closeDatabase } from './db/database'
 import { registerAllHandlers } from './ipc'
+import { closeAllPtys } from './pty/PtyManager'
 
 app.whenReady().then(() => {
   // Initialize database
@@ -20,6 +21,7 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  closeAllPtys()
   closeDatabase()
   if (process.platform !== 'darwin') {
     app.quit()
