@@ -10,11 +10,13 @@
 
 import { WebSocketServer, WebSocket } from 'ws'
 import Database from 'better-sqlite3'
+import { execFileSync } from 'child_process'
 import { join } from 'path'
 import { readFileSync, readdirSync, existsSync, mkdirSync } from 'fs'
 import { homedir, tmpdir } from 'os'
 import { nanoid } from 'nanoid'
 import * as pty from 'node-pty'
+import { getT3CodeThreadInfo, startT3Code, stopT3Code, stopAllT3Code } from '../main/t3code/T3CodeManager'
 
 // ─── Database Setup ────────────────────────────────────────────────────
 
@@ -101,8 +103,23 @@ function rowToWorkspace(row: any) {
     layoutState: JSON.parse(row.layout_state),
     archived: Boolean(row.archived),
     createdAt: row.created_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
+    lastPanelEditedAt: row.last_panel_edited_at ?? null
   }
+}
+
+function listWorkspacesForProject(args: string | { projectId: string; includeArchived?: boolean }) {
+  const projectId = typeof args === 'string' ? args : args.projectId
+  const includeArchived = typeof args === 'string' ? false : Boolean(args.includeArchived)
+
+  return db
+    .prepare(
+      includeArchived
+        ? 'SELECT * FROM workspaces WHERE project_id = ? ORDER BY archived ASC, created_at ASC'
+        : 'SELECT * FROM workspaces WHERE project_id = ? AND archived = 0 ORDER BY created_at ASC'
+    )
+    .all(projectId)
+    .map(rowToWorkspace)
 }
 
 // ─── PTY Manager ──────────────────────────────────────────────────────
@@ -119,6 +136,54 @@ const ptys = new Map<string, PtyInstance>()
 function getShell(): string {
   if (process.platform === 'win32') return 'powershell.exe'
   return process.env.SHELL || '/bin/zsh'
+}
+
+function selectDirectoryInBrowserMode(): string | null {
+  try {
+    if (process.platform === 'darwin') {
+      const output = execFileSync(
+        'osascript',
+        [
+          '-e',
+          'POSIX path of (choose folder with prompt "Select a project folder")'
+        ],
+        { encoding: 'utf8' }
+      )
+      const directory = output.trim()
+      return directory.length > 0 ? directory.replace(/\/$/, '') : null
+    }
+
+    if (process.platform === 'linux') {
+      const output = execFileSync(
+        'zenity',
+        ['--file-selection', '--directory', '--title=Select a project folder'],
+        { encoding: 'utf8' }
+      )
+      const directory = output.trim()
+      return directory.length > 0 ? directory : null
+    }
+
+    if (process.platform === 'win32') {
+      const output = execFileSync(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-Command',
+          "[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null; $dialog = New-Object System.Windows.Forms.FolderBrowserDialog; if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $dialog.SelectedPath }"
+        ],
+        { encoding: 'utf8' }
+      )
+      const directory = output.trim()
+      return directory.length > 0 ? directory : null
+    }
+  } catch (error) {
+    const details = error instanceof Error ? error.message : String(error)
+    if (!details.includes('execution error: User canceled')) {
+      console.warn(`[dev-server] Failed to open directory picker: ${details}`)
+    }
+  }
+
+  return null
 }
 
 // ─── IPC Handler Map ──────────────────────────────────────────────────
@@ -256,25 +321,119 @@ const handlers: Record<string, Handler> = {
     return result.changes > 0
   },
 
-  'workspace:list': (projectId: string) => {
-    return db
-      .prepare(
-        'SELECT * FROM workspaces WHERE project_id = ? AND archived = 0 ORDER BY created_at ASC'
-      )
-      .all(projectId)
-      .map(rowToWorkspace)
+  'workspace:list': (args: string | { projectId: string; includeArchived?: boolean }) => {
+    return listWorkspacesForProject(args)
   },
 
   'workspace:create': (input: any) => {
     const id = nanoid()
     const now = new Date().toISOString()
-    const defaultLayout = JSON.stringify({ panels: [], sizes: [] })
+    const defaultLayout = JSON.stringify(input.layoutState ?? { panels: [], sizes: [] })
+    const parsedLayout = JSON.parse(defaultLayout)
+    const lastPanelEditedAt = parsedLayout.panels.length > 0 ? now : null
     db.prepare(
-      `INSERT INTO workspaces (id, project_id, name, layout_state, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(id, input.projectId, input.name, defaultLayout, now, now)
+      `INSERT INTO workspaces (
+        id,
+        project_id,
+        name,
+        layout_state,
+        created_at,
+        updated_at,
+        last_panel_edited_at
+      )
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, input.projectId, input.name, defaultLayout, now, now, lastPanelEditedAt)
     return rowToWorkspace(
       db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id)
+    )
+  },
+
+  'workspace:update': (input: any) => {
+    const existing = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(input.id)
+    if (!existing) return null
+
+    const now = new Date().toISOString()
+    const updates: string[] = ['updated_at = ?']
+    const values: any[] = [now]
+
+    if (input.name !== undefined) {
+      updates.push('name = ?')
+      values.push(input.name)
+    }
+
+    if (input.archived !== undefined) {
+      updates.push('archived = ?')
+      values.push(input.archived ? 1 : 0)
+    }
+
+    if (updates.length === 1) {
+      return rowToWorkspace(existing)
+    }
+
+    values.push(input.id)
+
+    const result = db
+      .prepare(`UPDATE workspaces SET ${updates.join(', ')} WHERE id = ?`)
+      .run(...values)
+
+    if (result.changes === 0) {
+      return null
+    }
+
+    return rowToWorkspace(
+      db.prepare('SELECT * FROM workspaces WHERE id = ?').get(input.id)
+    )
+  },
+
+  'workspace:update-layout': (input: any) => {
+    const now = new Date().toISOString()
+    const result = db
+      .prepare(
+        'UPDATE workspaces SET layout_state = ?, updated_at = ?, last_panel_edited_at = ? WHERE id = ?'
+      )
+      .run(JSON.stringify(input.layoutState), now, now, input.id)
+    if (result.changes === 0) {
+      return null
+    }
+
+    return rowToWorkspace(
+      db.prepare('SELECT * FROM workspaces WHERE id = ?').get(input.id)
+    )
+  },
+
+  'workspace:update-last-panel-edited-at': (input: { id: string; timestamp: string }) => {
+    const existing = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(input.id)
+    if (!existing) {
+      return null
+    }
+
+    const nextTimestamp = new Date(input.timestamp)
+    if (Number.isNaN(nextTimestamp.getTime())) {
+      return rowToWorkspace(existing)
+    }
+
+    const currentTimestamp = existing.last_panel_edited_at
+      ? new Date(existing.last_panel_edited_at)
+      : null
+
+    if (
+      currentTimestamp &&
+      !Number.isNaN(currentTimestamp.getTime()) &&
+      currentTimestamp.getTime() >= nextTimestamp.getTime()
+    ) {
+      return rowToWorkspace(existing)
+    }
+
+    const result = db
+      .prepare('UPDATE workspaces SET last_panel_edited_at = ? WHERE id = ?')
+      .run(input.timestamp, input.id)
+
+    if (result.changes === 0) {
+      return null
+    }
+
+    return rowToWorkspace(
+      db.prepare('SELECT * FROM workspaces WHERE id = ?').get(input.id)
     )
   },
 
@@ -288,14 +447,23 @@ const handlers: Record<string, Handler> = {
     return result.changes > 0
   },
 
+  'workspace:unarchive': (id: string) => {
+    const now = new Date().toISOString()
+    const result = db
+      .prepare(
+        'UPDATE workspaces SET archived = 0, updated_at = ? WHERE id = ?'
+      )
+      .run(now, id)
+    return result.changes > 0
+  },
+
   'workspace:delete': (id: string) => {
     const result = db.prepare('DELETE FROM workspaces WHERE id = ?').run(id)
     return result.changes > 0
   },
 
   'dialog:select-directory': () => {
-    // In browser mode, we just return the cwd
-    return process.cwd()
+    return selectDirectoryInBrowserMode()
   },
 
   'terminal:create': (
@@ -373,6 +541,45 @@ const handlers: Record<string, Handler> = {
       instance.pty.kill()
       ptys.delete(args.id)
     }
+  },
+
+  't3code:start': async (args: {
+    instanceId?: string
+    workspaceId?: string
+    projectPath: string
+  }) => {
+    const resolvedInstanceId = args.instanceId ?? args.workspaceId
+    if (!resolvedInstanceId) {
+      throw new Error('Missing T3Code panel instance id')
+    }
+
+    return startT3Code(resolvedInstanceId, args.projectPath)
+  },
+
+  't3code:stop': (payload: string | { instanceId?: string; workspaceId?: string }) => {
+    const resolvedInstanceId =
+      typeof payload === 'string'
+        ? payload
+        : payload.instanceId ?? payload.workspaceId
+
+    if (!resolvedInstanceId) {
+      throw new Error('Missing T3Code panel instance id')
+    }
+
+    stopT3Code(resolvedInstanceId)
+  },
+
+  't3code:get-thread-info': (args: {
+    instanceId?: string
+    workspaceId?: string
+    projectPath: string
+  }) => {
+    const resolvedInstanceId = args.instanceId ?? args.workspaceId
+    if (!resolvedInstanceId) {
+      throw new Error('Missing T3Code panel instance id')
+    }
+
+    return getT3CodeThreadInfo(resolvedInstanceId, args.projectPath)
   }
 }
 
@@ -384,7 +591,7 @@ const wss = new WebSocketServer({ port: PORT })
 wss.on('connection', (ws) => {
   console.log('Client connected')
 
-  ws.on('message', (raw) => {
+  ws.on('message', async (raw) => {
     try {
       const msg = JSON.parse(raw.toString())
       const { id, channel, args } = msg
@@ -401,7 +608,7 @@ wss.on('connection', (ws) => {
       }
 
       try {
-        const result = handler(args, ws)
+        const result = await Promise.resolve(handler(args, ws))
         ws.send(JSON.stringify({ id, result }))
       } catch (err: any) {
         ws.send(JSON.stringify({ id, error: err.message }))
@@ -432,6 +639,7 @@ process.on('SIGINT', () => {
   for (const [, instance] of ptys) {
     instance.pty.kill()
   }
+  stopAllT3Code()
   db.close()
   process.exit(0)
 })
@@ -440,6 +648,7 @@ process.on('SIGTERM', () => {
   for (const [, instance] of ptys) {
     instance.pty.kill()
   }
+  stopAllT3Code()
   db.close()
   process.exit(0)
 })

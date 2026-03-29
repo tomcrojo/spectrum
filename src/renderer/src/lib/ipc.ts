@@ -3,7 +3,8 @@ import {
   TASK_CHANNELS,
   WORKSPACE_CHANNELS,
   TERMINAL_CHANNELS,
-  DIALOG_CHANNELS
+  DIALOG_CHANNELS,
+  T3CODE_CHANNELS
 } from '@shared/ipc-channels'
 import type {
   Project,
@@ -12,7 +13,14 @@ import type {
   Task,
   CreateTaskInput
 } from '@shared/project.types'
-import type { Workspace, CreateWorkspaceInput } from '@shared/workspace.types'
+import type {
+  Workspace,
+  CreateWorkspaceInput,
+  ListWorkspacesInput,
+  UpdateWorkspaceInput,
+  UpdateWorkspaceLayoutInput,
+  UpdateWorkspaceLastPanelEditedAtInput
+} from '@shared/workspace.types'
 import { transport } from './transport'
 
 function invoke<T>(channel: string, ...args: any[]): Promise<T> {
@@ -43,11 +51,18 @@ export const tasksApi = {
 
 // Workspaces
 export const workspacesApi = {
-  list: (projectId: string) =>
-    invoke<Workspace[]>(WORKSPACE_CHANNELS.LIST, projectId),
+  list: (input: string | ListWorkspacesInput) =>
+    invoke<Workspace[]>(WORKSPACE_CHANNELS.LIST, input),
   create: (input: CreateWorkspaceInput) =>
     invoke<Workspace>(WORKSPACE_CHANNELS.CREATE, input),
+  update: (input: UpdateWorkspaceInput) =>
+    invoke<Workspace | null>(WORKSPACE_CHANNELS.UPDATE, input),
+  updateLayout: (input: UpdateWorkspaceLayoutInput) =>
+    invoke<Workspace | null>(WORKSPACE_CHANNELS.UPDATE_LAYOUT, input),
+  updateLastPanelEditedAt: (input: UpdateWorkspaceLastPanelEditedAtInput) =>
+    invoke<Workspace | null>(WORKSPACE_CHANNELS.UPDATE_LAST_PANEL_EDITED_AT, input),
   archive: (id: string) => invoke<boolean>(WORKSPACE_CHANNELS.ARCHIVE, id),
+  unarchive: (id: string) => invoke<boolean>(WORKSPACE_CHANNELS.UNARCHIVE, id),
   delete: (id: string) => invoke<boolean>(WORKSPACE_CHANNELS.DELETE, id)
 }
 
@@ -68,6 +83,29 @@ export const terminalsApi = {
     transport.on(`terminal:data:${id}`, callback),
   onExit: (id: string, callback: (exitCode: number) => void) =>
     transport.on(`terminal:exit:${id}`, callback)
+}
+
+export const t3codeApi = {
+  start: (instanceId: string, projectPath: string) =>
+    invoke<{
+      url: string
+      logPath: string
+      threadTitle: string | null
+      lastUserMessageAt: string | null
+    }>(T3CODE_CHANNELS.START, {
+      instanceId,
+      projectPath
+    }),
+  getThreadInfo: (instanceId: string, projectPath: string) =>
+    invoke<{
+      url: string | null
+      threadTitle: string | null
+      lastUserMessageAt: string | null
+    }>(T3CODE_CHANNELS.GET_THREAD_INFO, {
+      instanceId,
+      projectPath
+    }),
+  stop: (instanceId: string) => invoke<void>(T3CODE_CHANNELS.STOP, instanceId)
 }
 
 // Dialogs

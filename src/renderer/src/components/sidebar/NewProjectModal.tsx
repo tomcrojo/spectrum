@@ -2,9 +2,11 @@ import { useState } from 'react'
 import { Modal } from '@renderer/components/shared/Modal'
 import { Input } from '@renderer/components/shared/Input'
 import { Button } from '@renderer/components/shared/Button'
+import { ColorPicker } from '@renderer/components/shared/ColorPicker'
 import { useProjectsStore } from '@renderer/stores/projects.store'
 import { useUiStore } from '@renderer/stores/ui.store'
 import { dialogsApi } from '@renderer/lib/ipc'
+import type { ProjectColor } from '@shared/project.types'
 
 export function NewProjectModal() {
   const { showNewProjectModal, setShowNewProjectModal, setActiveProject } = useUiStore()
@@ -12,6 +14,7 @@ export function NewProjectModal() {
   const [name, setName] = useState('')
   const [repoPath, setRepoPath] = useState('')
   const [description, setDescription] = useState('')
+  const [color, setColor] = useState<ProjectColor>('blue')
   const [loading, setLoading] = useState(false)
 
   const handleClose = () => {
@@ -19,6 +22,7 @@ export function NewProjectModal() {
     setName('')
     setRepoPath('')
     setDescription('')
+    setColor('blue')
   }
 
   const handleSelectDir = async () => {
@@ -33,7 +37,8 @@ export function NewProjectModal() {
       const project = await createProject({
         name: name.trim(),
         repoPath: repoPath.trim(),
-        description: description.trim()
+        description: description.trim(),
+        color
       })
       setActiveProject(project.id)
       handleClose()
@@ -87,6 +92,13 @@ export function NewProjectModal() {
             onChange={(e) => setDescription(e.target.value)}
             placeholder="A brief description of the project"
           />
+        </div>
+
+        <div>
+          <label className="block text-xs text-text-secondary mb-1.5">
+            Project Color
+          </label>
+          <ColorPicker value={color} onChange={setColor} />
         </div>
 
         <div className="flex justify-end gap-2 pt-2">

@@ -1,9 +1,17 @@
+export const PROJECT_COLORS = [
+  'slate', 'red', 'orange', 'amber', 'emerald', 'teal', 'cyan',
+  'sky', 'blue', 'indigo', 'violet', 'purple', 'fuchsia', 'pink', 'rose',
+] as const
+
+export type ProjectColor = (typeof PROJECT_COLORS)[number]
+
 export interface Project {
   id: string
   name: string
   repoPath: string
   description: string
   progress: 0 | 1 | 2 | 3 // maps to ◔ ◑ ◕ ⚫
+  color: ProjectColor
   gitWorkspacesEnabled: boolean
   defaultBrowserCookiePolicy: 'isolated' | 'shared'
   defaultTerminalMode: 'project-root' | 'workspace'
@@ -16,6 +24,7 @@ export interface CreateProjectInput {
   name: string
   repoPath: string
   description?: string
+  color?: ProjectColor
   gitWorkspacesEnabled?: boolean
 }
 
@@ -24,6 +33,7 @@ export interface UpdateProjectInput {
   name?: string
   description?: string
   progress?: 0 | 1 | 2 | 3
+  color?: ProjectColor
   gitWorkspacesEnabled?: boolean
   defaultBrowserCookiePolicy?: 'isolated' | 'shared'
   defaultTerminalMode?: 'project-root' | 'workspace'

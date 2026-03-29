@@ -42,6 +42,13 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   },
 
   updateProject: async (input) => {
+    // Optimistic update for immediate UI feedback (e.g. color changes)
+    set((state) => ({
+      projects: state.projects.map((p) =>
+        p.id === input.id ? { ...p, ...input } : p
+      )
+    }))
+    // Confirm from backend
     const updated = await projectsApi.update(input)
     if (updated) {
       set((state) => ({
@@ -53,7 +60,8 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   deleteProject: async (id) => {
     await projectsApi.delete(id)
     set((state) => ({
-      projects: state.projects.filter((p) => p.id !== id)
+      projects: state.projects.filter((p) => p.id !== id),
+      tasks: []
     }))
   },
 

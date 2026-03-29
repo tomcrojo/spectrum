@@ -1,0 +1,8 @@
+{
+  "t3code": {
+    "sourcePath": "./resources/t3code",
+    "installCommand": "bun install --frozen-lockfile",
+    "buildCommand": "bun run --cwd apps/web build && bun run --cwd apps/server build",
+    "entrypoint": "apps/server/dist/index.mjs"
+  }
+}

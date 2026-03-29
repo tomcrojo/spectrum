@@ -79,7 +79,9 @@ export function ProjectHeader({ project }: ProjectHeaderProps) {
       )}
 
       <div className="flex items-center gap-3 mt-3 text-xs text-text-muted">
-        <span>{project.repoPath}</span>
+        <span className="select-text cursor-text">
+          {project.repoPath}
+        </span>
         {project.gitWorkspacesEnabled && (
           <span className="px-1.5 py-0.5 rounded bg-bg-surface border border-border text-text-secondary">
             git workspaces

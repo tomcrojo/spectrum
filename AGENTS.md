@@ -162,19 +162,29 @@ ELECTRON_RUN_AS_NODE= ./node_modules/.bin/electron .
 
 ## Testing & Visualizing the UI (for AI agents)
 
-**Use the `dev-browser` CLI to test and visualize the renderer UI without needing a human to manually open the app.** When `npm run dev` is running, the Vite dev server serves the renderer at `http://localhost:5173/`. You can use `dev-browser` to load that URL, take screenshots, and verify the UI looks correct — all without a human in the loop.
+**Use the `dev-browser` CLI to test and visualize the renderer UI without needing a human to manually open the app.** When `npm run dev` or `npm run dev:browser` is running, the Vite dev server serves the renderer at `http://localhost:5173/`. Prefer attaching to the already-open local Chrome session with `dev-browser --connect` so you reuse the user's Chrome context (the "Agents" Chrome profile when it is open) instead of spinning up a separate managed browser.
 
 This enables faster iteration cycles: make a change → rebuild → use `dev-browser` to screenshot → verify the result → fix issues — all autonomously.
 
 ```bash
-# 1. Start the dev server (in background or separate terminal)
+# 1. Start the app or browser-mode dev server
 unset ELECTRON_RUN_AS_NODE && npx electron-vite dev &
 
-# 2. Use dev-browser to visit the renderer and take a screenshot
-dev-browser http://localhost:5173/
+# 2. Attach to the existing Chrome session and drive the renderer there
+dev-browser --connect <<'EOF'
+const pages = await browser.listPages();
+const page = await browser.getPage(
+  pages.find((entry) => entry.url.startsWith('http://localhost:5173'))?.id ?? 'centipede'
+);
+if (!page.url() || page.url() === 'about:blank') {
+  await page.goto('http://localhost:5173/');
+}
+const screenshot = await saveScreenshot(await page.screenshot(), 'centipede.png');
+console.log(screenshot);
+EOF
 ```
 
-**Note:** The renderer at `localhost:5173` runs without Electron APIs (no `window.api`), so IPC calls will fail. This is fine for visual/layout testing. For full integration testing (IPC, SQLite, etc.), you need the full Electron app running.
+**Note:** The renderer at `localhost:5173` runs without Electron APIs unless `npm run dev:browser` is also running. For full browser-only integration testing (SQLite, T3Code runtime, PTY, etc.), use `npm run dev:browser`, then attach with `dev-browser --connect`. For full Electron integration testing, run the Electron app and use the same attached Chrome flow only for renderer inspection.
 
 If you get stuck on implementation issues, use the **codex** CLI to ask for help.
 
@@ -188,7 +198,7 @@ When launching the QA subagent, include:
 
 1. **Builds without errors** — `npm run build` completes successfully
 2. **App launches** — `ELECTRON_RUN_AS_NODE= ./node_modules/.bin/electron .` runs without crashes
-3. **Visual inspection** — Use `dev-browser http://localhost:5173/` to screenshot key UI screens
+3. **Visual inspection** — Use `dev-browser --connect` to inspect or screenshot the live `localhost:5173` tab in the attached Chrome session
 4. **Feature verification** — Test the specific features added in the task
 5. **Regression check** — Verify existing features still work (project CRUD, task list, sidebar nav)
 6. **Database integrity** — Check that SQLite schema is correct and migrations applied
@@ -200,7 +210,7 @@ When launching the QA subagent, include:
 ```
 Run a QA report for Phase 1 completion:
 1. Build the project and verify no errors
-2. Start npm run dev, use dev-browser to screenshot the app
+2. Start `npm run dev` or `npm run dev:browser`, attach with `dev-browser --connect`, and screenshot the app
 3. Create a new project via the modal, verify it appears in sidebar
 4. Add tasks to the project, verify they persist
 5. Check the SQLite database was created with correct schema

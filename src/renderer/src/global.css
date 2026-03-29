@@ -1,25 +1,71 @@
 @import 'tailwindcss';
 
+:root {
+  color-scheme: light;
+  --app-color-bg: #fafaf9;
+  --app-color-bg-raised: #f2f2f1;
+  --app-color-bg-surface: #ffffff;
+  --app-color-bg-hover: #ececeb;
+  --app-color-bg-active: #e4e4e3;
+  --app-color-border: #d4d4d4;
+  --app-color-border-subtle: #e7e5e4;
+  --app-color-text-primary: #171717;
+  --app-color-text-secondary: #525252;
+  --app-color-text-muted: #737373;
+  --app-color-accent: #2563eb;
+  --app-color-accent-hover: #1d4ed8;
+  --app-color-success: #16a34a;
+  --app-color-warning: #ca8a04;
+  --app-color-danger: #dc2626;
+  --app-color-progress-0: #a3a3a3;
+  --app-color-progress-1: #2563eb;
+  --app-color-progress-2: #7c3aed;
+  --app-color-progress-3: #16a34a;
+}
+
+:root.dark {
+  color-scheme: dark;
+  --app-color-bg: #0a0a0a;
+  --app-color-bg-raised: #141414;
+  --app-color-bg-surface: #1a1a1a;
+  --app-color-bg-hover: #222222;
+  --app-color-bg-active: #2a2a2a;
+  --app-color-border: #2a2a2a;
+  --app-color-border-subtle: #1e1e1e;
+  --app-color-text-primary: #e5e5e5;
+  --app-color-text-secondary: #a3a3a3;
+  --app-color-text-muted: #737373;
+  --app-color-accent: #3b82f6;
+  --app-color-accent-hover: #2563eb;
+  --app-color-success: #22c55e;
+  --app-color-warning: #eab308;
+  --app-color-danger: #ef4444;
+  --app-color-progress-0: #525252;
+  --app-color-progress-1: #3b82f6;
+  --app-color-progress-2: #8b5cf6;
+  --app-color-progress-3: #22c55e;
+}
+
 @theme {
-  --color-bg: #0a0a0a;
-  --color-bg-raised: #141414;
-  --color-bg-surface: #1a1a1a;
-  --color-bg-hover: #222222;
-  --color-bg-active: #2a2a2a;
-  --color-border: #2a2a2a;
-  --color-border-subtle: #1e1e1e;
-  --color-text-primary: #e5e5e5;
-  --color-text-secondary: #a3a3a3;
-  --color-text-muted: #737373;
-  --color-accent: #3b82f6;
-  --color-accent-hover: #2563eb;
-  --color-success: #22c55e;
-  --color-warning: #eab308;
-  --color-danger: #ef4444;
-  --color-progress-0: #525252;
-  --color-progress-1: #3b82f6;
-  --color-progress-2: #8b5cf6;
-  --color-progress-3: #22c55e;
+  --color-bg: var(--app-color-bg);
+  --color-bg-raised: var(--app-color-bg-raised);
+  --color-bg-surface: var(--app-color-bg-surface);
+  --color-bg-hover: var(--app-color-bg-hover);
+  --color-bg-active: var(--app-color-bg-active);
+  --color-border: var(--app-color-border);
+  --color-border-subtle: var(--app-color-border-subtle);
+  --color-text-primary: var(--app-color-text-primary);
+  --color-text-secondary: var(--app-color-text-secondary);
+  --color-text-muted: var(--app-color-text-muted);
+  --color-accent: var(--app-color-accent);
+  --color-accent-hover: var(--app-color-accent-hover);
+  --color-success: var(--app-color-success);
+  --color-warning: var(--app-color-warning);
+  --color-danger: var(--app-color-danger);
+  --color-progress-0: var(--app-color-progress-0);
+  --color-progress-1: var(--app-color-progress-1);
+  --color-progress-2: var(--app-color-progress-2);
+  --color-progress-3: var(--app-color-progress-3);
 }
 
 * {
@@ -34,6 +80,8 @@ body {
   line-height: 1.5;
   overflow: hidden;
   user-select: none;
+  background: var(--app-color-bg);
+  color: var(--app-color-text-primary);
 }
 
 /* Custom drag region for frameless window */

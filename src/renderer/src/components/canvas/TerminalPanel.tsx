@@ -2,6 +2,8 @@ import { useEffect, useRef, useCallback } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { terminalsApi } from '@renderer/lib/ipc'
+import { useResolvedTheme } from '@renderer/lib/theme'
+import { useWorkspacesStore } from '@renderer/stores/workspaces.store'
 import { nanoid } from 'nanoid'
 
 interface TerminalPanelProps {
@@ -9,14 +11,72 @@ interface TerminalPanelProps {
   cwd: string
   projectId: string
   workspaceId: string
+  autoFocus: boolean
+}
+
+function getTerminalTheme(theme: 'light' | 'dark') {
+  if (theme === 'light') {
+    return {
+      background: '#fafaf9',
+      foreground: '#171717',
+      cursor: '#171717',
+      cursorAccent: '#fafaf9',
+      selectionBackground: '#2563eb33',
+      selectionForeground: '#171717',
+      black: '#171717',
+      red: '#dc2626',
+      green: '#16a34a',
+      yellow: '#ca8a04',
+      blue: '#2563eb',
+      magenta: '#7c3aed',
+      cyan: '#0891b2',
+      white: '#f5f5f4',
+      brightBlack: '#737373',
+      brightRed: '#ef4444',
+      brightGreen: '#22c55e',
+      brightYellow: '#eab308',
+      brightBlue: '#3b82f6',
+      brightMagenta: '#8b5cf6',
+      brightCyan: '#06b6d4',
+      brightWhite: '#ffffff'
+    }
+  }
+
+  return {
+    background: '#0a0a0a',
+    foreground: '#e5e5e5',
+    cursor: '#e5e5e5',
+    cursorAccent: '#0a0a0a',
+    selectionBackground: '#3b82f640',
+    selectionForeground: '#e5e5e5',
+    black: '#0a0a0a',
+    red: '#ef4444',
+    green: '#22c55e',
+    yellow: '#eab308',
+    blue: '#3b82f6',
+    magenta: '#8b5cf6',
+    cyan: '#06b6d4',
+    white: '#e5e5e5',
+    brightBlack: '#525252',
+    brightRed: '#f87171',
+    brightGreen: '#4ade80',
+    brightYellow: '#facc15',
+    brightBlue: '#60a5fa',
+    brightMagenta: '#a78bfa',
+    brightCyan: '#22d3ee',
+    brightWhite: '#ffffff'
+  }
 }
 
 export function TerminalPanel({
-  terminalId: _externalId,
+  terminalId,
   cwd,
   projectId,
-  workspaceId
+  workspaceId,
+  autoFocus
 }: TerminalPanelProps) {
+  const resolvedTheme = useResolvedTheme()
+  const updatePanel = useWorkspacesStore((state) => state.updatePanel)
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -38,30 +98,7 @@ export function TerminalPanel({
       fontSize: 13,
       fontFamily: "'SF Mono', 'Menlo', 'Monaco', 'Cascadia Code', 'Consolas', monospace",
       lineHeight: 1.4,
-      theme: {
-        background: '#0a0a0a',
-        foreground: '#e5e5e5',
-        cursor: '#e5e5e5',
-        cursorAccent: '#0a0a0a',
-        selectionBackground: '#3b82f640',
-        selectionForeground: '#e5e5e5',
-        black: '#0a0a0a',
-        red: '#ef4444',
-        green: '#22c55e',
-        yellow: '#eab308',
-        blue: '#3b82f6',
-        magenta: '#8b5cf6',
-        cyan: '#06b6d4',
-        white: '#e5e5e5',
-        brightBlack: '#525252',
-        brightRed: '#f87171',
-        brightGreen: '#4ade80',
-        brightYellow: '#facc15',
-        brightBlue: '#60a5fa',
-        brightMagenta: '#a78bfa',
-        brightCyan: '#22d3ee',
-        brightWhite: '#ffffff'
-      },
+      theme: getTerminalTheme(resolvedTheme),
       allowProposedApi: true,
       scrollback: 5000
     })
@@ -76,9 +113,13 @@ export function TerminalPanel({
     // Fit after opening
     requestAnimationFrame(() => {
       fitAddon.fit()
+      if (autoFocus) {
+        term.focus()
+      }
     })
 
     let inputDisposable: { dispose: () => void } | null = null
+    let titleDisposable: { dispose: () => void } | null = null
     let removeDataListener: (() => void) | null = null
     let removeExitListener: (() => void) | null = null
 
@@ -89,6 +130,13 @@ export function TerminalPanel({
         // Send user input to PTY
         inputDisposable = term.onData((data) => {
           terminalsApi.write(ptyId, data)
+        })
+
+        titleDisposable = term.onTitleChange((title) => {
+          const nextTitle = title.trim()
+          if (nextTitle) {
+            updatePanel(terminalId, { panelTitle: nextTitle })
+          }
         })
 
         // Receive PTY output
@@ -113,6 +161,7 @@ export function TerminalPanel({
 
     return () => {
       inputDisposable?.dispose()
+      titleDisposable?.dispose()
       removeDataListener?.()
       removeExitListener?.()
       terminalsApi.close(ptyId).catch(() => {})
@@ -122,7 +171,27 @@ export function TerminalPanel({
       ptyIdRef.current = null
       mountedRef.current = false
     }
-  }, [cwd, projectId, workspaceId])
+  }, [cwd, projectId, terminalId, updatePanel, workspaceId])
+
+  useEffect(() => {
+    if (!autoFocus) {
+      return
+    }
+
+    requestAnimationFrame(() => {
+      termRef.current?.focus()
+    })
+  }, [autoFocus])
+
+  useEffect(() => {
+    if (!termRef.current || !containerRef.current) {
+      return
+    }
+
+    termRef.current.options.theme = getTerminalTheme(resolvedTheme)
+    containerRef.current.style.backgroundColor =
+      resolvedTheme === 'light' ? '#fafaf9' : '#0a0a0a'
+  }, [resolvedTheme])
 
   // Handle resize
   const handleResize = useCallback(() => {
@@ -149,7 +218,10 @@ export function TerminalPanel({
     <div
       ref={containerRef}
       className="w-full h-full"
-      style={{ padding: '8px 0 0 8px' }}
+      style={{
+        padding: '8px 0 0 8px',
+        backgroundColor: resolvedTheme === 'light' ? '#fafaf9' : '#0a0a0a'
+      }}
     />
   )
 }

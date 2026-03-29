@@ -1,5 +1,6 @@
 import { cn } from '@renderer/lib/cn'
 import { ProgressIcon } from '@renderer/components/shared/ProgressIcon'
+import { PROJECT_COLOR_HEX } from '@renderer/lib/project-colors'
 import { useUiStore } from '@renderer/stores/ui.store'
 import type { Project } from '@shared/project.types'
 
@@ -13,13 +14,13 @@ const progressLabels = ['Starting', 'In Progress', 'Almost Done', 'Complete'] as
 
 export function ProjectCard({ project, active, onClick }: ProjectCardProps) {
   const { showProjectPage, toggleProjectPage } = useUiStore()
+  const isProjectPageOpen = active && showProjectPage
+  const colorHex = PROJECT_COLOR_HEX[project.color || 'blue']
 
   const handleArrowClick = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!active) {
-      // If clicking arrow on inactive project, first select it then show project page
       onClick()
-      // Small delay to let the project become active, then show project page
       setTimeout(() => useUiStore.getState().setShowProjectPage(true), 0)
     } else {
       toggleProjectPage()
@@ -45,14 +46,29 @@ export function ProjectCard({ project, active, onClick }: ProjectCardProps) {
         <div
           onClick={handleArrowClick}
           className={cn(
-            'no-drag p-0.5 rounded transition-all hover:bg-bg-hover',
-            active ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'
+            'no-drag flex items-center justify-center rounded-md transition-all duration-150',
+            'w-5 h-8',
+            active
+              ? 'opacity-100'
+              : 'opacity-0 group-hover:opacity-50'
           )}
+          style={
+            active
+              ? isProjectPageOpen
+                ? { background: '#e5e5e5' }
+                : { background: colorHex }
+              : undefined
+          }
         >
           <svg
             className={cn(
-              'w-3 h-3 text-text-muted transition-transform duration-200',
-              active && showProjectPage && 'rotate-180'
+              'w-3 h-3 transition-transform duration-200',
+              isProjectPageOpen ? 'rotate-180' : '',
+              active
+                ? isProjectPageOpen
+                  ? 'text-neutral-700'
+                  : 'text-white'
+                : 'text-text-muted'
             )}
             viewBox="0 0 12 12"
             fill="none"

@@ -21,8 +21,11 @@ export const WORKSPACE_CHANNELS = {
   LIST: 'workspace:list',
   CREATE: 'workspace:create',
   UPDATE: 'workspace:update',
+  UPDATE_LAYOUT: 'workspace:update-layout',
+  UPDATE_LAST_PANEL_EDITED_AT: 'workspace:update-last-panel-edited-at',
   DELETE: 'workspace:delete',
-  ARCHIVE: 'workspace:archive'
+  ARCHIVE: 'workspace:archive',
+  UNARCHIVE: 'workspace:unarchive'
 } as const
 
 // Terminal channels
@@ -32,6 +35,13 @@ export const TERMINAL_CHANNELS = {
   RESIZE: 'terminal:resize',
   CLOSE: 'terminal:close',
   DATA: 'terminal:data' // streaming: terminal:data:<id>
+} as const
+
+// T3Code channels
+export const T3CODE_CHANNELS = {
+  START: 't3code:start',
+  STOP: 't3code:stop',
+  GET_THREAD_INFO: 't3code:get-thread-info'
 } as const
 
 // Provider channels
