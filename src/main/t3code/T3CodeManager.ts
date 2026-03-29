@@ -4,7 +4,10 @@ import { homedir } from 'os'
 import { join, dirname } from 'path'
 import net from 'net'
 import Database from 'better-sqlite3'
+import { nanoid } from 'nanoid'
 import { getT3CodeConfig } from './config'
+import { getApiPort } from '../api/BrowserApiServer'
+import { registerToken, revokeToken } from '../api/TokenRegistry'
 
 interface RuntimeInstance {
   process: ChildProcess
@@ -12,6 +15,7 @@ interface RuntimeInstance {
   instanceId: string
   projectPath: string
   logPath: string
+  browserApiToken: string | null
 }
 
 interface BootstrapThreadInfo {
@@ -297,7 +301,11 @@ async function waitForBootstrapThreadInfo(
 
 export async function startT3Code(
   instanceId: string,
-  projectPath: string
+  projectPath: string,
+  scope?: {
+    workspaceId?: string
+    projectId?: string
+  }
 ): Promise<{
   url: string
   logPath: string
@@ -357,6 +365,15 @@ export async function startT3Code(
     env.T3CODE_STATE_DIR = env.T3CODE_HOME
     mkdirSync(env.T3CODE_HOME, { recursive: true })
 
+    const browserApiToken = scope?.workspaceId && scope.projectId ? nanoid(32) : null
+    if (browserApiToken && scope?.workspaceId && scope.projectId) {
+      registerToken(browserApiToken, scope.workspaceId, scope.projectId)
+      env.CENTIPEDE_API_PORT = String(getApiPort())
+      env.CENTIPEDE_API_TOKEN = browserApiToken
+      env.CENTIPEDE_WORKSPACE_ID = scope.workspaceId
+      env.CENTIPEDE_PROJECT_ID = scope.projectId
+    }
+
     const child = spawn('node', [
       entrypoint,
       '--mode',
@@ -378,6 +395,9 @@ export async function startT3Code(
     })
 
     child.on('exit', () => {
+      if (browserApiToken) {
+        revokeToken(browserApiToken)
+      }
       runtimes.delete(instanceId)
       pendingStarts.delete(instanceId)
       closeSync(logFd)
@@ -388,7 +408,8 @@ export async function startT3Code(
       url,
       instanceId,
       projectPath,
-      logPath
+      logPath,
+      browserApiToken
     })
 
     try {
@@ -404,6 +425,9 @@ export async function startT3Code(
       }
     } catch (error) {
       child.kill()
+      if (browserApiToken) {
+        revokeToken(browserApiToken)
+      }
       runtimes.delete(instanceId)
       throw error
     } finally {
@@ -423,6 +447,9 @@ export function stopT3Code(instanceId: string): void {
 
     const instance = runtimes.get(instanceId)
     if (!instance) return
+    if (instance.browserApiToken) {
+      revokeToken(instance.browserApiToken)
+    }
     instance.process.kill()
     runtimes.delete(instanceId)
   }, 1500)
@@ -437,6 +464,9 @@ export function stopAllT3Code(): void {
   pendingStops.clear()
 
   for (const [instanceId, instance] of runtimes) {
+    if (instance.browserApiToken) {
+      revokeToken(instance.browserApiToken)
+    }
     instance.process.kill()
     runtimes.delete(instanceId)
   }

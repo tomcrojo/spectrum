@@ -77,6 +77,17 @@ function createWsTransport(): Transport {
             if (set) set.forEach((cb) => cb(msg.exitCode))
             return
           }
+          if (
+            msg.type === 'browser:open' ||
+            msg.type === 'browser:close' ||
+            msg.type === 'browser:navigate' ||
+            msg.type === 'browser:resize' ||
+            msg.type === 'browser:url-changed'
+          ) {
+            const set = listeners.get(msg.type)
+            if (set) set.forEach((cb) => cb(msg.payload))
+            return
+          }
 
           // Request-response
           const p = pending.get(msg.id)

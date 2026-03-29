@@ -11,6 +11,7 @@
 import { WebSocketServer, WebSocket } from 'ws'
 import Database from 'better-sqlite3'
 import { execFileSync } from 'child_process'
+import http from 'node:http'
 import { join } from 'path'
 import { readFileSync, readdirSync, existsSync, mkdirSync } from 'fs'
 import { homedir, tmpdir } from 'os'
@@ -23,6 +24,7 @@ import {
   stopT3Code,
   stopAllT3Code
 } from '../main/t3code/T3CodeManager'
+import { BROWSER_CHANNELS } from '../shared/ipc-channels'
 
 // ─── Database Setup ────────────────────────────────────────────────────
 
@@ -194,13 +196,221 @@ interface PtyInstance {
   projectId: string
   workspaceId: string
   ws: WebSocket
+  browserApiToken: string
 }
 
 const ptys = new Map<string, PtyInstance>()
+const wsClients = new Set<WebSocket>()
+
+interface BrowserPanelState {
+  panelId: string
+  workspaceId: string
+  projectId: string
+  url: string
+  panelTitle: string
+  width?: number
+  height?: number
+}
+
+const browserPanels = new Map<string, BrowserPanelState>()
+const browserTokens = new Map<string, { workspaceId: string; projectId: string }>()
+let browserApiServer: http.Server | null = null
+let browserApiPort: number | null = null
 
 function getShell(): string {
   if (process.platform === 'win32') return 'powershell.exe'
   return process.env.SHELL || '/bin/zsh'
+}
+
+function registerBrowserToken(token: string, workspaceId: string, projectId: string): void {
+  browserTokens.set(token, { workspaceId, projectId })
+}
+
+function revokeBrowserToken(token: string): void {
+  browserTokens.delete(token)
+}
+
+function pushBrowserEvent(channel: string, payload: unknown): void {
+  const message = JSON.stringify({
+    type: channel,
+    payload
+  })
+
+  for (const client of wsClients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message)
+    }
+  }
+}
+
+function readRequestBody(req: http.IncomingMessage): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    req.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)))
+    req.on('end', () => {
+      if (chunks.length === 0) {
+        resolve({})
+        return
+      }
+
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')))
+      } catch {
+        reject(new Error('Invalid JSON body'))
+      }
+    })
+    req.on('error', reject)
+  })
+}
+
+function sendJson(res: http.ServerResponse, status: number, payload: unknown): void {
+  res.statusCode = status
+  res.setHeader('Content-Type', 'application/json')
+  res.end(JSON.stringify(payload))
+}
+
+function startBrowserApiServer(): Promise<number> {
+  if (browserApiServer && browserApiPort !== null) {
+    return Promise.resolve(browserApiPort)
+  }
+
+  browserApiServer = http.createServer(async (req, res) => {
+    if (req.method !== 'POST') {
+      sendJson(res, 405, { error: 'Method not allowed' })
+      return
+    }
+
+    let body: any
+    try {
+      body = await readRequestBody(req)
+    } catch (error) {
+      sendJson(res, 400, { error: error instanceof Error ? error.message : 'Invalid body' })
+      return
+    }
+
+    const token = typeof body.token === 'string' ? body.token : ''
+    const scope = browserTokens.get(token)
+    if (!scope) {
+      sendJson(res, 401, { error: 'Invalid token' })
+      return
+    }
+
+    if (req.url === '/browser/open') {
+      const panel: BrowserPanelState = {
+        panelId: nanoid(),
+        workspaceId: scope.workspaceId,
+        projectId: scope.projectId,
+        url: typeof body.url === 'string' ? body.url : 'about:blank',
+        panelTitle: 'Browser',
+        width: typeof body.width === 'number' ? body.width : undefined,
+        height: typeof body.height === 'number' ? body.height : undefined
+      }
+      browserPanels.set(panel.panelId, panel)
+      pushBrowserEvent(BROWSER_CHANNELS.OPEN, panel)
+      sendJson(res, 200, { panelId: panel.panelId })
+      return
+    }
+
+    if (req.url === '/browser/navigate') {
+      const panelId = typeof body.panelId === 'string' ? body.panelId : ''
+      const url = typeof body.url === 'string' ? body.url : ''
+      const panel = browserPanels.get(panelId)
+      if (!panel || panel.workspaceId !== scope.workspaceId) {
+        sendJson(res, 404, { error: 'Panel not found' })
+        return
+      }
+      panel.url = url
+      pushBrowserEvent(BROWSER_CHANNELS.NAVIGATE, {
+        panelId,
+        workspaceId: scope.workspaceId,
+        url
+      })
+      sendJson(res, 200, { ok: true })
+      return
+    }
+
+    if (req.url === '/browser/close') {
+      const panelId = typeof body.panelId === 'string' ? body.panelId : ''
+      const panel = browserPanels.get(panelId)
+      if (!panel || panel.workspaceId !== scope.workspaceId) {
+        sendJson(res, 404, { error: 'Panel not found' })
+        return
+      }
+      browserPanels.delete(panelId)
+      pushBrowserEvent(BROWSER_CHANNELS.CLOSE, {
+        panelId,
+        workspaceId: scope.workspaceId
+      })
+      sendJson(res, 200, { ok: true })
+      return
+    }
+
+    if (req.url === '/browser/resize') {
+      const panelId = typeof body.panelId === 'string' ? body.panelId : ''
+      const width = typeof body.width === 'number' ? body.width : Number.NaN
+      const height = typeof body.height === 'number' ? body.height : Number.NaN
+      const panel = browserPanels.get(panelId)
+      if (
+        !panel ||
+        panel.workspaceId !== scope.workspaceId ||
+        Number.isNaN(width) ||
+        Number.isNaN(height)
+      ) {
+        sendJson(res, 404, { error: 'Panel not found' })
+        return
+      }
+      panel.width = width
+      panel.height = height
+      pushBrowserEvent(BROWSER_CHANNELS.RESIZE, {
+        panelId,
+        workspaceId: scope.workspaceId,
+        width,
+        height
+      })
+      sendJson(res, 200, { ok: true })
+      return
+    }
+
+    if (req.url === '/browser/list') {
+      sendJson(res, 200, {
+        panels: Array.from(browserPanels.values()).filter(
+          (panel) => panel.workspaceId === scope.workspaceId
+        )
+      })
+      return
+    }
+
+    if (req.url === '/browser/cdp-endpoint') {
+      sendJson(res, 200, { endpoint: null })
+      return
+    }
+
+    sendJson(res, 404, { error: 'Not found' })
+  })
+
+  return new Promise((resolve, reject) => {
+    browserApiServer!.once('error', reject)
+    browserApiServer!.listen(0, '127.0.0.1', () => {
+      browserApiServer!.removeListener('error', reject)
+      const address = browserApiServer!.address()
+      if (!address || typeof address === 'string') {
+        reject(new Error('Failed to start browser API server'))
+        return
+      }
+      browserApiPort = address.port
+      resolve(address.port)
+    })
+  })
+}
+
+async function stopBrowserApiServer(): Promise<void> {
+  if (!browserApiServer) {
+    return
+  }
+
+  await new Promise<void>((resolve) => browserApiServer?.close(() => resolve()))
+  browserApiServer = null
+  browserApiPort = null
 }
 
 function selectDirectoryInBrowserMode(): string | null {
@@ -546,6 +756,14 @@ const handlers: Record<string, Handler> = {
     }
     env.TERM = 'xterm-256color'
     env.COLORTERM = 'truecolor'
+    const browserApiToken = nanoid(32)
+    registerBrowserToken(browserApiToken, args.workspaceId, args.projectId)
+    if (browserApiPort !== null) {
+      env.CENTIPEDE_API_PORT = String(browserApiPort)
+      env.CENTIPEDE_API_TOKEN = browserApiToken
+      env.CENTIPEDE_WORKSPACE_ID = args.workspaceId
+      env.CENTIPEDE_PROJECT_ID = args.projectId
+    }
 
     const ptyProcess = pty.spawn(shell, [], {
       name: 'xterm-256color',
@@ -577,6 +795,7 @@ const handlers: Record<string, Handler> = {
           })
         )
       }
+      revokeBrowserToken(browserApiToken)
       ptys.delete(args.id)
     })
 
@@ -584,7 +803,8 @@ const handlers: Record<string, Handler> = {
       pty: ptyProcess,
       projectId: args.projectId,
       workspaceId: args.workspaceId,
-      ws
+      ws,
+      browserApiToken
     })
 
     return { id: args.id, pid: ptyProcess.pid }
@@ -604,6 +824,7 @@ const handlers: Record<string, Handler> = {
     const instance = ptys.get(args.id)
     if (instance) {
       instance.pty.kill()
+      revokeBrowserToken(instance.browserApiToken)
       ptys.delete(args.id)
     }
   },
@@ -611,6 +832,7 @@ const handlers: Record<string, Handler> = {
   't3code:start': async (args: {
     instanceId?: string
     workspaceId?: string
+    projectId?: string
     projectPath: string
   }) => {
     const resolvedInstanceId = args.instanceId ?? args.workspaceId
@@ -618,7 +840,10 @@ const handlers: Record<string, Handler> = {
       throw new Error('Missing T3Code panel instance id')
     }
 
-    return startT3Code(resolvedInstanceId, args.projectPath)
+    return startT3Code(resolvedInstanceId, args.projectPath, {
+      workspaceId: args.workspaceId,
+      projectId: args.projectId
+    })
   },
 
   't3code:stop': (payload: string | { instanceId?: string; workspaceId?: string }) => {
@@ -645,6 +870,28 @@ const handlers: Record<string, Handler> = {
     }
 
     return getT3CodeThreadInfo(resolvedInstanceId, args.projectPath)
+  },
+
+  [BROWSER_CHANNELS.WEBVIEW_READY]: () => true,
+
+  [BROWSER_CHANNELS.WEBVIEW_DESTROYED]: () => true,
+
+  [BROWSER_CHANNELS.URL_CHANGED]: (payload: {
+    panelId: string
+    url?: string
+    panelTitle?: string
+  }) => {
+    const panel = browserPanels.get(payload.panelId)
+    if (!panel) {
+      return false
+    }
+    if (typeof payload.url === 'string') {
+      panel.url = payload.url
+    }
+    if (typeof payload.panelTitle === 'string' && payload.panelTitle.trim().length > 0) {
+      panel.panelTitle = payload.panelTitle.trim()
+    }
+    return true
   }
 }
 
@@ -652,9 +899,17 @@ const handlers: Record<string, Handler> = {
 
 const PORT = 3001
 const wss = new WebSocketServer({ port: PORT })
+void startBrowserApiServer()
+  .then((port) => {
+    console.log(`     Browser API: http://127.0.0.1:${port}`)
+  })
+  .catch((error) => {
+    console.error('[dev-server] Failed to start browser API server:', error)
+  })
 
 wss.on('connection', (ws) => {
   console.log('Client connected')
+  wsClients.add(ws)
 
   ws.on('message', async (raw) => {
     try {
@@ -685,10 +940,12 @@ wss.on('connection', (ws) => {
 
   ws.on('close', () => {
     console.log('Client disconnected')
+    wsClients.delete(ws)
     // Clean up PTYs owned by this connection
     for (const [id, instance] of ptys) {
       if (instance.ws === ws) {
         instance.pty.kill()
+        revokeBrowserToken(instance.browserApiToken)
         ptys.delete(id)
       }
     }
@@ -703,8 +960,10 @@ console.log(`     Open http://localhost:5173 in your browser\n`)
 process.on('SIGINT', () => {
   for (const [, instance] of ptys) {
     instance.pty.kill()
+    revokeBrowserToken(instance.browserApiToken)
   }
   stopAllT3Code()
+  void stopBrowserApiServer()
   db.close()
   process.exit(0)
 })
@@ -712,8 +971,10 @@ process.on('SIGINT', () => {
 process.on('SIGTERM', () => {
   for (const [, instance] of ptys) {
     instance.pty.kill()
+    revokeBrowserToken(instance.browserApiToken)
   }
   stopAllT3Code()
+  void stopBrowserApiServer()
   db.close()
   process.exit(0)
 })

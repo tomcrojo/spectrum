@@ -4,7 +4,8 @@ import {
   WORKSPACE_CHANNELS,
   TERMINAL_CHANNELS,
   DIALOG_CHANNELS,
-  T3CODE_CHANNELS
+  T3CODE_CHANNELS,
+  BROWSER_CHANNELS
 } from '@shared/ipc-channels'
 import type {
   Project,
@@ -86,7 +87,12 @@ export const terminalsApi = {
 }
 
 export const t3codeApi = {
-  start: (instanceId: string, projectPath: string) =>
+  start: (
+    instanceId: string,
+    projectPath: string,
+    workspaceId?: string,
+    projectId?: string
+  ) =>
     invoke<{
       url: string
       logPath: string
@@ -94,6 +100,8 @@ export const t3codeApi = {
       lastUserMessageAt: string | null
     }>(T3CODE_CHANNELS.START, {
       instanceId,
+      workspaceId,
+      projectId,
       projectPath
     }),
   getThreadInfo: (instanceId: string, projectPath: string) =>
@@ -106,6 +114,26 @@ export const t3codeApi = {
       projectPath
     }),
   stop: (instanceId: string) => invoke<void>(T3CODE_CHANNELS.STOP, instanceId)
+}
+
+export const browserApi = {
+  webviewReady: (input: {
+    panelId: string
+    workspaceId: string
+    projectId: string
+    webContentsId: number
+  }) => invoke<boolean>(BROWSER_CHANNELS.WEBVIEW_READY, input),
+  webviewDestroyed: (input: {
+    panelId?: string
+    workspaceId?: string
+    projectId?: string
+    webContentsId?: number
+  }) => invoke<boolean>(BROWSER_CHANNELS.WEBVIEW_DESTROYED, input),
+  urlChanged: (input: {
+    panelId: string
+    url?: string
+    panelTitle?: string
+  }) => invoke<boolean>(BROWSER_CHANNELS.URL_CHANGED, input)
 }
 
 // Dialogs

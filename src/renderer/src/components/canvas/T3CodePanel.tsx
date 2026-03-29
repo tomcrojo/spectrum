@@ -5,6 +5,7 @@ import { useWorkspacesStore } from '@renderer/stores/workspaces.store'
 interface T3CodePanelProps {
   panelId: string
   workspaceId: string
+  projectId: string
   projectPath: string
   theme: 'light' | 'dark'
   autoFocus: boolean
@@ -13,6 +14,7 @@ interface T3CodePanelProps {
 export function T3CodePanel({
   panelId,
   workspaceId,
+  projectId,
   projectPath,
   theme,
   autoFocus
@@ -57,7 +59,7 @@ export function T3CodePanel({
     }
 
     t3codeApi
-      .start(panelId, projectPath)
+      .start(panelId, projectPath, workspaceId, projectId)
       .then((runtime) => {
         if (!cancelled) {
           setUrl(runtime.url)
@@ -84,7 +86,7 @@ export function T3CodePanel({
       window.clearInterval(pollId)
       t3codeApi.stop(panelId).catch(() => {})
     }
-  }, [panelId, projectPath, updatePanel, updateWorkspaceLastPanelEditedAt, workspaceId])
+  }, [panelId, projectId, projectPath, updatePanel, updateWorkspaceLastPanelEditedAt, workspaceId])
 
   const themedUrl = useMemo(() => {
     if (!url) {

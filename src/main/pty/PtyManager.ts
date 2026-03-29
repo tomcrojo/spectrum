@@ -2,11 +2,15 @@ import * as pty from 'node-pty'
 import { BrowserWindow } from 'electron'
 import { existsSync } from 'fs'
 import { homedir } from 'os'
+import { nanoid } from 'nanoid'
+import { getApiPort } from '../api/BrowserApiServer'
+import { registerToken, revokeToken } from '../api/TokenRegistry'
 
 interface PtyInstance {
   pty: pty.IPty
   projectId: string
   workspaceId: string
+  browserApiToken: string
 }
 
 const ptys = new Map<string, PtyInstance>()
@@ -36,6 +40,13 @@ export function createPty(
   // Unset ELECTRON_RUN_AS_NODE so child shells behave normally
   delete env.ELECTRON_RUN_AS_NODE
 
+  const browserApiToken = nanoid(32)
+  registerToken(browserApiToken, workspaceId, projectId)
+  env.CENTIPEDE_API_PORT = String(getApiPort())
+  env.CENTIPEDE_API_TOKEN = browserApiToken
+  env.CENTIPEDE_WORKSPACE_ID = workspaceId
+  env.CENTIPEDE_PROJECT_ID = projectId
+
   const ptyProcess = pty.spawn(shell, [], {
     name: 'xterm-256color',
     cols: 80,
@@ -55,10 +66,11 @@ export function createPty(
     if (!window.isDestroyed()) {
       window.webContents.send(`terminal:exit:${id}`, exitCode)
     }
+    revokeToken(browserApiToken)
     ptys.delete(id)
   })
 
-  ptys.set(id, { pty: ptyProcess, projectId, workspaceId })
+  ptys.set(id, { pty: ptyProcess, projectId, workspaceId, browserApiToken })
 
   return { id, pid: ptyProcess.pid }
 }
@@ -81,6 +93,7 @@ export function closePty(id: string): void {
   const instance = ptys.get(id)
   if (instance) {
     instance.pty.kill()
+    revokeToken(instance.browserApiToken)
     ptys.delete(id)
   }
 }
@@ -88,6 +101,7 @@ export function closePty(id: string): void {
 export function closeAllPtys(): void {
   for (const [id, instance] of ptys) {
     instance.pty.kill()
+    revokeToken(instance.browserApiToken)
     ptys.delete(id)
   }
 }

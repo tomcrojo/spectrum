@@ -10,10 +10,12 @@ export function registerT3CodeHandlers(): void {
       {
         instanceId,
         workspaceId,
+        projectId,
         projectPath
       }: {
         instanceId?: string
         workspaceId?: string
+        projectId?: string
         projectPath: string
       }
     ) => {
@@ -21,7 +23,10 @@ export function registerT3CodeHandlers(): void {
       if (!resolvedInstanceId) {
         throw new Error('Missing T3Code panel instance id')
       }
-      return startT3Code(resolvedInstanceId, projectPath)
+      return startT3Code(resolvedInstanceId, projectPath, {
+        workspaceId,
+        projectId
+      })
     }
   )
 

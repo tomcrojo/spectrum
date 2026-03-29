@@ -4,6 +4,7 @@ import { useResolvedTheme } from '@renderer/lib/theme'
 import { useWorkspacesStore } from '@renderer/stores/workspaces.store'
 import { TerminalPanel } from './TerminalPanel'
 import { T3CodePanel } from './T3CodePanel'
+import { BrowserPanel } from './BrowserPanel'
 import { PanelPlaceholder } from './PanelPlaceholder'
 import type { PanelType } from '@shared/workspace.types'
 
@@ -315,6 +316,7 @@ export function WorkspacePanel({
           <T3CodePanel
             panelId={panelId}
             workspaceId={workspaceId}
+            projectId={projectId}
             projectPath={cwd}
             theme={resolvedTheme}
             autoFocus={isFocused}
@@ -326,6 +328,15 @@ export function WorkspacePanel({
             projectId={projectId}
             workspaceId={workspaceId}
             autoFocus={isFocused}
+          />
+        ) : panelType === 'browser' ? (
+          <BrowserPanel
+            panelId={panelId}
+            workspaceId={workspaceId}
+            projectId={projectId}
+            initialUrl={initialUrl}
+            autoFocus={isFocused}
+            isResizing={isResizing}
           />
         ) : (
           <PanelPlaceholder type={panelType} />

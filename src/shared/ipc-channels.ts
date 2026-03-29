@@ -44,6 +44,17 @@ export const T3CODE_CHANNELS = {
   GET_THREAD_INFO: 't3code:get-thread-info'
 } as const
 
+export const BROWSER_CHANNELS = {
+  NAVIGATE: 'browser:navigate',
+  OPEN: 'browser:open',
+  CLOSE: 'browser:close',
+  RESIZE: 'browser:resize',
+  LIST: 'browser:list',
+  URL_CHANGED: 'browser:url-changed',
+  WEBVIEW_READY: 'browser:webview-ready',
+  WEBVIEW_DESTROYED: 'browser:webview-destroyed'
+} as const
+
 // Provider channels
 export const PROVIDER_CHANNELS = {
   LIST: 'provider:list',
