@@ -40,8 +40,10 @@ interface WorkspacesState {
   reopenWorkspace: (workspaceId: string, cwd: string) => Promise<void>
   setActivePanels: (panels: ActiveWorkspacePanel[]) => void
   addActivePanel: (panel: ActiveWorkspacePanel) => void
+  addActivePanelWithoutFocus: (panel: ActiveWorkspacePanel) => void
   /** Insert a panel right after the given panel ID (used for focus-aware insertion) */
   insertPanelAfter: (panel: ActiveWorkspacePanel, afterPanelId: string) => void
+  insertPanelAfterWithoutFocus: (panel: ActiveWorkspacePanel, afterPanelId: string) => void
   closeActivePanel: (panelId: string) => void
   /** Set which panel currently has focus */
   setFocusedPanel: (panelId: string | null) => void
@@ -399,6 +401,18 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
     scheduleSave(panel.workspaceId, get)
   },
 
+  addActivePanelWithoutFocus: (panel) => {
+    set((state) => {
+      if (state.activePanels.some((existing) => existing.panelId === panel.panelId)) {
+        return state
+      }
+      return {
+        activePanels: [...state.activePanels, panel]
+      }
+    })
+    scheduleSave(panel.workspaceId, get)
+  },
+
   insertPanelAfter: (panel, afterPanelId) => {
     set((state) => {
       if (state.activePanels.some((existing) => existing.panelId === panel.panelId)) {
@@ -425,6 +439,26 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
           ...state.lastFocusedPanelByWorkspace,
           [panel.workspaceId]: panel.panelId
         }
+      }
+    })
+    scheduleSave(panel.workspaceId, get)
+  },
+
+  insertPanelAfterWithoutFocus: (panel, afterPanelId) => {
+    set((state) => {
+      if (state.activePanels.some((existing) => existing.panelId === panel.panelId)) {
+        return state
+      }
+      const idx = state.activePanels.findIndex((p) => p.panelId === afterPanelId)
+      if (idx === -1) {
+        return {
+          activePanels: [...state.activePanels, panel]
+        }
+      }
+      const newPanels = [...state.activePanels]
+      newPanels.splice(idx + 1, 0, panel)
+      return {
+        activePanels: newPanels
       }
     })
     scheduleSave(panel.workspaceId, get)

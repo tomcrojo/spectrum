@@ -16,6 +16,7 @@ export interface BrowserPanelState {
 
 const panelsById = new Map<string, BrowserPanelState>()
 const panelIdByWebContentsId = new Map<number, string>()
+const focusedPanelIdByWorkspace = new Map<string, string>()
 let mainWindow: BrowserWindow | null = null
 
 function emitToRenderer(channel: string, payload: unknown): void {
@@ -51,6 +52,7 @@ export function openBrowserPanel(input: {
   }
 
   panelsById.set(panel.panelId, panel)
+  focusedPanelIdByWorkspace.set(panel.workspaceId, panel.panelId)
   emitToRenderer(BROWSER_CHANNELS.OPEN, panel)
   return panel
 }
@@ -106,6 +108,9 @@ export function closeBrowserPanel(
   }
 
   panelsById.delete(panelId)
+  if (focusedPanelIdByWorkspace.get(panel.workspaceId) === panelId) {
+    focusedPanelIdByWorkspace.delete(panel.workspaceId)
+  }
   if (typeof panel.webContentsId === 'number') {
     panelIdByWebContentsId.delete(panel.webContentsId)
     void unregisterCdpTarget({
@@ -123,6 +128,10 @@ export function closeBrowserPanel(
 
 export function listBrowserPanels(workspaceId: string): BrowserPanelState[] {
   return Array.from(panelsById.values()).filter((panel) => panel.workspaceId === workspaceId)
+}
+
+export function getFocusedBrowserPanelId(workspaceId: string): string | null {
+  return focusedPanelIdByWorkspace.get(workspaceId) ?? null
 }
 
 export function updateBrowserPanelFromRenderer(input: {
@@ -192,6 +201,48 @@ export function getBrowserPanelByWebContentsId(
 
 export function getBrowserPanel(panelId: string): BrowserPanelState | null {
   return panelsById.get(panelId) ?? null
+}
+
+export function setFocusedBrowserPanel(
+  workspaceId: string,
+  panelId: string | null
+): void {
+  if (!panelId) {
+    focusedPanelIdByWorkspace.delete(workspaceId)
+    emitToRenderer(BROWSER_CHANNELS.FOCUS_CHANGED, {
+      workspaceId,
+      panelId: null
+    })
+    return
+  }
+
+  const panel = panelsById.get(panelId)
+  if (!panel || panel.workspaceId !== workspaceId) {
+    return
+  }
+
+  focusedPanelIdByWorkspace.set(workspaceId, panelId)
+  emitToRenderer(BROWSER_CHANNELS.FOCUS_CHANGED, {
+    workspaceId,
+    panelId
+  })
+}
+
+export function activateBrowserPanel(
+  workspaceId: string,
+  panelId: string
+): BrowserPanelState | null {
+  const panel = panelsById.get(panelId)
+  if (!panel || panel.workspaceId !== workspaceId) {
+    return null
+  }
+
+  focusedPanelIdByWorkspace.set(workspaceId, panelId)
+  emitToRenderer(BROWSER_CHANNELS.ACTIVATE, {
+    workspaceId,
+    panelId
+  })
+  return panel
 }
 
 export function ensureBrowserPanelState(input: {

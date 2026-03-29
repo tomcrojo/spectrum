@@ -1,7 +1,9 @@
 import http from 'node:http'
-import { getProject } from '../db/projects.repo'
 import {
+  activateBrowserPanel,
   closeBrowserPanel,
+  getBrowserPanel,
+  getFocusedBrowserPanelId,
   listBrowserPanels,
   navigateBrowserPanel,
   openBrowserPanel,
@@ -9,6 +11,9 @@ import {
 } from '../browser/BrowserPanelManager'
 import { getCdpProxyPort } from '../cdp/CdpProxyManager'
 import { validateToken } from './TokenRegistry'
+import { getProject } from '../db/projects.repo'
+import { listWorkspaces } from '../db/workspaces.repo'
+import { getYellowSessionSnapshot } from '../yellow/YellowSessionManager'
 
 interface BrowserApiRequestBody {
   token?: string
@@ -72,6 +77,9 @@ export async function startApiServer(): Promise<number> {
       const project = getProject(scope.projectId)
       const workspaceId = scope.workspaceId
       const projectId = scope.projectId
+      const workspace = listWorkspaces({ projectId, includeArchived: true }).find(
+        (entry) => entry.id === workspaceId
+      )
 
       if (req.url === '/browser/open') {
         const url = typeof body.url === 'string' ? body.url : 'about:blank'
@@ -138,17 +146,70 @@ export async function startApiServer(): Promise<number> {
       }
 
       if (req.url === '/browser/list') {
+        const focusedPanelId = getFocusedBrowserPanelId(workspaceId)
         sendJson(res, 200, {
           panels: listBrowserPanels(workspaceId).map((panel) => ({
             panelId: panel.panelId,
             workspaceId: panel.workspaceId,
             projectId: panel.projectId,
+            projectName: project?.name ?? null,
+            workspaceName: workspace?.name ?? null,
             url: panel.url,
             panelTitle: panel.panelTitle,
             width: panel.width,
-            height: panel.height
+            height: panel.height,
+            isFocused: focusedPanelId === panel.panelId,
+            isVisible: true,
+            kind: 'centipede-browser-panel',
+            webContentsId: panel.webContentsId ?? null,
+            targetId: typeof panel.webContentsId === 'number' ? String(panel.webContentsId) : null
           }))
         })
+        return
+      }
+
+      if (req.url === '/browser/get') {
+        if (typeof body.panelId !== 'string') {
+          sendJson(res, 400, { error: 'panelId is required' })
+          return
+        }
+
+        const panel = getBrowserPanel(body.panelId)
+        if (!panel || panel.workspaceId !== workspaceId) {
+          sendJson(res, 404, { error: 'Panel not found in workspace' })
+          return
+        }
+
+        sendJson(res, 200, {
+          panelId: panel.panelId,
+          workspaceId: panel.workspaceId,
+          projectId: panel.projectId,
+          projectName: project?.name ?? null,
+          workspaceName: workspace?.name ?? null,
+          url: panel.url,
+          panelTitle: panel.panelTitle,
+          width: panel.width,
+          height: panel.height,
+          isFocused: getFocusedBrowserPanelId(workspaceId) === panel.panelId,
+          isVisible: true,
+          kind: 'centipede-browser-panel',
+          webContentsId: panel.webContentsId ?? null,
+          targetId: typeof panel.webContentsId === 'number' ? String(panel.webContentsId) : null
+        })
+        return
+      }
+
+      if (req.url === '/browser/activate') {
+        if (typeof body.panelId !== 'string') {
+          sendJson(res, 400, { error: 'panelId is required' })
+          return
+        }
+        const panel = activateBrowserPanel(workspaceId, body.panelId)
+        if (!panel) {
+          sendJson(res, 404, { error: 'Panel not found in workspace' })
+          return
+        }
+        sendJson(res, 200, { ok: true })
         return
       }
 
@@ -157,6 +218,17 @@ export async function startApiServer(): Promise<number> {
         sendJson(res, 200, {
           endpoint: cdpPort ? `http://127.0.0.1:${cdpPort}` : null
         })
+        return
+      }
+
+      if (req.url === '/browser/session') {
+        const session = getYellowSessionSnapshot()
+        if (!session || session.workspaceId !== workspaceId || session.projectId !== projectId) {
+          sendJson(res, 404, { error: 'Session not found for workspace' })
+          return
+        }
+
+        sendJson(res, 200, session)
         return
       }
 

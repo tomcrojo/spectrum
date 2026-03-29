@@ -117,6 +117,16 @@ export const t3codeApi = {
 }
 
 export const browserApi = {
+  activate: (input: { workspaceId: string; panelId: string }) =>
+    invoke<boolean>(BROWSER_CHANNELS.ACTIVATE, input),
+  get: (input: { panelId: string }) =>
+    invoke<any>(BROWSER_CHANNELS.GET, input),
+  getSession: () => invoke<any>(BROWSER_CHANNELS.SESSION),
+  sessionSync: (input: {
+    activeProjectId: string | null
+    activeWorkspaceId: string | null
+    focusedBrowserPanelId: string | null
+  }) => invoke<boolean>(BROWSER_CHANNELS.SESSION_SYNC, input),
   webviewReady: (input: {
     panelId: string
     workspaceId: string

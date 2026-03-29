@@ -1,0 +1,10 @@
+{
+  "name": "browser-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "browser": "./bin/browser.js",
+    "browser-cli": "./bin/browser-cli.js"
+  }
+}

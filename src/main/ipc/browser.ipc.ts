@@ -1,9 +1,11 @@
 import { ipcMain } from 'electron'
 import { BROWSER_CHANNELS } from '@shared/ipc-channels'
 import {
+  activateBrowserPanel,
   bindBrowserPanelWebContents,
   ensureBrowserPanelState,
   getBrowserPanel,
+  setFocusedBrowserPanel,
   unbindBrowserPanelByWebContentsId,
   updateBrowserPanelFromRenderer
 } from '../browser/BrowserPanelManager'
@@ -13,6 +15,10 @@ import {
   updateCdpTarget
 } from '../cdp/CdpProxyManager'
 import { isKnownWebviewId } from '../webview/WebviewSessionManager'
+import {
+  touchYellowSession,
+  updateYellowSessionScope
+} from '../yellow/YellowSessionManager'
 
 interface WebviewReadyPayload {
   panelId: string
@@ -30,6 +36,12 @@ interface UrlChangedPayload {
   panelId: string
   url?: string
   panelTitle?: string
+}
+
+interface SessionSyncPayload {
+  activeProjectId: string | null
+  activeWorkspaceId: string | null
+  focusedBrowserPanelId: string | null
 }
 
 export function registerBrowserHandlers(): void {
@@ -61,6 +73,7 @@ export function registerBrowserHandlers(): void {
       title: panel.panelTitle,
       url: panel.url
     })
+    touchYellowSession()
 
     return true
   })
@@ -73,6 +86,7 @@ export function registerBrowserHandlers(): void {
           workspaceId: panel.workspaceId,
           webContentsId: payload.webContentsId
         })
+        touchYellowSession()
       }
       return true
     }
@@ -88,6 +102,7 @@ export function registerBrowserHandlers(): void {
         workspaceId: panel.workspaceId,
         webContentsId
       })
+      touchYellowSession()
       return true
     }
 
@@ -111,4 +126,25 @@ export function registerBrowserHandlers(): void {
 
     return Boolean(panel)
   })
+
+  ipcMain.handle(BROWSER_CHANNELS.SESSION_SYNC, (_event, payload: SessionSyncPayload) => {
+    updateYellowSessionScope(payload)
+
+    if (payload.activeWorkspaceId) {
+      setFocusedBrowserPanel(payload.activeWorkspaceId, payload.focusedBrowserPanelId)
+    }
+
+    return true
+  })
+
+  ipcMain.handle(
+    BROWSER_CHANNELS.ACTIVATE,
+    (_event, payload: { workspaceId: string; panelId: string }) => {
+      const panel = activateBrowserPanel(payload.workspaceId, payload.panelId)
+      if (panel) {
+        touchYellowSession()
+      }
+      return Boolean(panel)
+    }
+  )
 }

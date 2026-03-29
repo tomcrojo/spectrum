@@ -53,7 +53,7 @@ export function useBrowserApiListener(): void {
         return
       }
 
-      state.addActivePanel({
+      const nextPanel = {
         panelId: payload.panelId,
         workspaceId: payload.workspaceId,
         workspaceName: workspace.name,
@@ -63,7 +63,18 @@ export function useBrowserApiListener(): void {
         url: payload.url,
         width: payload.width,
         height: payload.height
-      })
+      }
+
+      const focusedPanel = state.focusedPanelId
+        ? state.activePanels.find((panel) => panel.panelId === state.focusedPanelId)
+        : null
+
+      if (focusedPanel && focusedPanel.workspaceId === payload.workspaceId) {
+        state.insertPanelAfterWithoutFocus(nextPanel, focusedPanel.panelId)
+        return
+      }
+
+      state.addActivePanelWithoutFocus(nextPanel)
     })
 
     const removeNavigate = transport.on(
@@ -84,11 +95,30 @@ export function useBrowserApiListener(): void {
       })
     })
 
+    const removeActivate = transport.on(
+      BROWSER_CHANNELS.ACTIVATE,
+      (payload: { panelId: string }) => {
+        useWorkspacesStore.getState().setFocusedPanel(payload.panelId)
+      }
+    )
+
+    const removeFocusChanged = transport.on(
+      BROWSER_CHANNELS.FOCUS_CHANGED,
+      (payload: { panelId: string | null }) => {
+        if (!payload.panelId) {
+          return
+        }
+        useWorkspacesStore.getState().setFocusedPanel(payload.panelId)
+      }
+    )
+
     return () => {
       removeOpen()
       removeNavigate()
       removeClose()
       removeResize()
+      removeActivate()
+      removeFocusChanged()
     }
   }, [])
 }

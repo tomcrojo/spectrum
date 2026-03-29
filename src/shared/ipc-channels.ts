@@ -49,8 +49,13 @@ export const BROWSER_CHANNELS = {
   OPEN: 'browser:open',
   CLOSE: 'browser:close',
   RESIZE: 'browser:resize',
+  ACTIVATE: 'browser:activate',
   LIST: 'browser:list',
+  GET: 'browser:get',
+  SESSION: 'browser:session',
+  SESSION_SYNC: 'browser:session-sync',
   URL_CHANGED: 'browser:url-changed',
+  FOCUS_CHANGED: 'browser:focus-changed',
   WEBVIEW_READY: 'browser:webview-ready',
   WEBVIEW_DESTROYED: 'browser:webview-destroyed'
 } as const
