@@ -235,6 +235,14 @@ function resolveLatestUserMessageAt(stateDir: string, projectPath: string): stri
   }
 }
 
+export function getT3CodeLastUserMessageAt(
+  instanceId: string,
+  projectPath: string
+): string | null {
+  const stateDir = join(homedir(), '.centipede-dev', 't3code-state', instanceId)
+  return resolveLatestUserMessageAt(stateDir, projectPath)
+}
+
 export function getT3CodeThreadInfo(
   instanceId: string,
   projectPath: string
@@ -248,14 +256,14 @@ export function getT3CodeThreadInfo(
     return {
       url: baseUrl,
       threadTitle: null,
-      lastUserMessageAt: resolveLatestUserMessageAt(stateDir, projectPath)
+      lastUserMessageAt: getT3CodeLastUserMessageAt(instanceId, projectPath)
     }
   }
 
   return {
     url: baseUrl ? new URL(`/${threadInfo.threadId}`, `${baseUrl}/`).toString() : null,
     threadTitle: threadInfo.title,
-    lastUserMessageAt: resolveLatestUserMessageAt(stateDir, projectPath)
+    lastUserMessageAt: getT3CodeLastUserMessageAt(instanceId, projectPath)
   }
 }
 

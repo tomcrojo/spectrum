@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid'
 import { getDb } from './database'
+import { getT3CodeLastUserMessageAt } from '../t3code/T3CodeManager'
 import type {
   Workspace,
   CreateWorkspaceInput,
@@ -9,6 +10,63 @@ import type {
   UpdateWorkspaceLayoutInput,
   UpdateWorkspaceLastPanelEditedAtInput
 } from '@shared/workspace.types'
+
+function getNewerTimestamp(
+  left: string | null | undefined,
+  right: string | null | undefined
+): string | null {
+  const leftValue = left ? new Date(left).getTime() : Number.NaN
+  const rightValue = right ? new Date(right).getTime() : Number.NaN
+
+  if (Number.isNaN(leftValue)) {
+    return Number.isNaN(rightValue) ? null : right ?? null
+  }
+
+  if (Number.isNaN(rightValue) || leftValue >= rightValue) {
+    return left ?? null
+  }
+
+  return right ?? null
+}
+
+function getLatestT3CodePanelActivityAt(
+  layoutState: WorkspaceLayoutState,
+  projectPath: string
+): string | null {
+  return layoutState.panels.reduce<string | null>((latestTimestamp, panel) => {
+    if (panel.type !== 't3code') {
+      return latestTimestamp
+    }
+
+    return getNewerTimestamp(
+      latestTimestamp,
+      getT3CodeLastUserMessageAt(panel.id, projectPath)
+    )
+  }, null)
+}
+
+function backfillWorkspaceLastPanelEditedAt(
+  row: any,
+  projectPath: string
+): any {
+  const layoutState = JSON.parse(row.layout_state) as WorkspaceLayoutState
+  const nextTimestamp = getNewerTimestamp(
+    row.last_panel_edited_at ?? null,
+    getLatestT3CodePanelActivityAt(layoutState, projectPath)
+  )
+
+  if (!nextTimestamp || nextTimestamp === row.last_panel_edited_at) {
+    return row
+  }
+
+  const db = getDb()
+  db.prepare('UPDATE workspaces SET last_panel_edited_at = ? WHERE id = ?').run(nextTimestamp, row.id)
+
+  return {
+    ...row,
+    last_panel_edited_at: nextTimestamp
+  }
+}
 
 function rowToWorkspace(row: any): Workspace {
   return {
@@ -31,11 +89,21 @@ export function listWorkspaces(input: string | ListWorkspacesInput): Workspace[]
   const rows = db
     .prepare(
       includeArchived
-        ? 'SELECT * FROM workspaces WHERE project_id = ? ORDER BY archived ASC, created_at ASC'
-        : 'SELECT * FROM workspaces WHERE project_id = ? AND archived = 0 ORDER BY created_at ASC'
+        ? `SELECT w.*, p.repo_path
+           FROM workspaces w
+           INNER JOIN projects p ON p.id = w.project_id
+           WHERE w.project_id = ?
+           ORDER BY w.archived ASC, w.created_at ASC`
+        : `SELECT w.*, p.repo_path
+           FROM workspaces w
+           INNER JOIN projects p ON p.id = w.project_id
+           WHERE w.project_id = ? AND w.archived = 0
+           ORDER BY w.created_at ASC`
     )
     .all(projectId)
-  return rows.map(rowToWorkspace)
+  return rows
+    .map((row) => backfillWorkspaceLastPanelEditedAt(row, row.repo_path))
+    .map(rowToWorkspace)
 }
 
 export function createWorkspace(input: CreateWorkspaceInput): Workspace {
