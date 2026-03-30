@@ -11,7 +11,7 @@ import {
 } from './browser/BrowserPanelManager'
 import { startApiServer, stopApiServer } from './api/BrowserApiServer'
 import { shutdownCdpProxies } from './cdp/CdpProxyManager'
-import { clearYellowSession } from './yellow/YellowSessionManager'
+import { clearBrowserCliSession } from './browser-cli/BrowserCliSessionManager'
 
 app.whenReady().then(() => {
   // Initialize database
@@ -38,7 +38,7 @@ app.on('window-all-closed', () => {
   clearBrowserPanelMainWindow()
   closeAllPtys()
   stopAllT3Code()
-  clearYellowSession()
+  clearBrowserCliSession()
   void stopApiServer()
   void shutdownCdpProxies()
   closeDatabase()

@@ -6,9 +6,9 @@ import { listWorkspaces } from '../db/workspaces.repo'
 import { getApiPort } from '../api/BrowserApiServer'
 import { registerToken, revokeToken } from '../api/TokenRegistry'
 import { getCdpProxyPort } from '../cdp/CdpProxyManager'
-import { getYellowSessionFilePath } from './YellowPathManager'
+import { getBrowserCliSessionFilePath } from './BrowserCliPathManager'
 
-interface YellowSessionRecord {
+interface BrowserCliSessionRecord {
   appInstanceId: string
   processId: number
   projectId: string
@@ -39,20 +39,20 @@ let currentToken: string | null = null
 let currentTokenScope: { projectId: string; workspaceId: string } | null = null
 let heartbeatTimer: NodeJS.Timeout | null = null
 
-function readSessionFile(): YellowSessionRecord[] {
-  const sessionFile = getYellowSessionFilePath()
+function readSessionFile(): BrowserCliSessionRecord[] {
+  const sessionFile = getBrowserCliSessionFilePath()
 
   try {
     const raw = readFileSync(sessionFile, 'utf8')
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? (parsed as YellowSessionRecord[]) : []
+    return Array.isArray(parsed) ? (parsed as BrowserCliSessionRecord[]) : []
   } catch {
     return []
   }
 }
 
-function writeSessionFile(records: YellowSessionRecord[]): void {
-  const sessionFile = getYellowSessionFilePath()
+function writeSessionFile(records: BrowserCliSessionRecord[]): void {
+  const sessionFile = getBrowserCliSessionFilePath()
   mkdirSync(dirname(sessionFile), { recursive: true })
   writeFileSync(sessionFile, JSON.stringify(records, null, 2))
 }
@@ -64,7 +64,7 @@ function resolveWorkspaceName(projectId: string, workspaceId: string): string | 
   return workspace?.name ?? null
 }
 
-function buildSessionRecord(): YellowSessionRecord | null {
+function buildSessionRecord(): BrowserCliSessionRecord | null {
   if (!currentScope.activeProjectId || !currentScope.activeWorkspaceId || !currentToken) {
     return null
   }
@@ -107,7 +107,7 @@ function persistCurrentSession(): void {
   }
 
   if (records.length === 0) {
-    rmSync(getYellowSessionFilePath(), { force: true })
+    rmSync(getBrowserCliSessionFilePath(), { force: true })
     return
   }
 
@@ -143,7 +143,7 @@ function stopHeartbeat(): void {
   heartbeatTimer = null
 }
 
-export function updateYellowSessionScope(input: RendererSessionState): void {
+export function updateBrowserCliSessionScope(input: RendererSessionState): void {
   currentScope = input
 
   if (!input.activeProjectId || !input.activeWorkspaceId) {
@@ -172,12 +172,12 @@ export function updateYellowSessionScope(input: RendererSessionState): void {
   persistCurrentSession()
 }
 
-export function touchYellowSession(): void {
+export function touchBrowserCliSession(): void {
   persistCurrentSession()
 }
 
-export function getYellowSessionSnapshot():
-  | (YellowSessionRecord & {
+export function getBrowserCliSessionSnapshot():
+  | (BrowserCliSessionRecord & {
       capabilities: {
         activatePanel: true
         createPanel: true
@@ -202,7 +202,7 @@ export function getYellowSessionSnapshot():
   }
 }
 
-export function clearYellowSession(): void {
+export function clearBrowserCliSession(): void {
   stopHeartbeat()
   clearRegisteredToken()
   persistCurrentSession()

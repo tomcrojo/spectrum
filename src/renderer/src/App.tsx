@@ -1,9 +1,9 @@
 import { AppShell } from '@renderer/components/layout/AppShell'
 import { useBrowserApiListener } from '@renderer/hooks/useBrowserApiListener'
-import { useYellowSessionSync } from '@renderer/hooks/useYellowSessionSync'
+import { useBrowserCliSessionSync } from '@renderer/hooks/useBrowserCliSessionSync'
 
 export default function App() {
   useBrowserApiListener()
-  useYellowSessionSync()
+  useBrowserCliSessionSync()
   return <AppShell />
 }

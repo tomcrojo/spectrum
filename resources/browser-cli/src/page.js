@@ -1,4 +1,4 @@
-import { YellowError } from "./errors.js";
+import { BrowserCliError } from "./errors.js";
 
 async function getTargetIdForPage(page) {
   const cdp = await page.context().newCDPSession(page);
@@ -58,7 +58,7 @@ async function snapshotDom(page, options = {}) {
 export async function bindPanelToPage(page, pageSummary) {
   const targetId = await getTargetIdForPage(page);
   if (!targetId || (pageSummary.targetId && targetId !== pageSummary.targetId)) {
-    throw new YellowError(`Panel ${pageSummary.panelId} exists but no webview target is attached yet`, {
+    throw new BrowserCliError(`Panel ${pageSummary.panelId} exists but no webview target is attached yet`, {
       code: "TARGET_NOT_READY",
     });
   }

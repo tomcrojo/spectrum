@@ -1,27 +1,23 @@
-const { spawn, spawnSync } = require('node:child_process')
+const { spawn } = require('node:child_process')
+const path = require('node:path')
+const esbuild = require('esbuild')
 
-const build = spawnSync(
-  'npx',
-  [
-    'esbuild',
-    'src/dev-server/index.ts',
-    '--bundle',
-    '--platform=node',
-    '--format=cjs',
-    '--outfile=.dev-server.cjs',
-    '--external:better-sqlite3',
-    '--external:node-pty',
-    '--external:ws'
-  ],
-  {
-    stdio: 'inherit',
-    cwd: process.cwd(),
-    shell: false
-  }
-)
-
-if (build.status !== 0) {
-  process.exit(build.status ?? 1)
+try {
+  esbuild.buildSync({
+    entryPoints: ['src/dev-server/index.ts'],
+    bundle: true,
+    platform: 'node',
+    format: 'cjs',
+    outfile: '.dev-server.cjs',
+    absWorkingDir: process.cwd(),
+    alias: {
+      '@shared': path.resolve(process.cwd(), 'src/shared')
+    },
+    external: ['better-sqlite3', 'electron', 'node-pty', 'ws']
+  })
+} catch (error) {
+  console.error(error)
+  process.exit(1)
 }
 
 const child = spawn('npx', ['electron', '.dev-server.cjs'], {

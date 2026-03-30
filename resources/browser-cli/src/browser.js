@@ -1,8 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createPageHandle, bindPanelToPage } from "./page.js";
-import { YellowError } from "./errors.js";
-import { getYellowTmpDir } from "./protocol.js";
+import { BrowserCliError } from "./errors.js";
+import { getBrowserCliTmpDir } from "./protocol.js";
 
 async function ensureDir(dir) {
   await fs.mkdir(dir, { recursive: true });
@@ -33,10 +33,10 @@ async function getTargetIdForPlaywrightPage(page) {
   }
 }
 
-export class YellowBrowser {
+export class BrowserCli {
   constructor(api) {
     this.api = api;
-    this.aliasStateFile = path.join(path.dirname(getYellowTmpDir()), "state.json");
+    this.aliasStateFile = path.join(path.dirname(getBrowserCliTmpDir()), "state.json");
   }
 
   async loadAliasState() {
@@ -113,7 +113,7 @@ export class YellowBrowser {
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
 
-    throw new YellowError(`Panel ${panelId} exists but no webview target is attached yet`, {
+    throw new BrowserCliError(`Panel ${panelId} exists but no webview target is attached yet`, {
       code: "TARGET_NOT_READY",
     });
   }
@@ -138,7 +138,7 @@ export class YellowBrowser {
     }
 
     if (typeof idOrPredicate !== "string" || idOrPredicate.trim().length === 0) {
-      throw new YellowError("browser.getPage(...) requires a page id, alias, or predicate", {
+      throw new BrowserCliError("browser.getPage(...) requires a page id, alias, or predicate", {
         code: "INVALID_PAGE_REFERENCE",
       });
     }
@@ -182,7 +182,7 @@ export class YellowBrowser {
   async closePage(idOrName) {
     const summary = await this.resolvePanelReference(idOrName);
     if (!summary) {
-      throw new YellowError(`Unknown page: ${idOrName}`, {
+      throw new BrowserCliError(`Unknown page: ${idOrName}`, {
         code: "PAGE_NOT_FOUND",
       });
     }
@@ -198,7 +198,7 @@ export class YellowBrowser {
 }
 
 export async function saveNamedFile(name, data) {
-  const tmpDir = getYellowTmpDir();
+  const tmpDir = getBrowserCliTmpDir();
   await ensureDir(tmpDir);
   const targetPath = path.join(tmpDir, path.basename(name));
   await fs.writeFile(targetPath, data);
@@ -206,6 +206,6 @@ export async function saveNamedFile(name, data) {
 }
 
 export async function readNamedFile(name) {
-  const targetPath = path.join(getYellowTmpDir(), path.basename(name));
+  const targetPath = path.join(getBrowserCliTmpDir(), path.basename(name));
   return fs.readFile(targetPath, "utf8");
 }

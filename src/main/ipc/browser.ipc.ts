@@ -16,9 +16,9 @@ import {
 } from '../cdp/CdpProxyManager'
 import { isKnownWebviewId } from '../webview/WebviewSessionManager'
 import {
-  touchYellowSession,
-  updateYellowSessionScope
-} from '../yellow/YellowSessionManager'
+  touchBrowserCliSession,
+  updateBrowserCliSessionScope
+} from '../browser-cli/BrowserCliSessionManager'
 
 interface WebviewReadyPayload {
   panelId: string
@@ -73,7 +73,7 @@ export function registerBrowserHandlers(): void {
       title: panel.panelTitle,
       url: panel.url
     })
-    touchYellowSession()
+    touchBrowserCliSession()
 
     return true
   })
@@ -86,7 +86,7 @@ export function registerBrowserHandlers(): void {
           workspaceId: panel.workspaceId,
           webContentsId: payload.webContentsId
         })
-        touchYellowSession()
+        touchBrowserCliSession()
       }
       return true
     }
@@ -102,7 +102,7 @@ export function registerBrowserHandlers(): void {
         workspaceId: panel.workspaceId,
         webContentsId
       })
-      touchYellowSession()
+      touchBrowserCliSession()
       return true
     }
 
@@ -128,7 +128,7 @@ export function registerBrowserHandlers(): void {
   })
 
   ipcMain.handle(BROWSER_CHANNELS.SESSION_SYNC, (_event, payload: SessionSyncPayload) => {
-    updateYellowSessionScope(payload)
+    updateBrowserCliSessionScope(payload)
 
     if (payload.activeWorkspaceId) {
       setFocusedBrowserPanel(payload.activeWorkspaceId, payload.focusedBrowserPanelId)
@@ -142,7 +142,7 @@ export function registerBrowserHandlers(): void {
     (_event, payload: { workspaceId: string; panelId: string }) => {
       const panel = activateBrowserPanel(payload.workspaceId, payload.panelId)
       if (panel) {
-        touchYellowSession()
+        touchBrowserCliSession()
       }
       return Boolean(panel)
     }

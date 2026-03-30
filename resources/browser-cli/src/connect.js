@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import { chromium } from "playwright-core";
-import { YellowError } from "./errors.js";
+import { BrowserCliError } from "./errors.js";
 import { getSessionFilePath, normalizeConnectArg } from "./protocol.js";
 
 const SESSION_STALE_MS = 15_000;
@@ -19,7 +19,7 @@ async function postJson(baseUrl, route, token, body = {}) {
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new YellowError(payload.error ?? `Request failed: ${route}`, {
+    throw new BrowserCliError(payload.error ?? `Request failed: ${route}`, {
       code: "API_ERROR",
     });
   }
@@ -57,8 +57,13 @@ function chooseSession(sessions, options) {
   });
 
   if (filtered.length === 0) {
-    throw new YellowError("No running Centipede session found for browser --connect", {
+    throw new BrowserCliError("No active Centipede workspace session found for browser-cli.", {
       code: "NO_SESSION",
+      hints: [
+        "browser-cli only controls browser panels inside a running Centipede workspace.",
+        "Open Centipede, select a project/workspace, and keep that workspace active before running browser-cli.",
+        "If you meant to open an external Chrome window, browser-cli cannot do that."
+      ]
     });
   }
 
@@ -71,8 +76,12 @@ function chooseSession(sessions, options) {
     return focused[0];
   }
 
-  throw new YellowError("Multiple active workspaces found; pass --workspace <id>", {
+  throw new BrowserCliError("Multiple active Centipede workspaces matched this request.", {
     code: "AMBIGUOUS_SESSION",
+    hints: [
+      "Retry with --workspace <id> to target one specific workspace.",
+      "You can inspect available sessions with `browser --json` once a workspace is active."
+    ]
   });
 }
 
@@ -125,8 +134,13 @@ export async function createSessionClient(options = {}) {
         : await api.getCdpEndpoint();
 
       if (!endpoint) {
-        throw new YellowError("This operation requires a mounted browser panel", {
+        throw new BrowserCliError("No mounted Centipede browser panel is available for CDP attachment.", {
           code: "NO_CDP_ENDPOINT",
+          hints: [
+            "browser-cli can create and control browser panels inside Centipede, but it does not attach to external Chrome windows.",
+            "Make sure the target workspace is open in Centipede and at least one browser panel is mounted.",
+            "If you are trying to create a panel, run a script like: browser --connect <<'EOF' ... const page = await browser.newPage({ url: 'https://example.com' }); ... EOF"
+          ]
         });
       }
 

@@ -24,7 +24,7 @@ export function getSessionFilePath() {
   );
 }
 
-export function getYellowTmpDir() {
+export function getBrowserCliTmpDir() {
   return path.join(getDefaultUserDataDir(), "browser-cli", "tmp");
 }
 

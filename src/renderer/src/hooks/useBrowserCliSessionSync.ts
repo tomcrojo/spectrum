@@ -3,7 +3,7 @@ import { browserApi } from '@renderer/lib/ipc'
 import { useUiStore } from '@renderer/stores/ui.store'
 import { useWorkspacesStore } from '@renderer/stores/workspaces.store'
 
-export function useYellowSessionSync(): void {
+export function useBrowserCliSessionSync(): void {
   const activeProjectId = useUiStore((state) => state.activeProjectId)
   const activePanels = useWorkspacesStore((state) => state.activePanels)
   const focusedPanelId = useWorkspacesStore((state) => state.focusedPanelId)

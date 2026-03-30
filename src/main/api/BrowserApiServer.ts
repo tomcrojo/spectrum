@@ -13,7 +13,7 @@ import { getCdpProxyPort } from '../cdp/CdpProxyManager'
 import { validateToken } from './TokenRegistry'
 import { getProject } from '../db/projects.repo'
 import { listWorkspaces } from '../db/workspaces.repo'
-import { getYellowSessionSnapshot } from '../yellow/YellowSessionManager'
+import { getBrowserCliSessionSnapshot } from '../browser-cli/BrowserCliSessionManager'
 
 interface BrowserApiRequestBody {
   token?: string
@@ -222,7 +222,7 @@ export async function startApiServer(): Promise<number> {
       }
 
       if (req.url === '/browser/session') {
-        const session = getYellowSessionSnapshot()
+        const session = getBrowserCliSessionSnapshot()
         if (!session || session.workspaceId !== workspaceId || session.projectId !== projectId) {
           sendJson(res, 404, { error: 'Session not found for workspace' })
           return

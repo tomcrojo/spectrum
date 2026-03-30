@@ -6,9 +6,9 @@ import { nanoid } from 'nanoid'
 import { getApiPort } from '../api/BrowserApiServer'
 import { registerToken, revokeToken } from '../api/TokenRegistry'
 import {
-  getYellowSessionFilePath,
-  prependYellowToPath
-} from '../yellow/YellowPathManager'
+  getBrowserCliSessionFilePath,
+  prependBrowserCliToPath
+} from '../browser-cli/BrowserCliPathManager'
 
 interface PtyInstance {
   pty: pty.IPty
@@ -43,8 +43,8 @@ export function createPty(
   }
   // Unset ELECTRON_RUN_AS_NODE so child shells behave normally
   delete env.ELECTRON_RUN_AS_NODE
-  env.PATH = prependYellowToPath(env.PATH)
-  env.CENTIPEDE_BROWSER_SESSION_FILE = getYellowSessionFilePath()
+  env.PATH = prependBrowserCliToPath(env.PATH)
+  env.CENTIPEDE_BROWSER_SESSION_FILE = getBrowserCliSessionFilePath()
 
   const browserApiToken = nanoid(32)
   registerToken(browserApiToken, workspaceId, projectId)
