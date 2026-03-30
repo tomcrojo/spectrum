@@ -146,7 +146,13 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
 
     void Promise.allSettled(
       t3CodePanels.map(async ({ workspaceId, panelId }) => {
-        const threadInfo = await t3codeApi.getThreadInfo(panelId, repoPath)
+        const workspace = workspaces.find((entry) => entry.id === workspaceId)
+        const panel = workspace?.layoutState.panels.find((entry) => entry.id === panelId)
+        if (!panel?.t3ThreadId) {
+          return
+        }
+
+        const threadInfo = await t3codeApi.getThreadInfo(panel.t3ThreadId)
         if (cancelled || !threadInfo.lastUserMessageAt) {
           return
         }
@@ -158,7 +164,7 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
     return () => {
       cancelled = true
     }
-  }, [repoPath, updateWorkspaceLastPanelEditedAt, workspaces])
+  }, [updateWorkspaceLastPanelEditedAt, workspaces])
 
   const commitRename = useCallback(
     async (workspaceId: string, currentName: string) => {
@@ -253,7 +259,9 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
       workspaceName: workspace.name,
       cwd: repoPath,
       panelType: panel.type,
-      panelTitle: panel.title
+      panelTitle: panel.title,
+      t3ProjectId: panel.t3ProjectId,
+      t3ThreadId: panel.t3ThreadId
     })
   }
 

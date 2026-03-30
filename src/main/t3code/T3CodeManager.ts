@@ -4,10 +4,8 @@ import { homedir } from 'os'
 import { join, dirname } from 'path'
 import net from 'net'
 import Database from 'better-sqlite3'
-import { nanoid } from 'nanoid'
+import WebSocket from 'ws'
 import { getT3CodeConfig } from './config'
-import { getApiPort } from '../api/BrowserApiServer'
-import { registerToken, revokeToken } from '../api/TokenRegistry'
 import {
   getBrowserCliCommandPath,
   getBrowserCommandPath,
@@ -17,16 +15,29 @@ import {
 
 interface RuntimeInstance {
   process: ChildProcess
-  url: string
-  instanceId: string
-  projectPath: string
+  baseUrl: string
   logPath: string
-  browserApiToken: string | null
+  stateDir: string
 }
 
-interface BootstrapThreadInfo {
-  threadId: string
+interface ProjectRow {
+  projectId: string
   title: string
+  workspaceRoot: string
+  defaultModelSelectionJson: string | null
+}
+
+interface ThreadRow {
+  threadId: string
+  projectId: string
+  title: string
+  modelSelectionJson: string
+  deletedAt: string | null
+}
+
+interface ThreadMetadata {
+  threadTitle: string | null
+  lastUserMessageAt: string | null
 }
 
 export interface T3CodeThreadInfo {
@@ -35,17 +46,25 @@ export interface T3CodeThreadInfo {
   lastUserMessageAt: string | null
 }
 
-const runtimes = new Map<string, RuntimeInstance>()
-const pendingStarts = new Map<
+const GLOBAL_RUNTIME_ID = 'global'
+const DEFAULT_MODEL_SELECTION = {
+  provider: 'codex',
+  model: 'gpt-5.4'
+} as const
+
+let runtime: RuntimeInstance | null = null
+let pendingRuntimeStart: Promise<{ baseUrl: string; logPath: string }> | null = null
+const pendingProjectEnsures = new Map<string, Promise<{ t3ProjectId: string }>>()
+const pendingPanelThreadEnsures = new Map<
   string,
   Promise<{
-    url: string
-    logPath: string
+    baseUrl: string
+    t3ProjectId: string
+    t3ThreadId: string
     threadTitle: string | null
     lastUserMessageAt: string | null
   }>
 >()
-const pendingStops = new Map<string, NodeJS.Timeout>()
 
 function reserveLoopbackPort(): Promise<number> {
   const server = net.createServer()
@@ -59,13 +78,14 @@ function reserveLoopbackPort(): Promise<number> {
         reject(new Error('Failed to reserve loopback port'))
         return
       }
+
       const port = address.port
       server.close(() => resolve(port))
     })
   })
 }
 
-async function getFreePort(): Promise<number> {
+function getFreePort(): Promise<number> {
   return reserveLoopbackPort()
 }
 
@@ -140,209 +160,328 @@ function ensureBuilt(sourcePath: string, installCommand: string, buildCommand: s
   }
 }
 
-async function waitForReady(url: string, timeoutMs = 30000): Promise<void> {
+async function waitForReady(baseUrl: string, timeoutMs = 30000): Promise<void> {
   const started = Date.now()
 
   while (Date.now() - started < timeoutMs) {
     try {
-      const response = await fetch(`${url}/global/health`)
-      if (response.ok) return
+      const response = await fetch(`${baseUrl}/global/health`)
+      if (response.ok) {
+        return
+      }
     } catch {
       // retry
     }
+
     await new Promise((resolve) => setTimeout(resolve, 500))
   }
 
   throw new Error('Timed out waiting for T3Code to become ready')
 }
 
-async function waitForAppShell(url: string, timeoutMs = 30000): Promise<void> {
+async function waitForAppShell(baseUrl: string, timeoutMs = 30000): Promise<void> {
   const started = Date.now()
 
   while (Date.now() - started < timeoutMs) {
     try {
-      const response = await fetch(url)
-      if (response.ok) return
+      const response = await fetch(baseUrl)
+      if (response.ok) {
+        return
+      }
     } catch {
       // retry
     }
+
     await new Promise((resolve) => setTimeout(resolve, 250))
   }
 
   throw new Error('Timed out waiting for T3Code app shell')
 }
 
-function prepareLogPath(instanceId: string): string {
-  const logsDir = join(homedir(), '.centipede-dev', 't3code-logs')
-  mkdirSync(logsDir, { recursive: true })
-  return join(logsDir, `${instanceId}.log`)
-}
-
-function resolveBootstrapThreadInfo(stateDir: string, projectPath: string): BootstrapThreadInfo | null {
-  const stateDbPath = join(stateDir, 'userdata', 'state.sqlite')
-  if (!existsSync(stateDbPath)) {
-    return null
-  }
-
-  const db = new Database(stateDbPath, { readonly: true })
-
-  try {
-    const row = db
-      .prepare(
-        `SELECT t.thread_id AS threadId, t.title AS title
-         FROM projection_threads t
-         INNER JOIN projection_projects p ON p.project_id = t.project_id
-         WHERE p.workspace_root = ? AND t.deleted_at IS NULL
-         ORDER BY COALESCE(t.updated_at, t.created_at) DESC
-         LIMIT 1`
-      )
-      .get(projectPath) as { threadId?: string; title?: string } | undefined
-
-    if (!row?.threadId || !row.title) {
-      return null
-    }
-
-    return {
-      threadId: row.threadId,
-      title: row.title
-    }
-  } catch {
-    return null
-  } finally {
-    db.close()
-  }
-}
-
-function resolveLatestUserMessageAt(stateDir: string, projectPath: string): string | null {
-  const stateDbPath = join(stateDir, 'userdata', 'state.sqlite')
-  if (!existsSync(stateDbPath)) {
-    return null
-  }
-
-  const db = new Database(stateDbPath, { readonly: true })
-
-  try {
-    const row = db
-      .prepare(
-        `SELECT m.created_at AS lastUserMessageAt
-         FROM projection_thread_messages m
-         INNER JOIN projection_threads t ON t.thread_id = m.thread_id
-         INNER JOIN projection_projects p ON p.project_id = t.project_id
-         WHERE p.workspace_root = ?
-           AND p.deleted_at IS NULL
-           AND t.deleted_at IS NULL
-           AND m.role = 'user'
-         ORDER BY m.created_at DESC
-         LIMIT 1`
-      )
-      .get(projectPath) as { lastUserMessageAt?: string } | undefined
-
-    return row?.lastUserMessageAt ?? null
-  } catch {
-    return null
-  } finally {
-    db.close()
-  }
-}
-
-export function getT3CodeLastUserMessageAt(
-  instanceId: string,
-  projectPath: string
-): string | null {
-  const stateDir = join(homedir(), '.centipede-dev', 't3code-state', instanceId)
-  return resolveLatestUserMessageAt(stateDir, projectPath)
-}
-
-export function getT3CodeThreadInfo(
-  instanceId: string,
-  projectPath: string
-): T3CodeThreadInfo {
-  const runtime = runtimes.get(instanceId)
-  const baseUrl = runtime?.url ?? null
-  const stateDir = join(homedir(), '.centipede-dev', 't3code-state', instanceId)
-  const threadInfo = resolveBootstrapThreadInfo(stateDir, projectPath)
-
-  if (!threadInfo) {
-    return {
-      url: baseUrl,
-      threadTitle: null,
-      lastUserMessageAt: getT3CodeLastUserMessageAt(instanceId, projectPath)
-    }
-  }
-
-  return {
-    url: baseUrl ? new URL(`/${threadInfo.threadId}`, `${baseUrl}/`).toString() : null,
-    threadTitle: threadInfo.title,
-    lastUserMessageAt: getT3CodeLastUserMessageAt(instanceId, projectPath)
-  }
-}
-
-async function waitForBootstrapThreadInfo(
-  baseUrl: string,
-  stateDir: string,
-  projectPath: string,
-  timeoutMs = 5000
-): Promise<{ url: string; threadTitle: string | null; lastUserMessageAt: string | null }> {
+async function waitForWebSocketReady(baseUrl: string, timeoutMs = 10000): Promise<void> {
   const started = Date.now()
 
   while (Date.now() - started < timeoutMs) {
-    const threadInfo = resolveBootstrapThreadInfo(stateDir, projectPath)
-    if (threadInfo) {
-      return {
-        url: new URL(`/${threadInfo.threadId}`, `${baseUrl}/`).toString(),
-        threadTitle: threadInfo.title,
-        lastUserMessageAt: resolveLatestUserMessageAt(stateDir, projectPath)
-      }
+    try {
+      await sendWsRequest(baseUrl, { _tag: 'orchestration.getSnapshot' })
+      return
+    } catch {
+      // retry
     }
 
     await new Promise((resolve) => setTimeout(resolve, 200))
   }
 
-  return {
-    url: baseUrl,
-    threadTitle: null,
-    lastUserMessageAt: resolveLatestUserMessageAt(stateDir, projectPath)
+  throw new Error('Timed out waiting for T3Code websocket readiness')
+}
+
+function getStateDir(): string {
+  return join(homedir(), '.centipede-dev', 't3code-state', GLOBAL_RUNTIME_ID)
+}
+
+function getLogPath(): string {
+  const logsDir = join(homedir(), '.centipede-dev', 't3code-logs')
+  mkdirSync(logsDir, { recursive: true })
+  return join(logsDir, `${GLOBAL_RUNTIME_ID}.log`)
+}
+
+function getStateDbPath(stateDir = getStateDir()): string {
+  return join(stateDir, 'userdata', 'state.sqlite')
+}
+
+function openStateDb(options?: Database.Options): Database.Database | null {
+  const stateDbPath = getStateDbPath()
+  if (!existsSync(stateDbPath)) {
+    return null
+  }
+
+  return new Database(stateDbPath, options)
+}
+
+function getProjectBindingId(centipedeProjectId: string): string {
+  return `centipede-project:${centipedeProjectId}`
+}
+
+function parseModelSelection(raw: string | null | undefined): Record<string, unknown> {
+  if (!raw) {
+    return DEFAULT_MODEL_SELECTION
+  }
+
+  try {
+    const parsed = JSON.parse(raw)
+    if (parsed && typeof parsed === 'object') {
+      return parsed as Record<string, unknown>
+    }
+  } catch {
+    // fallback
+  }
+
+  return DEFAULT_MODEL_SELECTION
+}
+
+function getProjectById(projectId: string): ProjectRow | null {
+  const db = openStateDb({ readonly: true })
+  if (!db) {
+    return null
+  }
+
+  try {
+    return (
+      (db
+        .prepare(
+          `SELECT
+             project_id AS projectId,
+             title,
+             workspace_root AS workspaceRoot,
+             default_model_selection_json AS defaultModelSelectionJson
+           FROM projection_projects
+           WHERE project_id = ?
+             AND deleted_at IS NULL`
+        )
+        .get(projectId) as ProjectRow | undefined) ?? null
+    )
+  } finally {
+    db.close()
   }
 }
 
-export async function startT3Code(
-  instanceId: string,
-  projectPath: string,
-  scope?: {
-    workspaceId?: string
-    projectId?: string
-  }
-): Promise<{
-  url: string
-  logPath: string
-  threadTitle: string | null
-  lastUserMessageAt: string | null
-}> {
-  const pendingStop = pendingStops.get(instanceId)
-  if (pendingStop) {
-    clearTimeout(pendingStop)
-    pendingStops.delete(instanceId)
+function getThreadById(threadId: string): ThreadRow | null {
+  const db = openStateDb({ readonly: true })
+  if (!db) {
+    return null
   }
 
-  const existing = runtimes.get(instanceId)
-  if (existing && existing.process.exitCode === null) {
-    const threadInfo = await waitForBootstrapThreadInfo(
-      existing.url,
-      join(homedir(), '.centipede-dev', 't3code-state', instanceId),
-      existing.projectPath,
-      1500
+  try {
+    return (
+      (db
+        .prepare(
+          `SELECT
+             thread_id AS threadId,
+             project_id AS projectId,
+             title,
+             model_selection_json AS modelSelectionJson,
+             deleted_at AS deletedAt
+           FROM projection_threads
+           WHERE thread_id = ?`
+        )
+        .get(threadId) as ThreadRow | undefined) ?? null
     )
+  } finally {
+    db.close()
+  }
+}
+
+function getThreadMetadata(threadId: string): ThreadMetadata {
+  const db = openStateDb({ readonly: true })
+  if (!db) {
     return {
-      url: threadInfo.url,
-      logPath: existing.logPath,
-      threadTitle: threadInfo.threadTitle,
-      lastUserMessageAt: threadInfo.lastUserMessageAt
+      threadTitle: null,
+      lastUserMessageAt: null
     }
   }
 
-  const pending = pendingStarts.get(instanceId)
-  if (pending) {
-    return pending
+  try {
+    const threadRow = db
+      .prepare(
+        `SELECT title
+         FROM projection_threads
+         WHERE thread_id = ?
+           AND deleted_at IS NULL`
+      )
+      .get(threadId) as { title?: string } | undefined
+
+    const messageRow = db
+      .prepare(
+        `SELECT created_at AS lastUserMessageAt
+         FROM projection_thread_messages
+         WHERE thread_id = ?
+           AND role = 'user'
+         ORDER BY created_at DESC
+         LIMIT 1`
+      )
+      .get(threadId) as { lastUserMessageAt?: string } | undefined
+
+    return {
+      threadTitle: threadRow?.title ?? null,
+      lastUserMessageAt: messageRow?.lastUserMessageAt ?? null
+    }
+  } finally {
+    db.close()
+  }
+}
+
+async function waitForProject(projectId: string, timeoutMs = 5000): Promise<ProjectRow> {
+  const started = Date.now()
+
+  while (Date.now() - started < timeoutMs) {
+    const project = getProjectById(projectId)
+    if (project) {
+      return project
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+
+  throw new Error(`Timed out waiting for T3Code project ${projectId}`)
+}
+
+async function waitForThread(threadId: string, timeoutMs = 5000): Promise<ThreadRow> {
+  const started = Date.now()
+
+  while (Date.now() - started < timeoutMs) {
+    const thread = getThreadById(threadId)
+    if (thread && !thread.deletedAt) {
+      return thread
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+
+  throw new Error(`Timed out waiting for T3Code thread ${threadId}`)
+}
+
+async function sendWsRequest<T>(baseUrl: string, body: Record<string, unknown>): Promise<T> {
+  const started = Date.now()
+  let lastError: Error | null = null
+
+  while (Date.now() - started < 10000) {
+    try {
+      return await new Promise<T>((resolve, reject) => {
+        const wsUrl = baseUrl.replace(/^http/, 'ws')
+        const socket = new WebSocket(wsUrl)
+        const requestId = `centipede-${crypto.randomUUID()}`
+        let settled = false
+
+        const finish = (callback: () => void) => {
+          if (settled) {
+            return
+          }
+
+          settled = true
+          clearTimeout(timeout)
+          socket.removeAllListeners()
+          try {
+            socket.close()
+          } catch {
+            // ignore
+          }
+          callback()
+        }
+
+        const timeout = setTimeout(() => {
+          finish(() =>
+            reject(new Error(`Timed out waiting for T3Code websocket response: ${String(body._tag)}`))
+          )
+        }, 30000)
+
+        socket.on('open', () => {
+          socket.send(
+            JSON.stringify({
+              id: requestId,
+              body
+            })
+          )
+        })
+
+        socket.on('message', (raw) => {
+          let parsed: { id?: string; result?: T; error?: { message?: string }; type?: string }
+
+          try {
+            parsed = JSON.parse(raw.toString())
+          } catch {
+            return
+          }
+
+          if (parsed.type === 'push' || parsed.id !== requestId) {
+            return
+          }
+
+          if (parsed.error?.message) {
+            finish(() => reject(new Error(parsed.error.message)))
+            return
+          }
+
+          finish(() => resolve(parsed.result as T))
+        })
+
+        socket.on('error', (error) => {
+          finish(() => reject(error))
+        })
+
+        socket.on('close', () => {
+          if (!settled) {
+            finish(() => reject(new Error('T3Code websocket connection closed unexpectedly')))
+          }
+        })
+      })
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+
+      if (
+        !/ECONNREFUSED|closed unexpectedly/i.test(lastError.message) &&
+        !(lastError as NodeJS.ErrnoException).code?.includes?.('ECONNREFUSED')
+      ) {
+        throw lastError
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    }
+  }
+
+  throw lastError ?? new Error('Timed out connecting to T3Code websocket')
+}
+
+function buildEmbeddedThreadUrl(baseUrl: string, threadId: string): string {
+  return new URL(`/embed/thread/${threadId}`, `${baseUrl}/`).toString()
+}
+
+export async function ensureRuntime(): Promise<{ baseUrl: string; logPath: string }> {
+  if (runtime && runtime.process.exitCode === null) {
+    return { baseUrl: runtime.baseUrl, logPath: runtime.logPath }
+  }
+
+  if (pendingRuntimeStart) {
+    return pendingRuntimeStart
   }
 
   const config = getT3CodeConfig()
@@ -350,13 +489,15 @@ export async function startT3Code(
     throw new Error(`T3Code source not found at ${config.sourcePath}`)
   }
 
-  const startPromise = (async () => {
+  pendingRuntimeStart = (async () => {
     ensureBuilt(config.sourcePath, config.installCommand, config.buildCommand)
 
     const port = await getFreePort()
-    const url = `http://127.0.0.1:${port}`
+    const baseUrl = `http://127.0.0.1:${port}`
     const entrypoint = join(config.sourcePath, config.entrypoint)
-    const logPath = prepareLogPath(instanceId)
+    const stateDir = getStateDir()
+    const logPath = getLogPath()
+    mkdirSync(stateDir, { recursive: true })
     mkdirSync(dirname(logPath), { recursive: true })
     const logFd = openSync(logPath, 'a')
 
@@ -371,113 +512,239 @@ export async function startT3Code(
     env.T3CODE_HOST = '127.0.0.1'
     env.T3CODE_PORT = String(port)
     env.T3CODE_NO_BROWSER = '1'
-    env.T3CODE_HOME = join(homedir(), '.centipede-dev', 't3code-state', instanceId)
-    env.T3CODE_STATE_DIR = env.T3CODE_HOME
-    mkdirSync(env.T3CODE_HOME, { recursive: true })
+    env.T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD = '0'
+    env.T3CODE_HOME = stateDir
+    env.T3CODE_STATE_DIR = stateDir
 
-    const browserApiToken = scope?.workspaceId && scope.projectId ? nanoid(32) : null
-    if (browserApiToken && scope?.workspaceId && scope.projectId) {
-      registerToken(browserApiToken, scope.workspaceId, scope.projectId)
-      env.CENTIPEDE_API_PORT = String(getApiPort())
-      env.CENTIPEDE_API_TOKEN = browserApiToken
-      env.CENTIPEDE_WORKSPACE_ID = scope.workspaceId
-      env.CENTIPEDE_PROJECT_ID = scope.projectId
-    }
-
-    const child = spawn('node', [
-      entrypoint,
-      '--mode',
-      'web',
-      '--host',
-      '127.0.0.1',
-      '--port',
-      String(port),
-      '--home-dir',
-      env.T3CODE_HOME,
-      '--auth-token',
-      '',
-      '--no-browser',
-      '--auto-bootstrap-project-from-cwd'
-    ], {
-      cwd: projectPath,
-      env,
-      stdio: ['ignore', logFd, logFd]
-    })
+    const child = spawn(
+      'node',
+      [
+        entrypoint,
+        '--mode',
+        'web',
+        '--host',
+        '127.0.0.1',
+        '--port',
+        String(port),
+        '--home-dir',
+        stateDir,
+        '--auth-token',
+        '',
+        '--no-browser'
+      ],
+      {
+        cwd: config.sourcePath,
+        env,
+        stdio: ['ignore', logFd, logFd]
+      }
+    )
 
     child.on('exit', () => {
-      if (browserApiToken) {
-        revokeToken(browserApiToken)
-      }
-      runtimes.delete(instanceId)
-      pendingStarts.delete(instanceId)
+      runtime = null
+      pendingRuntimeStart = null
       closeSync(logFd)
     })
 
-    runtimes.set(instanceId, {
+    runtime = {
       process: child,
-      url,
-      instanceId,
-      projectPath,
+      baseUrl,
       logPath,
-      browserApiToken
-    })
+      stateDir
+    }
 
     try {
-      await waitForReady(url)
-      await waitForAppShell(url)
-      await new Promise((resolve) => setTimeout(resolve, 350))
-      const threadInfo = await waitForBootstrapThreadInfo(url, env.T3CODE_HOME, projectPath)
-      return {
-        url: threadInfo.url,
-        logPath,
-        threadTitle: threadInfo.threadTitle,
-        lastUserMessageAt: threadInfo.lastUserMessageAt
-      }
+      await waitForReady(baseUrl)
+      await waitForAppShell(baseUrl)
+      await waitForWebSocketReady(baseUrl)
+      return { baseUrl, logPath }
     } catch (error) {
       child.kill()
-      if (browserApiToken) {
-        revokeToken(browserApiToken)
-      }
-      runtimes.delete(instanceId)
+      runtime = null
       throw error
     } finally {
-      pendingStarts.delete(instanceId)
+      pendingRuntimeStart = null
     }
   })()
 
-  pendingStarts.set(instanceId, startPromise)
-  return startPromise
+  return pendingRuntimeStart
 }
 
-export function stopT3Code(instanceId: string): void {
-  if (pendingStops.has(instanceId)) return
+export async function ensureT3Project(input: {
+  centipedeProjectId: string
+  projectPath: string
+  projectName: string
+  existingT3ProjectId?: string
+}): Promise<{ t3ProjectId: string }> {
+  const pendingKey = input.existingT3ProjectId || getProjectBindingId(input.centipedeProjectId)
+  const pending = pendingProjectEnsures.get(pendingKey)
+  if (pending) {
+    return pending
+  }
 
-  const timer = setTimeout(() => {
-    pendingStops.delete(instanceId)
+  const ensurePromise = (async () => {
+  const { baseUrl } = await ensureRuntime()
+  const t3ProjectId = input.existingT3ProjectId || getProjectBindingId(input.centipedeProjectId)
+  const existing = getProjectById(t3ProjectId)
 
-    const instance = runtimes.get(instanceId)
-    if (!instance) return
-    if (instance.browserApiToken) {
-      revokeToken(instance.browserApiToken)
+  if (existing) {
+    if (existing.workspaceRoot !== input.projectPath || existing.title !== input.projectName) {
+      await sendWsRequest(baseUrl, {
+        _tag: 'orchestration.dispatchCommand',
+        command: {
+          type: 'project.meta.update',
+          commandId: crypto.randomUUID(),
+          projectId: t3ProjectId,
+          title: input.projectName,
+          workspaceRoot: input.projectPath
+        }
+      })
+      await waitForProject(t3ProjectId)
     }
-    instance.process.kill()
-    runtimes.delete(instanceId)
-  }, 1500)
 
-  pendingStops.set(instanceId, timer)
+    return { t3ProjectId }
+  }
+
+    try {
+      await sendWsRequest(baseUrl, {
+        _tag: 'orchestration.dispatchCommand',
+        command: {
+          type: 'project.create',
+          commandId: crypto.randomUUID(),
+          projectId: t3ProjectId,
+          title: input.projectName,
+          workspaceRoot: input.projectPath,
+          defaultModelSelection: DEFAULT_MODEL_SELECTION,
+          createdAt: new Date().toISOString()
+        }
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (!/already exists and cannot be created twice/i.test(message)) {
+        throw error
+      }
+    }
+
+    await waitForProject(t3ProjectId)
+    return { t3ProjectId }
+  })()
+
+  pendingProjectEnsures.set(pendingKey, ensurePromise)
+
+  try {
+    return await ensurePromise
+  } finally {
+    pendingProjectEnsures.delete(pendingKey)
+  }
+}
+
+async function createThread(projectId: string): Promise<ThreadRow> {
+  const activeProject = await waitForProject(projectId)
+  const { baseUrl } = await ensureRuntime()
+  const threadId = crypto.randomUUID()
+  const modelSelection = parseModelSelection(activeProject.defaultModelSelectionJson)
+
+  await sendWsRequest(baseUrl, {
+    _tag: 'orchestration.dispatchCommand',
+    command: {
+      type: 'thread.create',
+      commandId: crypto.randomUUID(),
+      threadId,
+      projectId,
+      title: 'New thread',
+      modelSelection,
+      runtimeMode: 'full-access',
+      interactionMode: 'default',
+      branch: null,
+      worktreePath: null,
+      createdAt: new Date().toISOString()
+    }
+  })
+
+  return waitForThread(threadId)
+}
+
+export async function ensurePanelThread(input: {
+  panelId: string
+  centipedeProjectId: string
+  projectPath: string
+  projectName: string
+  existingT3ProjectId?: string
+  existingT3ThreadId?: string
+}): Promise<{
+  baseUrl: string
+  t3ProjectId: string
+  t3ThreadId: string
+  threadTitle: string | null
+  lastUserMessageAt: string | null
+}> {
+  const pending = pendingPanelThreadEnsures.get(input.panelId)
+  if (pending) {
+    return pending
+  }
+
+  const ensurePromise = (async () => {
+    const { baseUrl } = await ensureRuntime()
+    const { t3ProjectId } = await ensureT3Project({
+      centipedeProjectId: input.centipedeProjectId,
+      projectPath: input.projectPath,
+      projectName: input.projectName,
+      existingT3ProjectId: input.existingT3ProjectId
+    })
+
+    let thread = input.existingT3ThreadId ? getThreadById(input.existingT3ThreadId) : null
+    if (!thread || thread.deletedAt || thread.projectId !== t3ProjectId) {
+      thread = await createThread(t3ProjectId)
+    }
+
+    const metadata = getThreadMetadata(thread.threadId)
+
+    return {
+      baseUrl,
+      t3ProjectId,
+      t3ThreadId: thread.threadId,
+      threadTitle: metadata.threadTitle,
+      lastUserMessageAt: metadata.lastUserMessageAt
+    }
+  })()
+
+  pendingPanelThreadEnsures.set(input.panelId, ensurePromise)
+
+  try {
+    return await ensurePromise
+  } finally {
+    pendingPanelThreadEnsures.delete(input.panelId)
+  }
+}
+
+export async function getThreadInfo(t3ThreadId: string): Promise<T3CodeThreadInfo> {
+  const activeRuntime = runtime
+  const metadata = getThreadMetadata(t3ThreadId)
+
+  return {
+    url:
+      activeRuntime && activeRuntime.process.exitCode === null
+        ? buildEmbeddedThreadUrl(activeRuntime.baseUrl, t3ThreadId)
+        : null,
+    threadTitle: metadata.threadTitle,
+    lastUserMessageAt: metadata.lastUserMessageAt
+  }
+}
+
+export function getT3CodeLastUserMessageAt(t3ThreadId: string): string | null {
+  return getThreadMetadata(t3ThreadId).lastUserMessageAt
+}
+
+export function stopSharedRuntime(): void {
+  const activeRuntime = runtime
+  runtime = null
+  pendingRuntimeStart = null
+  if (!activeRuntime) {
+    return
+  }
+
+  activeRuntime.process.kill()
 }
 
 export function stopAllT3Code(): void {
-  for (const [, timer] of pendingStops) {
-    clearTimeout(timer)
-  }
-  pendingStops.clear()
-
-  for (const [instanceId, instance] of runtimes) {
-    if (instance.browserApiToken) {
-      revokeToken(instance.browserApiToken)
-    }
-    instance.process.kill()
-    runtimes.delete(instanceId)
-  }
+  stopSharedRuntime()
 }

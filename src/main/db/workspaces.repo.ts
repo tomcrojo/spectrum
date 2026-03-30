@@ -30,17 +30,16 @@ function getNewerTimestamp(
 }
 
 function getLatestT3CodePanelActivityAt(
-  layoutState: WorkspaceLayoutState,
-  projectPath: string
+  layoutState: WorkspaceLayoutState
 ): string | null {
   return layoutState.panels.reduce<string | null>((latestTimestamp, panel) => {
-    if (panel.type !== 't3code') {
+    if (panel.type !== 't3code' || !panel.t3ThreadId) {
       return latestTimestamp
     }
 
     return getNewerTimestamp(
       latestTimestamp,
-      getT3CodeLastUserMessageAt(panel.id, projectPath)
+      getT3CodeLastUserMessageAt(panel.t3ThreadId)
     )
   }, null)
 }
@@ -52,7 +51,7 @@ function backfillWorkspaceLastPanelEditedAt(
   const layoutState = JSON.parse(row.layout_state) as WorkspaceLayoutState
   const nextTimestamp = getNewerTimestamp(
     row.last_panel_edited_at ?? null,
-    getLatestT3CodePanelActivityAt(layoutState, projectPath)
+    getLatestT3CodePanelActivityAt(layoutState)
   )
 
   if (!nextTimestamp || nextTimestamp === row.last_panel_edited_at) {

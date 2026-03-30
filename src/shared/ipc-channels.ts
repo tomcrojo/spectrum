@@ -39,8 +39,9 @@ export const TERMINAL_CHANNELS = {
 
 // T3Code channels
 export const T3CODE_CHANNELS = {
-  START: 't3code:start',
-  STOP: 't3code:stop',
+  ENSURE_RUNTIME: 't3code:ensure-runtime',
+  ENSURE_PROJECT: 't3code:ensure-project',
+  ENSURE_PANEL_THREAD: 't3code:ensure-panel-thread',
   GET_THREAD_INFO: 't3code:get-thread-info'
 } as const
 

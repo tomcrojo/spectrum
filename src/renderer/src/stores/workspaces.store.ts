@@ -17,6 +17,8 @@ export interface ActiveWorkspacePanel {
   cwd: string
   panelType: PanelType
   panelTitle: string
+  t3ProjectId?: string
+  t3ThreadId?: string
   /** Browser URL — kept in sync with navigation events */
   url?: string
   /** Panel width in px */
@@ -55,7 +57,15 @@ interface WorkspacesState {
   focusWorkspace: (workspaceId: string) => void
 
   /** Update a single panel's properties (size, url, title) — triggers autosave */
-  updatePanel: (panelId: string, patch: Partial<Pick<ActiveWorkspacePanel, 'url' | 'width' | 'height' | 'panelTitle'>>) => void
+  updatePanel: (
+    panelId: string,
+    patch: Partial<
+      Pick<
+        ActiveWorkspacePanel,
+        'url' | 'width' | 'height' | 'panelTitle' | 't3ProjectId' | 't3ThreadId'
+      >
+    >
+  ) => void
   updateWorkspaceLastPanelEditedAt: (workspaceId: string, timestamp: string) => Promise<void>
 
   /** Restore all saved panels from workspace layout states (called on project load) */
@@ -80,6 +90,8 @@ function buildLayoutState(panels: ActiveWorkspacePanel[]): WorkspaceLayoutState 
     id: p.panelId,
     type: p.panelType,
     title: p.panelTitle,
+    t3ProjectId: p.t3ProjectId,
+    t3ThreadId: p.t3ThreadId,
     url: p.url,
     width: p.width,
     height: p.height
@@ -102,6 +114,8 @@ function buildPanelsFromWorkspace(
     cwd,
     panelType: panel.type,
     panelTitle: panel.title,
+    t3ProjectId: panel.t3ProjectId,
+    t3ThreadId: panel.t3ThreadId,
     url: panel.url,
     width: panel.width,
     height: panel.height

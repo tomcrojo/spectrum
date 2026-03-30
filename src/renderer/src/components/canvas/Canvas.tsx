@@ -21,6 +21,8 @@ const FIT_CONTENT_PADDING = 96
 const MIN_GRID_OPACITY = 0.18
 const FIT_ZOOM_TOLERANCE = 0.02
 const FIT_SCROLL_TOLERANCE = 24
+const FIT_MOVE_DURATION_MS = 180
+const FIT_ZOOM_DURATION_MS = 140
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
@@ -79,7 +81,9 @@ function buildActivePanel(workspace: Workspace, cwd: string): ActiveWorkspacePan
     workspaceName: workspace.name,
     cwd,
     panelType: panel.type,
-    panelTitle: panel.title
+    panelTitle: panel.title,
+    t3ProjectId: panel.t3ProjectId,
+    t3ThreadId: panel.t3ThreadId
   }
 }
 
@@ -112,6 +116,7 @@ export function Canvas() {
   const canvasWheelCleanupRef = useRef<(() => void) | null>(null)
   const contentMeasureRef = useRef<HTMLDivElement>(null)
   const previousZoomRef = useRef(canvasZoom)
+  const fitAnimationFrameRef = useRef<number | null>(null)
   const [showCreateMenu, setShowCreateMenu] = useState(false)
   const [isPanning, setIsPanning] = useState(false)
   const [contentSize, setContentSize] = useState({ width: 0, height: 0 })
@@ -210,13 +215,12 @@ export function Canvas() {
 
     let cancelled = false
 
-    t3codeApi.start(panelId, activeProject.repoPath).catch(() => {
+    t3codeApi.ensureRuntime().catch(() => {
       if (cancelled) return
     })
 
     return () => {
       cancelled = true
-      t3codeApi.stop(panelId).catch(() => {})
     }
   }, [activeProject, projectWorkspaces])
 
@@ -342,6 +346,14 @@ export function Canvas() {
       top: clampScroll(targetScrollTop, canvas.scrollHeight - canvas.clientHeight)
     })
   }, [canvasZoom, paddedInsets.left, paddedInsets.top])
+
+  useEffect(() => {
+    return () => {
+      if (fitAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(fitAnimationFrameRef.current)
+      }
+    }
+  }, [])
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current
@@ -655,6 +667,10 @@ export function Canvas() {
     const canvas = canvasRef.current
     const content = contentMeasureRef.current
     if (!canvas || !content) return
+    if (fitAnimationFrameRef.current !== null) {
+      window.cancelAnimationFrame(fitAnimationFrameRef.current)
+      fitAnimationFrameRef.current = null
+    }
 
     const panelElements = Array.from(
       content.querySelectorAll<HTMLElement>('[data-panel-root="true"]')
@@ -711,6 +727,63 @@ export function Canvas() {
       fitScrollTop,
       canvas.scrollHeight - canvas.clientHeight
     )
+
+    const getScrollForWorldPoint = (worldX: number, worldY: number, zoom: number) => ({
+      left: clampScroll(
+        paddedInsets.left + worldX * zoom - canvas.clientWidth / 2,
+        canvas.scrollWidth - canvas.clientWidth
+      ),
+      top: clampScroll(
+        paddedInsets.top + worldY * zoom - canvas.clientHeight / 2,
+        canvas.scrollHeight - canvas.clientHeight
+      )
+    })
+
+    const animateMoveThenZoom = (
+      targetZoom: number,
+      targetWorldCenterX: number,
+      targetWorldCenterY: number
+    ) => {
+      const startZoom = useUiStore.getState().canvasZoom
+      const startScrollLeft = canvas.scrollLeft
+      const startScrollTop = canvas.scrollTop
+      const moveTarget = getScrollForWorldPoint(targetWorldCenterX, targetWorldCenterY, startZoom)
+
+      const animate = (timestamp: number) => {
+        const elapsed = timestamp - startTimestamp
+
+        if (elapsed <= FIT_MOVE_DURATION_MS) {
+          const progress = Math.min(1, elapsed / FIT_MOVE_DURATION_MS)
+          canvas.scrollLeft = startScrollLeft + (moveTarget.left - startScrollLeft) * progress
+          canvas.scrollTop = startScrollTop + (moveTarget.top - startScrollTop) * progress
+          fitAnimationFrameRef.current = window.requestAnimationFrame(animate)
+          return
+        }
+
+        const zoomElapsed = elapsed - FIT_MOVE_DURATION_MS
+        const zoomProgress = Math.min(1, zoomElapsed / FIT_ZOOM_DURATION_MS)
+        const nextZoom = startZoom + (targetZoom - startZoom) * zoomProgress
+        const nextScroll = getScrollForWorldPoint(targetWorldCenterX, targetWorldCenterY, nextZoom)
+
+        useUiStore.getState().setCanvasZoom(nextZoom)
+        canvas.scrollLeft = nextScroll.left
+        canvas.scrollTop = nextScroll.top
+
+        if (zoomProgress < 1) {
+          fitAnimationFrameRef.current = window.requestAnimationFrame(animate)
+          return
+        }
+
+        setCanvasZoom(targetZoom)
+        canvas.scrollLeft = getScrollForWorldPoint(targetWorldCenterX, targetWorldCenterY, targetZoom).left
+        canvas.scrollTop = getScrollForWorldPoint(targetWorldCenterX, targetWorldCenterY, targetZoom).top
+        fitAnimationFrameRef.current = null
+      }
+
+      const startTimestamp = performance.now()
+      fitAnimationFrameRef.current = window.requestAnimationFrame(animate)
+    }
+
     const isAlreadyShowingEverything =
       Math.abs(canvasZoom - nextZoom) <= FIT_ZOOM_TOLERANCE &&
       Math.abs(canvas.scrollLeft - targetFitScrollLeft) <= FIT_SCROLL_TOLERANCE &&
@@ -728,35 +801,19 @@ export function Canvas() {
         const width = focusedPanelRect.width / canvasZoom
         const height = focusedPanelRect.height / canvasZoom
         const detailZoom = 1
+        const targetWorldCenterX = left + width / 2
+        const targetWorldCenterY = top + height / 2
 
-        setCanvasZoom(detailZoom)
-
-        requestAnimationFrame(() => {
-          const detailScrollLeft =
-            paddedInsets.left + (left + width / 2) * detailZoom - canvas.clientWidth / 2
-          const detailScrollTop =
-            paddedInsets.top + (top + height / 2) * detailZoom - canvas.clientHeight / 2
-
-          canvas.scrollTo({
-            left: clampScroll(detailScrollLeft, canvas.scrollWidth - canvas.clientWidth),
-            top: clampScroll(detailScrollTop, canvas.scrollHeight - canvas.clientHeight),
-            behavior: 'smooth'
-          })
-        })
+        animateMoveThenZoom(detailZoom, targetWorldCenterX, targetWorldCenterY)
 
         return
       }
     }
 
-    setCanvasZoom(nextZoom)
+    const targetWorldCenterX = (bounds.left + bounds.right) / 2
+    const targetWorldCenterY = (bounds.top + bounds.bottom) / 2
 
-    requestAnimationFrame(() => {
-      canvas.scrollTo({
-        left: targetFitScrollLeft,
-        top: targetFitScrollTop,
-        behavior: 'smooth'
-      })
-    })
+    animateMoveThenZoom(nextZoom, targetWorldCenterX, targetWorldCenterY)
   }, [canvasZoom, focusedPanelId, paddedInsets.left, paddedInsets.top, setCanvasZoom])
 
   if (!activeProjectId) {
@@ -859,10 +916,13 @@ export function Canvas() {
                             workspaceId={panel.workspaceId}
                             workspaceName={panel.workspaceName}
                             projectId={activeProjectId}
+                            projectName={activeProject?.name ?? 'Project'}
                             cwd={panel.cwd}
                             panelType={panel.panelType}
                             panelTitle={panel.panelTitle}
                             panelId={panel.panelId}
+                            t3ProjectId={panel.t3ProjectId}
+                            t3ThreadId={panel.t3ThreadId}
                             onClose={() => handleClosePanel(panel.panelId)}
                             initialWidth={panel.width}
                             initialHeight={panel.height}

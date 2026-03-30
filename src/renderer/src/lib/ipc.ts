@@ -87,33 +87,40 @@ export const terminalsApi = {
 }
 
 export const t3codeApi = {
-  start: (
-    instanceId: string,
-    projectPath: string,
-    workspaceId?: string,
-    projectId?: string
-  ) =>
+  ensureRuntime: () =>
     invoke<{
-      url: string
+      baseUrl: string
       logPath: string
+    }>(T3CODE_CHANNELS.ENSURE_RUNTIME),
+  ensureProject: (input: {
+    centipedeProjectId: string
+    projectPath: string
+    projectName: string
+  }) =>
+    invoke<{
+      t3ProjectId: string
+    }>(T3CODE_CHANNELS.ENSURE_PROJECT, input),
+  ensurePanelThread: (input: {
+    panelId: string
+    centipedeProjectId: string
+    projectPath: string
+    projectName: string
+    existingT3ProjectId?: string
+    existingT3ThreadId?: string
+  }) =>
+    invoke<{
+      baseUrl: string
+      t3ProjectId: string
+      t3ThreadId: string
       threadTitle: string | null
       lastUserMessageAt: string | null
-    }>(T3CODE_CHANNELS.START, {
-      instanceId,
-      workspaceId,
-      projectId,
-      projectPath
-    }),
-  getThreadInfo: (instanceId: string, projectPath: string) =>
+    }>(T3CODE_CHANNELS.ENSURE_PANEL_THREAD, input),
+  getThreadInfo: (t3ThreadId: string) =>
     invoke<{
       url: string | null
       threadTitle: string | null
       lastUserMessageAt: string | null
-    }>(T3CODE_CHANNELS.GET_THREAD_INFO, {
-      instanceId,
-      projectPath
-    }),
-  stop: (instanceId: string) => invoke<void>(T3CODE_CHANNELS.STOP, instanceId)
+    }>(T3CODE_CHANNELS.GET_THREAD_INFO, { t3ThreadId })
 }
 
 export const browserApi = {

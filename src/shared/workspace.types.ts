@@ -4,6 +4,10 @@ export interface PanelConfig {
   id: string
   type: PanelType
   title: string
+  /** T3Code project binding for persisted t3code panels */
+  t3ProjectId?: string
+  /** T3Code thread binding for persisted t3code panels */
+  t3ThreadId?: string
   /** Browser URL — persisted so the page reloads where the user left off */
   url?: string
   /** Panel width in px */

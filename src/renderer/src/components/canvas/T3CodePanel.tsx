@@ -6,16 +6,34 @@ interface T3CodePanelProps {
   panelId: string
   workspaceId: string
   projectId: string
+  projectName: string
   projectPath: string
+  t3ProjectId?: string
+  t3ThreadId?: string
   theme: 'light' | 'dark'
   autoFocus: boolean
+}
+
+interface ThreadBinding {
+  baseUrl: string
+  t3ProjectId: string
+  t3ThreadId: string
+}
+
+interface ThreadInfo {
+  url: string | null
+  threadTitle: string | null
+  lastUserMessageAt: string | null
 }
 
 export function T3CodePanel({
   panelId,
   workspaceId,
   projectId,
+  projectName,
   projectPath,
+  t3ProjectId,
+  t3ThreadId,
   theme,
   autoFocus
 }: T3CodePanelProps) {
@@ -23,10 +41,24 @@ export function T3CodePanel({
   const updateWorkspaceLastPanelEditedAt = useWorkspacesStore(
     (state) => state.updateWorkspaceLastPanelEditedAt
   )
-  const [url, setUrl] = useState<string | null>(null)
+  const [binding, setBinding] = useState<ThreadBinding | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [iframeUrl, setIframeUrl] = useState<string | null>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
+
+  useEffect(() => {
+    if (!t3ProjectId || !t3ThreadId) {
+      return
+    }
+
+    setBinding((current) =>
+      current?.t3ProjectId === t3ProjectId && current.t3ThreadId === t3ThreadId
+        ? current
+        : current
+          ? { ...current, t3ProjectId, t3ThreadId }
+          : null
+    )
+  }, [t3ProjectId, t3ThreadId])
 
   const postTheme = () => {
     iframeRef.current?.contentWindow?.postMessage(
@@ -41,15 +73,9 @@ export function T3CodePanel({
   useEffect(() => {
     let cancelled = false
 
-    const applyThreadInfo = (threadInfo: {
-      url: string | null
-      threadTitle: string | null
-      lastUserMessageAt: string | null
-    }) => {
+    const applyThreadInfo = (threadInfo: ThreadInfo) => {
       if (cancelled) return
-      if (threadInfo.url) {
-        setUrl(threadInfo.url)
-      }
+
       if (threadInfo.threadTitle?.trim()) {
         updatePanel(panelId, { panelTitle: threadInfo.threadTitle.trim() })
       }
@@ -59,14 +85,40 @@ export function T3CodePanel({
     }
 
     t3codeApi
-      .start(panelId, projectPath, workspaceId, projectId)
+      .ensurePanelThread({
+        panelId,
+        centipedeProjectId: projectId,
+        projectPath,
+        projectName,
+        existingT3ProjectId: t3ProjectId,
+        existingT3ThreadId: t3ThreadId
+      })
       .then((runtime) => {
-        if (!cancelled) {
-          setUrl(runtime.url)
-          setIframeUrl(null)
-          setError(null)
-          applyThreadInfo(runtime)
+        if (cancelled) {
+          return
         }
+
+        setBinding({
+          baseUrl: runtime.baseUrl,
+          t3ProjectId: runtime.t3ProjectId,
+          t3ThreadId: runtime.t3ThreadId
+        })
+        setIframeUrl(null)
+        setError(null)
+
+        if (
+          runtime.t3ProjectId !== t3ProjectId ||
+          runtime.t3ThreadId !== t3ThreadId ||
+          runtime.threadTitle?.trim()
+        ) {
+          updatePanel(panelId, {
+            t3ProjectId: runtime.t3ProjectId,
+            t3ThreadId: runtime.t3ThreadId,
+            panelTitle: runtime.threadTitle?.trim() || undefined
+          })
+        }
+
+        applyThreadInfo(runtime)
       })
       .catch((err: Error) => {
         if (!cancelled) {
@@ -74,32 +126,68 @@ export function T3CodePanel({
         }
       })
 
-    const pollId = window.setInterval(() => {
+    return () => {
+      cancelled = true
+    }
+  }, [
+    panelId,
+    projectId,
+    projectName,
+    projectPath,
+    t3ProjectId,
+    t3ThreadId,
+    updatePanel,
+    updateWorkspaceLastPanelEditedAt,
+    workspaceId
+  ])
+
+  useEffect(() => {
+    if (!binding?.t3ThreadId) {
+      return
+    }
+
+    let cancelled = false
+
+    const poll = () => {
       t3codeApi
-        .getThreadInfo(panelId, projectPath)
-        .then(applyThreadInfo)
+        .getThreadInfo(binding.t3ThreadId)
+        .then((threadInfo) => {
+          if (cancelled) {
+            return
+          }
+
+          if (threadInfo.threadTitle?.trim()) {
+            updatePanel(panelId, { panelTitle: threadInfo.threadTitle.trim() })
+          }
+          if (threadInfo.lastUserMessageAt) {
+            void updateWorkspaceLastPanelEditedAt(workspaceId, threadInfo.lastUserMessageAt)
+          }
+        })
         .catch(() => {})
-    }, 2000)
+    }
+
+    poll()
+    const pollId = window.setInterval(poll, 2000)
 
     return () => {
       cancelled = true
       window.clearInterval(pollId)
-      t3codeApi.stop(panelId).catch(() => {})
     }
-  }, [panelId, projectId, projectPath, updatePanel, updateWorkspaceLastPanelEditedAt, workspaceId])
+  }, [binding?.t3ThreadId, panelId, updatePanel, updateWorkspaceLastPanelEditedAt, workspaceId])
 
   const themedUrl = useMemo(() => {
-    if (!url) {
+    if (!binding?.baseUrl || !binding.t3ThreadId) {
       return null
     }
 
-    const iframeUrl = new URL(url)
-    iframeUrl.searchParams.set('centipedeTheme', theme)
-    return iframeUrl.toString()
-  }, [url, theme])
+    const url = new URL(`/embed/thread/${binding.t3ThreadId}`, `${binding.baseUrl}/`)
+    url.searchParams.set('embedded', '1')
+    url.searchParams.set('centipedeTheme', theme)
+    return url.toString()
+  }, [binding, theme])
 
   useEffect(() => {
-    if (!themedUrl) {
+    if (!themedUrl || !binding?.baseUrl) {
       setIframeUrl(null)
       return
     }
@@ -107,13 +195,9 @@ export function T3CodePanel({
     let cancelled = false
 
     const waitForBrowserReachability = async () => {
-      const probeUrl = new URL(themedUrl)
-      probeUrl.search = ''
-      probeUrl.hash = ''
-
       for (let attempt = 0; attempt < 20; attempt += 1) {
         try {
-          await fetch(probeUrl.toString(), {
+          await fetch(binding.baseUrl, {
             method: 'GET',
             cache: 'no-store',
             credentials: 'omit',
@@ -142,7 +226,7 @@ export function T3CodePanel({
     return () => {
       cancelled = true
     }
-  }, [themedUrl])
+  }, [binding?.baseUrl, themedUrl])
 
   useEffect(() => {
     postTheme()
@@ -160,14 +244,14 @@ export function T3CodePanel({
     return (
       <div className="flex h-full items-center justify-center px-6 text-center">
         <div>
-          <p className="text-sm text-red-400 mb-2">Failed to start T3Code</p>
+          <p className="mb-2 text-sm text-red-400">Failed to start T3Code</p>
           <p className="text-xs text-text-muted">{error}</p>
         </div>
       </div>
     )
   }
 
-  if (!url || !iframeUrl) {
+  if (!binding || !iframeUrl) {
     return (
       <div className="flex h-full items-center justify-center">
         <p className="text-sm text-text-muted">Starting T3Code…</p>

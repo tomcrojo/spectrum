@@ -15,10 +15,13 @@ interface WorkspacePanelProps {
   workspaceId: string
   workspaceName: string
   projectId: string
+  projectName: string
   cwd: string
   panelType: PanelType
   panelTitle: string
   panelId: string
+  t3ProjectId?: string
+  t3ThreadId?: string
   onClose: () => void
   style?: React.CSSProperties
   /** Restored width from saved state */
@@ -179,10 +182,13 @@ function PanelFocusHitArea({
 export function WorkspacePanel({
   workspaceId,
   projectId,
+  projectName,
   cwd,
   panelType,
   panelTitle,
   panelId,
+  t3ProjectId,
+  t3ThreadId,
   onClose,
   style,
   initialWidth,
@@ -438,7 +444,10 @@ export function WorkspacePanel({
             panelId={panelId}
             workspaceId={workspaceId}
             projectId={projectId}
+            projectName={projectName}
             projectPath={cwd}
+            t3ProjectId={t3ProjectId}
+            t3ThreadId={t3ThreadId}
             theme={resolvedTheme}
             autoFocus={isFocused}
           />
