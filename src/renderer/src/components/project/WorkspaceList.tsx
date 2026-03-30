@@ -8,6 +8,7 @@ import { Button } from '@renderer/components/shared/Button'
 import { Input } from '@renderer/components/shared/Input'
 import { formatWorkspaceLastEditedAt } from '@renderer/lib/dates'
 import { t3codeApi } from '@renderer/lib/ipc'
+import type { PanelType } from '@shared/workspace.types'
 
 interface WorkspaceListProps {
   projectId: string
@@ -24,6 +25,7 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
     unarchiveWorkspace,
     reopenWorkspace,
     addActivePanel,
+    closeActivePanel,
     focusWorkspace,
     focusedPanelId,
     setFocusedPanel,
@@ -40,6 +42,7 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
   const [archivedExpanded, setArchivedExpanded] = useState(false)
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null)
   const [expandedWorkspaceIds, setExpandedWorkspaceIds] = useState<string[]>([])
+  const [addPanelMenuWorkspaceId, setAddPanelMenuWorkspaceId] = useState<string | null>(null)
   const [timestampNow, setTimestampNow] = useState(() => Date.now())
   /** Guard against double-commit from blur + unmount */
   const isCommitting = useRef(false)
@@ -65,24 +68,35 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
     map.set(panel.workspaceId, existingPanels)
     return map
   }, new Map<string, typeof activePanels>())
+  // Use activePanels as the source of truth when the workspace has been opened
+  // this session (has an entry in panelsByWorkspace OR had panels restored on load).
+  // Only fall back to layoutState for workspaces that haven't been opened yet
+  // (no active panels AND no panels were ever loaded for them this session).
+  const hasAnyActivePanels = activePanels.length > 0
   const activeWorkspaces = workspaces
     .filter((workspace) => !workspace.archived)
     .map((workspace) => ({
       workspaceId: workspace.id,
       workspaceName: workspace.name,
-      panels:
-        panelsByWorkspace.get(workspace.id) ??
-        workspace.layoutState.panels.map((panel) => ({
-          panelId: panel.id,
-          workspaceId: workspace.id,
-          workspaceName: workspace.name,
-          cwd: repoPath,
-          panelType: panel.type,
-          panelTitle: panel.title,
-          url: panel.url,
-          width: panel.width,
-          height: panel.height
-        }))
+      panels: panelsByWorkspace.get(workspace.id) ?? (
+        // Only fall back to layoutState if no panels have been loaded into activePanels
+        // at all (i.e., the project just loaded and panels haven't been restored yet).
+        // Once any workspace has active panels, treat missing entries as "0 panels"
+        // rather than showing stale layoutState data.
+        hasAnyActivePanels
+          ? []
+          : workspace.layoutState.panels.map((panel) => ({
+              panelId: panel.id,
+              workspaceId: workspace.id,
+              workspaceName: workspace.name,
+              cwd: repoPath,
+              panelType: panel.type,
+              panelTitle: panel.title,
+              url: panel.url,
+              width: panel.width,
+              height: panel.height
+            }))
+      )
     }))
   const archivedWorkspaces = workspaces.filter((workspace) => workspace.archived)
 
@@ -200,6 +214,7 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
 
   const handleWorkspaceClick = (workspaceId: string) => {
     if (editingWorkspaceId) return
+    if (addPanelMenuWorkspaceId) setAddPanelMenuWorkspaceId(null)
 
     clearPendingWorkspaceClick()
     workspaceClickTimeoutRef.current = setTimeout(() => {
@@ -242,6 +257,33 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
     })
   }
 
+  const handleAddPanel = (workspaceId: string, panelType: PanelType) => {
+    const workspace = activeWorkspaces.find((ws) => ws.workspaceId === workspaceId)
+    if (!workspace) return
+
+    const panelTitle =
+      panelType === 't3code'
+        ? 'T3Code'
+        : panelType === 'browser'
+          ? 'Browser'
+          : 'Terminal'
+
+    addActivePanel({
+      panelId: nanoid(),
+      workspaceId,
+      workspaceName: workspace.workspaceName,
+      cwd: repoPath,
+      panelType,
+      panelTitle
+    })
+    setAddPanelMenuWorkspaceId(null)
+  }
+
+  const handleClosePanel = (panelId: string, event: React.MouseEvent) => {
+    event.stopPropagation()
+    closeActivePanel(panelId)
+  }
+
   const handleArchive = async (workspaceId: string) => {
     if (editingWorkspaceId === workspaceId) {
       cancelRename()
@@ -256,11 +298,6 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
     const workspace = await unarchiveWorkspace(workspaceId)
     if (!workspace) return
     reopenWorkspace(workspace.id, repoPath)
-  }
-
-  const handleReopen = (workspaceId: string) => {
-    reopenWorkspace(workspaceId, repoPath)
-    focusSelectedWorkspace(workspaceId)
   }
 
   const toggleWorkspacePanels = (workspaceId: string) => {
@@ -330,46 +367,33 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
                     {workspace.workspaceName}
                   </span>
                 )}
-                {workspace.panels.length > 0 ? (
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      toggleWorkspacePanels(workspace.workspaceId)
-                    }}
-                    className="flex items-center gap-1 rounded px-1.5 py-1 text-xs text-text-muted hover:text-text-primary hover:bg-bg-active transition-colors"
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    toggleWorkspacePanels(workspace.workspaceId)
+                  }}
+                  className="flex items-center gap-1 rounded px-1.5 py-1 text-xs text-text-muted hover:text-text-primary hover:bg-bg-active transition-colors"
+                >
+                  <span>
+                    {workspace.panels.length} {workspace.panels.length === 1 ? 'panel' : 'panels'}
+                  </span>
+                  <svg
+                    className={`h-3 w-3 transition-transform ${
+                      expandedWorkspaceIds.includes(workspace.workspaceId) ? 'rotate-90' : ''
+                    }`}
+                    viewBox="0 0 12 12"
+                    fill="none"
                   >
-                    <span>
-                      {workspace.panels.length} {workspace.panels.length === 1 ? 'panel' : 'panels'}
-                    </span>
-                    <svg
-                      className={`h-3 w-3 transition-transform ${
-                        expandedWorkspaceIds.includes(workspace.workspaceId) ? 'rotate-90' : ''
-                      }`}
-                      viewBox="0 0 12 12"
-                      fill="none"
-                    >
-                      <path
-                        d="M4.5 3L7.5 6L4.5 9"
-                        stroke="currentColor"
-                        strokeWidth={1.5}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      handleReopen(workspace.workspaceId)
-                    }}
-                    className="rounded px-1.5 py-1 text-xs text-text-muted hover:text-text-primary hover:bg-bg-active transition-colors"
-                  >
-                    Reopen
-                  </button>
-                )}
+                    <path
+                      d="M4.5 3L7.5 6L4.5 9"
+                      stroke="currentColor"
+                      strokeWidth={1.5}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
                 <button
                   type="button"
                   title="Archive workspace"
@@ -418,7 +442,7 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
                           event.stopPropagation()
                           handlePanelClick(workspace.workspaceId, panel.panelId)
                         }}
-                        className={`flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs transition-colors ${
+                        className={`group/panel flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs transition-colors ${
                           focusedPanelId === panel.panelId
                             ? 'bg-bg-active text-text-primary'
                             : 'bg-bg/40 text-text-secondary hover:bg-bg-active hover:text-text-primary'
@@ -427,9 +451,62 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
                         <span className="uppercase tracking-wide text-text-muted">
                           {panel.panelType}
                         </span>
-                        <span className="text-text-primary truncate">{panel.panelTitle}</span>
+                        <span className="text-text-primary truncate flex-1">{panel.panelTitle}</span>
+                        <button
+                          type="button"
+                          title="Close panel"
+                          aria-label="Close panel"
+                          onClick={(event) => handleClosePanel(panel.panelId, event)}
+                          className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:text-text-primary hover:bg-bg-hover opacity-0 group-hover/panel:opacity-100 transition-all flex-shrink-0"
+                        >
+                          <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
+                            <path
+                              d="M3 3L9 9M9 3L3 9"
+                              stroke="currentColor"
+                              strokeWidth={1.5}
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                        </button>
                       </div>
                     ))}
+                  </div>
+                  <div className="relative mt-1">
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setAddPanelMenuWorkspaceId(
+                          addPanelMenuWorkspaceId === workspace.workspaceId
+                            ? null
+                            : workspace.workspaceId
+                        )
+                      }}
+                      className="text-xs text-text-muted hover:text-text-primary transition-colors px-2 py-1"
+                    >
+                      + Add Panel
+                    </button>
+                    {addPanelMenuWorkspaceId === workspace.workspaceId ? (
+                      <div className="mt-1 rounded-lg border border-border bg-bg-raised p-1 shadow-lg">
+                        {(['t3code', 'terminal', 'browser'] as const).map((type) => (
+                          <button
+                            key={type}
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              handleAddPanel(workspace.workspaceId, type)
+                            }}
+                            className="w-full rounded px-3 py-1.5 text-left text-xs text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors"
+                          >
+                            {type === 't3code'
+                              ? 'T3Code'
+                              : type === 'browser'
+                                ? 'Browser'
+                                : 'Terminal'}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               ) : null}

@@ -1,14 +1,35 @@
-import { useEffect, useCallback, useMemo, useRef, useState } from 'react'
-import { useUiStore } from '@renderer/stores/ui.store'
+import { useEffect, useLayoutEffect, useCallback, useMemo, useRef, useState } from 'react'
+import {
+  CANVAS_ZOOM_STEPS,
+  useUiStore
+} from '@renderer/stores/ui.store'
 import { useWorkspacesStore, type ActiveWorkspacePanel } from '@renderer/stores/workspaces.store'
 import { useProjectsStore } from '@renderer/stores/projects.store'
 import { t3codeApi } from '@renderer/lib/ipc'
 import { WorkspacePanel } from './WorkspacePanel'
 import { NewCanvasItemMenu } from './NewCanvasItemMenu'
+import { CanvasToolbar } from './CanvasToolbar'
+import { EdgeButton } from './EdgeButton'
 import { cn } from '@renderer/lib/cn'
 import { nanoid } from 'nanoid'
 import type { PanelType, Workspace } from '@shared/workspace.types'
 import type { Project } from '@shared/project.types'
+
+const VIRTUAL_PADDING = 5000
+const GRID_SIZE = 24
+const FIT_CONTENT_PADDING = 96
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+
+  return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'))
+}
+
+function clampScroll(value: number, max: number): number {
+  return Math.min(Math.max(0, value), max)
+}
 
 function isCentipedeProject(project: Project): boolean {
   const normalizedName = project.name.trim().toLowerCase()
@@ -50,7 +71,15 @@ function buildActivePanel(workspace: Workspace, cwd: string): ActiveWorkspacePan
 }
 
 export function Canvas() {
-  const { activeProjectId } = useUiStore()
+  const {
+    activeProjectId,
+    autoCenterFocusedPanel,
+    canvasZoom,
+    setCanvasZoom,
+    zoomIn,
+    zoomOut,
+    resetZoom
+  } = useUiStore()
   const {
     workspaces,
     activePanels,
@@ -60,14 +89,24 @@ export function Canvas() {
     setActivePanels,
     addActivePanel,
     insertPanelAfter,
+    prependPanelToWorkspace,
     closeActivePanel,
     restorePanelsFromWorkspaces
   } = useWorkspacesStore()
   const { projects } = useProjectsStore()
   const didAutoOpenRef = useRef<string | null>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
+  const contentMeasureRef = useRef<HTMLDivElement>(null)
+  const previousZoomRef = useRef(canvasZoom)
   const [showCreateMenu, setShowCreateMenu] = useState(false)
   const [isPanning, setIsPanning] = useState(false)
+  const [contentSize, setContentSize] = useState({ width: 0, height: 0 })
+  const [canvasInsets, setCanvasInsets] = useState({
+    top: 24,
+    right: 24,
+    bottom: 24,
+    left: 24
+  })
 
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null
   const projectWorkspaces = activeProjectId
@@ -95,6 +134,20 @@ export function Canvas() {
       }))
       .filter((workspace) => workspace.panels.length > 0)
   }, [activePanels, projectWorkspaces])
+
+  const focusedPanel = useMemo(
+    () => activePanels.find((panel) => panel.panelId === focusedPanelId) ?? null,
+    [activePanels, focusedPanelId]
+  )
+  const paddedInsets = useMemo(
+    () => ({
+      top: canvasInsets.top + VIRTUAL_PADDING,
+      right: canvasInsets.right + VIRTUAL_PADDING,
+      bottom: canvasInsets.bottom + VIRTUAL_PADDING,
+      left: canvasInsets.left + VIRTUAL_PADDING
+    }),
+    [canvasInsets]
+  )
 
   // Load workspaces when project changes and restore saved panel state
   useEffect(() => {
@@ -151,6 +204,186 @@ export function Canvas() {
       t3codeApi.stop(panelId).catch(() => {})
     }
   }, [activeProject, projectWorkspaces])
+
+  useLayoutEffect(() => {
+    const content = contentMeasureRef.current
+    if (!content) return
+
+    const updateContentSize = () => {
+      const nextWidth = content.offsetWidth
+      const nextHeight = content.offsetHeight
+
+      setContentSize((current) =>
+        current.width === nextWidth && current.height === nextHeight
+          ? current
+          : { width: nextWidth, height: nextHeight }
+      )
+    }
+
+    updateContentSize()
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateContentSize()
+    })
+
+    resizeObserver.observe(content)
+
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [panelsByWorkspace, activePanels.length])
+
+  useLayoutEffect(() => {
+    if (!autoCenterFocusedPanel) {
+      setCanvasInsets((current) =>
+        current.top === 24 &&
+        current.right === 24 &&
+        current.bottom === 24 &&
+        current.left === 24
+          ? current
+          : { top: 24, right: 24, bottom: 24, left: 24 }
+      )
+      return
+    }
+
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const focusedPanel = focusedPanelId
+      ? canvas.querySelector<HTMLElement>(`[data-panel-id="${focusedPanelId}"]`)
+      : null
+
+    if (!focusedPanel) {
+      setCanvasInsets((current) =>
+        current.top === 24 &&
+        current.right === 24 &&
+        current.bottom === 24 &&
+        current.left === 24
+          ? current
+          : { top: 24, right: 24, bottom: 24, left: 24 }
+      )
+      return
+    }
+
+    const updateInsets = () => {
+      const nextInsets = {
+        top: Math.max(24, (canvas.clientHeight - focusedPanel.offsetHeight) / 2),
+        right: Math.max(24, (canvas.clientWidth - focusedPanel.offsetWidth) / 2),
+        bottom: Math.max(24, (canvas.clientHeight - focusedPanel.offsetHeight) / 2),
+        left: Math.max(24, (canvas.clientWidth - focusedPanel.offsetWidth) / 2)
+      }
+
+      setCanvasInsets((current) =>
+        current.top === nextInsets.top &&
+        current.right === nextInsets.right &&
+        current.bottom === nextInsets.bottom &&
+        current.left === nextInsets.left
+          ? current
+          : nextInsets
+      )
+    }
+
+    updateInsets()
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateInsets()
+    })
+
+    resizeObserver.observe(canvas)
+    resizeObserver.observe(focusedPanel)
+
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [autoCenterFocusedPanel, focusedPanelId, activePanels])
+
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    if (previousZoomRef.current === canvasZoom) return
+
+    const previousZoom = previousZoomRef.current
+    const worldCenterX =
+      (canvas.scrollLeft - paddedInsets.left + canvas.clientWidth / 2) / previousZoom
+    const worldCenterY =
+      (canvas.scrollTop - paddedInsets.top + canvas.clientHeight / 2) / previousZoom
+    const targetScrollLeft =
+      paddedInsets.left + worldCenterX * canvasZoom - canvas.clientWidth / 2
+    const targetScrollTop =
+      paddedInsets.top + worldCenterY * canvasZoom - canvas.clientHeight / 2
+
+    previousZoomRef.current = canvasZoom
+    canvas.scrollTo({
+      left: clampScroll(targetScrollLeft, canvas.scrollWidth - canvas.clientWidth),
+      top: clampScroll(targetScrollTop, canvas.scrollHeight - canvas.clientHeight)
+    })
+  }, [canvasZoom, paddedInsets.left, paddedInsets.top])
+
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    canvas.scrollTo({
+      left: VIRTUAL_PADDING,
+      top: VIRTUAL_PADDING
+    })
+  }, [activeProjectId])
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const handleWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) {
+        return
+      }
+
+      event.preventDefault()
+
+      if (event.deltaY < 0) {
+        zoomIn()
+      } else if (event.deltaY > 0) {
+        zoomOut()
+      }
+    }
+
+    canvas.addEventListener('wheel', handleWheel, { passive: false })
+
+    return () => {
+      canvas.removeEventListener('wheel', handleWheel)
+    }
+  }, [zoomIn, zoomOut])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((!event.ctrlKey && !event.metaKey) || isEditableTarget(event.target)) {
+        return
+      }
+
+      if (event.key === '=' || event.key === '+') {
+        event.preventDefault()
+        zoomIn()
+        return
+      }
+
+      if (event.key === '-') {
+        event.preventDefault()
+        zoomOut()
+        return
+      }
+
+      if (event.key === '0') {
+        event.preventDefault()
+        resetZoom()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [resetZoom, zoomIn, zoomOut])
 
   const handleNewWorkspace = useCallback(async () => {
     if (!activeProjectId || !activeProject) return
@@ -220,6 +453,66 @@ export function Canvas() {
       addActivePanel(newPanel)
     }
   }, [activeProjectId, activeProject, activePanels, focusedPanelId, projectWorkspaces, createWorkspace, addActivePanel, insertPanelAfter])
+
+  const handlePrependPanelToWorkspace = useCallback((panelType: PanelType, workspaceId: string) => {
+    if (!activeProject) return
+
+    const workspace = projectWorkspaces.find((ws) => ws.id === workspaceId)
+    if (!workspace) return
+
+    const panelTitle =
+      panelType === 't3code'
+        ? 'T3Code'
+        : panelType === 'browser'
+          ? 'Browser'
+          : panelType === 'chat'
+            ? 'Chat'
+            : 'Terminal'
+
+    const newPanel: ActiveWorkspacePanel = {
+      panelId: nanoid(),
+      workspaceId,
+      workspaceName: workspace.name,
+      cwd: activeProject.repoPath,
+      panelType,
+      panelTitle
+    }
+
+    prependPanelToWorkspace(newPanel)
+  }, [activeProject, projectWorkspaces, prependPanelToWorkspace])
+
+  const handleAppendPanelToWorkspace = useCallback((panelType: PanelType, workspaceId: string) => {
+    if (!activeProject) return
+
+    const workspace = projectWorkspaces.find((ws) => ws.id === workspaceId)
+    if (!workspace) return
+
+    const panelTitle =
+      panelType === 't3code'
+        ? 'T3Code'
+        : panelType === 'browser'
+          ? 'Browser'
+          : panelType === 'chat'
+            ? 'Chat'
+            : 'Terminal'
+
+    const newPanel: ActiveWorkspacePanel = {
+      panelId: nanoid(),
+      workspaceId,
+      workspaceName: workspace.name,
+      cwd: activeProject.repoPath,
+      panelType,
+      panelTitle
+    }
+
+    const workspacePanels = activePanels.filter((p) => p.workspaceId === workspaceId)
+    const lastPanel = workspacePanels.at(-1)
+    if (lastPanel) {
+      insertPanelAfter(newPanel, lastPanel.panelId)
+    } else {
+      addActivePanel(newPanel)
+    }
+  }, [activeProject, projectWorkspaces, activePanels, insertPanelAfter, addActivePanel])
 
   const handleClosePanel = useCallback((panelId: string) => {
     closeActivePanel(panelId)
@@ -302,6 +595,92 @@ export function Canvas() {
     [handleNewWorkspace]
   )
 
+  const buildEdgePanelOptions = useCallback(
+    (workspaceId: string) => [
+      {
+        label: 'T3Code',
+        description: 'Open a T3Code panel in this workspace.',
+        onSelect: () => void handleAppendPanelToWorkspace('t3code', workspaceId)
+      },
+      {
+        label: 'Terminal',
+        description: 'Open a terminal panel in this workspace.',
+        onSelect: () => void handleAppendPanelToWorkspace('terminal', workspaceId)
+      },
+      {
+        label: 'Browser',
+        description: 'Open a browser panel in this workspace.',
+        onSelect: () => void handleAppendPanelToWorkspace('browser', workspaceId)
+      }
+    ],
+    [handleAppendPanelToWorkspace]
+  )
+
+  const handleFitToContent = useCallback(() => {
+    const canvas = canvasRef.current
+    const content = contentMeasureRef.current
+    if (!canvas || !content) return
+
+    const panelElements = Array.from(
+      content.querySelectorAll<HTMLElement>('[data-panel-root="true"]')
+    )
+    if (panelElements.length === 0) {
+      return
+    }
+
+    const contentRect = content.getBoundingClientRect()
+    const bounds = panelElements.reduce(
+      (acc, panel) => {
+        const panelRect = panel.getBoundingClientRect()
+        const left = (panelRect.left - contentRect.left) / canvasZoom
+        const top = (panelRect.top - contentRect.top) / canvasZoom
+        const right = left + panelRect.width / canvasZoom
+        const bottom = top + panelRect.height / canvasZoom
+
+        return {
+          left: Math.min(acc.left, left),
+          top: Math.min(acc.top, top),
+          right: Math.max(acc.right, right),
+          bottom: Math.max(acc.bottom, bottom)
+        }
+      },
+      {
+        left: Number.POSITIVE_INFINITY,
+        top: Number.POSITIVE_INFINITY,
+        right: Number.NEGATIVE_INFINITY,
+        bottom: Number.NEGATIVE_INFINITY
+      }
+    )
+
+    const contentWidth = Math.max(1, bounds.right - bounds.left)
+    const contentHeight = Math.max(1, bounds.bottom - bounds.top)
+    const nextZoom = Math.min(
+      CANVAS_ZOOM_STEPS[CANVAS_ZOOM_STEPS.length - 1],
+      Math.max(
+        CANVAS_ZOOM_STEPS[0],
+        Math.min(
+          (canvas.clientWidth - FIT_CONTENT_PADDING * 2) / contentWidth,
+          (canvas.clientHeight - FIT_CONTENT_PADDING * 2) / contentHeight
+        )
+      )
+    )
+
+    setCanvasZoom(nextZoom)
+
+    requestAnimationFrame(() => {
+      const centeredScrollLeft =
+        paddedInsets.left + ((bounds.left + bounds.right) / 2) * nextZoom - canvas.clientWidth / 2
+      const centeredScrollTop =
+        paddedInsets.top + ((bounds.top + bounds.bottom) / 2) * nextZoom - canvas.clientHeight / 2
+
+      canvas.scrollTo({
+        left: clampScroll(centeredScrollLeft, canvas.scrollWidth - canvas.clientWidth),
+        top: clampScroll(centeredScrollTop, canvas.scrollHeight - canvas.clientHeight),
+        behavior: 'smooth'
+      })
+    })
+  }, [canvasZoom, paddedInsets.left, paddedInsets.top, setCanvasZoom])
+
   if (!activeProjectId) {
     return (
       <div className="flex-1 flex items-center justify-center canvas-grid">
@@ -316,17 +695,8 @@ export function Canvas() {
   }
 
   return (
-    <div
-      ref={canvasRef}
-      data-canvas-scroll-root="true"
-      onMouseDown={handleCanvasPointerDown}
-      className={cn(
-        'flex-1 canvas-grid relative overflow-auto',
-        isPanning ? 'cursor-grabbing select-none' : 'cursor-grab'
-      )}
-    >
-      {/* Floating new workspace button */}
-      <div className="sticky top-3 left-3 z-20 w-fit">
+    <div className="relative flex-1">
+      <div className="absolute left-3 top-3 z-20 w-fit">
         <button
           onClick={() => setShowCreateMenu((open) => !open)}
           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-bg-raised border border-border text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors"
@@ -348,54 +718,130 @@ export function Canvas() {
           workspaceOption={workspaceOption}
         />
       </div>
-
-      {/* Workspace panels */}
       <div
+        ref={canvasRef}
+        data-canvas-scroll-root="true"
+        onMouseDown={handleCanvasPointerDown}
         className={cn(
-          'min-h-full min-w-max p-6 flex flex-col gap-6',
-          panelsByWorkspace.length === 1 && panelsByWorkspace[0]?.panels.length === 1
-            ? 'justify-center'
-            : 'justify-start'
+          'canvas-grid absolute inset-0 overflow-auto',
+          isPanning ? 'cursor-grabbing select-none' : 'cursor-grab'
         )}
+        style={{
+          backgroundSize: `${GRID_SIZE * canvasZoom}px ${GRID_SIZE * canvasZoom}px`
+        }}
       >
-        {panelsByWorkspace.map((workspace) => (
-          <div key={workspace.workspaceId} className="flex gap-6 items-start">
-            {workspace.panels.map((panel) => (
-              <WorkspacePanel
-                key={panel.panelId}
-                workspaceId={panel.workspaceId}
-                workspaceName={panel.workspaceName}
-                projectId={activeProjectId}
-                cwd={panel.cwd}
-                panelType={panel.panelType}
-                panelTitle={panel.panelTitle}
-                panelId={panel.panelId}
-                onClose={() => handleClosePanel(panel.panelId)}
-                initialWidth={panel.width}
-                initialHeight={panel.height}
-                initialUrl={panel.url}
-              />
-            ))}
-          </div>
-        ))}
-      </div>
-
-      {/* Empty state when project is selected but no terminals */}
-      {activePanels.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="text-center">
-            <p className="text-xs text-text-muted opacity-50 mb-3">
-              No open workspaces
-            </p>
-            <button
-              onClick={() => setShowCreateMenu(true)}
-              className="pointer-events-auto text-xs text-accent hover:text-accent-hover transition-colors"
+        <div
+          style={{
+            paddingTop: paddedInsets.top,
+            paddingRight: paddedInsets.right,
+            paddingBottom: paddedInsets.bottom,
+            paddingLeft: paddedInsets.left
+          }}
+        >
+          <div
+            className="relative"
+            style={{
+              width: contentSize.width * canvasZoom,
+              height: contentSize.height * canvasZoom
+            }}
+          >
+            <div
+              ref={contentMeasureRef}
+              className="absolute left-0 top-0 flex w-max flex-col gap-6"
+              style={{
+                transform: `scale(${canvasZoom})`,
+                transformOrigin: 'top left'
+              }}
             >
-              Open the create menu
-            </button>
+              {panelsByWorkspace.map((workspace, wsIndex) => (
+                <div key={workspace.workspaceId} className="flex items-start gap-6">
+                  {workspace.panels.map((panel, panelIndex) => {
+                    const isFocused = panel.panelId === focusedPanel?.panelId
+                    const showRightButton = isFocused && panelIndex === workspace.panels.length - 1
+                    const showTopButton = isFocused && wsIndex === 0
+                    const showBottomButton =
+                      isFocused && wsIndex === panelsByWorkspace.length - 1
+
+                    return (
+                      <div key={panel.panelId} className="flex items-stretch gap-3">
+                        <div className="relative">
+                          {showTopButton && (
+                            <div className="absolute bottom-full left-0 mb-3">
+                              <EdgeButton
+                                direction="top"
+                                label="New Workspace"
+                                onClick={handleNewWorkspace}
+                                width={panel.width ?? 700}
+                              />
+                            </div>
+                          )}
+
+                          <WorkspacePanel
+                            workspaceId={panel.workspaceId}
+                            workspaceName={panel.workspaceName}
+                            projectId={activeProjectId}
+                            cwd={panel.cwd}
+                            panelType={panel.panelType}
+                            panelTitle={panel.panelTitle}
+                            panelId={panel.panelId}
+                            onClose={() => handleClosePanel(panel.panelId)}
+                            initialWidth={panel.width}
+                            initialHeight={panel.height}
+                            initialUrl={panel.url}
+                          />
+
+                          {showBottomButton && (
+                            <div className="absolute left-0 top-full mt-3">
+                              <EdgeButton
+                                direction="bottom"
+                                label="New Workspace"
+                                onClick={handleNewWorkspace}
+                                width={panel.width ?? 700}
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {showRightButton && (
+                          <EdgeButton
+                            direction="right"
+                            label="New"
+                            menuOptions={buildEdgePanelOptions(workspace.workspaceId)}
+                          />
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      )}
+
+        {activePanels.length === 0 && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="text-center">
+              <p className="mb-3 text-xs text-text-muted opacity-50">No open workspaces</p>
+              <button
+                onClick={() => setShowCreateMenu(true)}
+                className="pointer-events-auto text-xs text-accent hover:text-accent-hover transition-colors"
+              >
+                Open the create menu
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="pointer-events-none absolute bottom-3 left-3 z-20">
+        <CanvasToolbar
+          canvasZoom={canvasZoom}
+          onZoomIn={zoomIn}
+          onZoomOut={zoomOut}
+          onResetZoom={resetZoom}
+          onFitToContent={handleFitToContent}
+        />
+      </div>
     </div>
   )
 }

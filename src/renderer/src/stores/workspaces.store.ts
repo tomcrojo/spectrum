@@ -8,6 +8,7 @@ import type {
   WorkspaceLayoutState
 } from '@shared/workspace.types'
 import { workspacesApi } from '@renderer/lib/ipc'
+import { nanoid } from 'nanoid'
 
 export interface ActiveWorkspacePanel {
   panelId: string
@@ -35,6 +36,7 @@ interface WorkspacesState {
   loadWorkspaces: (projectId: string) => Promise<void>
   createWorkspace: (input: CreateWorkspaceInput) => Promise<Workspace>
   updateWorkspace: (input: UpdateWorkspaceInput) => Promise<Workspace | null>
+  deleteWorkspace: (id: string) => Promise<void>
   archiveWorkspace: (id: string) => Promise<void>
   unarchiveWorkspace: (id: string) => Promise<Workspace | null>
   reopenWorkspace: (workspaceId: string, cwd: string) => Promise<void>
@@ -44,6 +46,8 @@ interface WorkspacesState {
   /** Insert a panel right after the given panel ID (used for focus-aware insertion) */
   insertPanelAfter: (panel: ActiveWorkspacePanel, afterPanelId: string) => void
   insertPanelAfterWithoutFocus: (panel: ActiveWorkspacePanel, afterPanelId: string) => void
+  /** Prepend a panel at the start of a workspace (before all existing panels) */
+  prependPanelToWorkspace: (panel: ActiveWorkspacePanel) => void
   closeActivePanel: (panelId: string) => void
   /** Set which panel currently has focus */
   setFocusedPanel: (panelId: string | null) => void
@@ -206,6 +210,16 @@ function scheduleAffectedSaves(
   }
 }
 
+function clearPendingSave(workspaceId: string): void {
+  const existing = saveTimers.get(workspaceId)
+  if (!existing) {
+    return
+  }
+
+  clearTimeout(existing)
+  saveTimers.delete(workspaceId)
+}
+
 async function flushWorkspaceLayout(
   workspaceId: string,
   getState: () => WorkspacesState
@@ -279,6 +293,39 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
     }))
 
     return workspace
+  },
+
+  deleteWorkspace: async (id) => {
+    const workspace = get().workspaces.find((entry) => entry.id === id)
+    if (!workspace) {
+      return
+    }
+
+    clearPendingSave(id)
+
+    set((state) => {
+      const remainingPanels = state.activePanels.filter((panel) => panel.workspaceId !== id)
+      const nextFocusedPanelId =
+        state.focusedPanelId && remainingPanels.some((panel) => panel.panelId === state.focusedPanelId)
+          ? state.focusedPanelId
+          : remainingPanels.at(-1)?.panelId ?? null
+
+      return {
+        workspaces: state.workspaces.filter((entry) => entry.id !== id),
+        activePanels: remainingPanels,
+        focusedPanelId: nextFocusedPanelId,
+        lastFocusedPanelByWorkspace: Object.fromEntries(
+          Object.entries(state.lastFocusedPanelByWorkspace).filter(([workspaceId]) => workspaceId !== id)
+        )
+      }
+    })
+
+    try {
+      await workspacesApi.delete(id)
+    } catch (err) {
+      console.error(`[workspaces] Failed to delete workspace ${id}:`, err)
+      await get().loadWorkspaces(workspace.projectId)
+    }
   },
 
   archiveWorkspace: async (id) => {
@@ -464,8 +511,48 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
     scheduleSave(panel.workspaceId, get)
   },
 
+  prependPanelToWorkspace: (panel) => {
+    set((state) => {
+      if (state.activePanels.some((existing) => existing.panelId === panel.panelId)) {
+        return state
+      }
+      // Find the first panel in this workspace and insert before it
+      const firstIdx = state.activePanels.findIndex((p) => p.workspaceId === panel.workspaceId)
+      if (firstIdx === -1) {
+        // No panels in this workspace yet — just append
+        return {
+          activePanels: [...state.activePanels, panel],
+          focusedPanelId: panel.panelId,
+          lastFocusedPanelByWorkspace: {
+            ...state.lastFocusedPanelByWorkspace,
+            [panel.workspaceId]: panel.panelId
+          }
+        }
+      }
+      const newPanels = [...state.activePanels]
+      newPanels.splice(firstIdx, 0, panel)
+      return {
+        activePanels: newPanels,
+        focusedPanelId: panel.panelId,
+        lastFocusedPanelByWorkspace: {
+          ...state.lastFocusedPanelByWorkspace,
+          [panel.workspaceId]: panel.panelId
+        }
+      }
+    })
+    scheduleSave(panel.workspaceId, get)
+  },
+
   closeActivePanel: (panelId) => {
     const panel = get().activePanels.find((p) => p.panelId === panelId)
+    if (panel) {
+      const workspacePanels = get().activePanels.filter((entry) => entry.workspaceId === panel.workspaceId)
+      if (workspacePanels.length === 1) {
+        void get().deleteWorkspace(panel.workspaceId)
+        return
+      }
+    }
+
     set((state) => ({
       activePanels: state.activePanels.filter((p) => p.panelId !== panelId),
       focusedPanelId:

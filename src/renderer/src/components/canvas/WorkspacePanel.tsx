@@ -1,12 +1,15 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { cn } from '@renderer/lib/cn'
 import { useResolvedTheme } from '@renderer/lib/theme'
+import { useUiStore } from '@renderer/stores/ui.store'
 import { useWorkspacesStore } from '@renderer/stores/workspaces.store'
 import { TerminalPanel } from './TerminalPanel'
 import { T3CodePanel } from './T3CodePanel'
 import { BrowserPanel } from './BrowserPanel'
 import { PanelPlaceholder } from './PanelPlaceholder'
 import type { PanelType } from '@shared/workspace.types'
+
+const PANEL_FOCUS_HIT_AREA_PX = 7
 
 interface WorkspacePanelProps {
   workspaceId: string
@@ -120,6 +123,59 @@ function findScrollContainer(element: HTMLElement): HTMLElement | null {
   return null
 }
 
+function PanelFocusHitArea({
+  panelId,
+  revealPanel,
+  setFocusedPanel,
+  autoCenterFocusedPanel
+}: {
+  panelId: string
+  revealPanel: () => void
+  setFocusedPanel: (panelId: string | null) => void
+  autoCenterFocusedPanel: boolean
+}) {
+  const focusPanel = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      event.preventDefault()
+      event.stopPropagation()
+      setFocusedPanel(panelId)
+      if (autoCenterFocusedPanel) {
+        revealPanel()
+      }
+    },
+    [autoCenterFocusedPanel, panelId, revealPanel, setFocusedPanel]
+  )
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-10">
+      <div
+        aria-hidden="true"
+        className="pointer-events-auto absolute inset-x-0 top-0"
+        style={{ height: PANEL_FOCUS_HIT_AREA_PX }}
+        onMouseDown={focusPanel}
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-auto absolute inset-y-0 left-0"
+        style={{ width: PANEL_FOCUS_HIT_AREA_PX }}
+        onMouseDown={focusPanel}
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-auto absolute inset-y-0 right-0"
+        style={{ width: PANEL_FOCUS_HIT_AREA_PX }}
+        onMouseDown={focusPanel}
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-auto absolute inset-x-0 bottom-0"
+        style={{ height: PANEL_FOCUS_HIT_AREA_PX }}
+        onMouseDown={focusPanel}
+      />
+    </div>
+  )
+}
+
 export function WorkspacePanel({
   workspaceId,
   projectId,
@@ -134,6 +190,7 @@ export function WorkspacePanel({
   initialUrl
 }: WorkspacePanelProps) {
   const resolvedTheme = useResolvedTheme()
+  const autoCenterFocusedPanel = useUiStore((state) => state.autoCenterFocusedPanel)
   const updatePanel = useWorkspacesStore((s) => s.updatePanel)
   const setFocusedPanel = useWorkspacesStore((s) => s.setFocusedPanel)
   const isFocused = useWorkspacesStore((s) => s.focusedPanelId === panelId)
@@ -148,6 +205,7 @@ export function WorkspacePanel({
   }))
   const panelRef = useRef<HTMLDivElement>(null)
   const startPos = useRef({ x: 0, y: 0, w: 0, h: 0 })
+  const revealAnimationFrameRef = useRef<number | null>(null)
   const panelLabel = getPanelLabel(panelType, panelTitle)
   const revealPanel = useCallback(() => {
     const panelElement = panelRef.current
@@ -156,6 +214,7 @@ export function WorkspacePanel({
     const scrollContainer = findScrollContainer(panelElement)
     if (!scrollContainer) {
       panelElement.scrollIntoView({
+        behavior: 'smooth',
         block: 'center',
         inline: 'center'
       })
@@ -163,32 +222,81 @@ export function WorkspacePanel({
     }
     const panelRect = panelElement.getBoundingClientRect()
     const containerRect = scrollContainer.getBoundingClientRect()
-    const panelOffsetLeft = panelRect.left - containerRect.left + scrollContainer.scrollLeft
-    const panelOffsetTop = panelRect.top - containerRect.top + scrollContainer.scrollTop
+    const zoom = useUiStore.getState().canvasZoom
+    const panelOffsetLeft =
+      (panelRect.left - containerRect.left) / zoom + scrollContainer.scrollLeft
+    const panelOffsetTop =
+      (panelRect.top - containerRect.top) / zoom + scrollContainer.scrollTop
+    const panelWidth = panelRect.width / zoom
+    const panelHeight = panelRect.height / zoom
     const nextScrollLeft =
-      panelOffsetLeft - (scrollContainer.clientWidth - panelRect.width) / 2
+      panelOffsetLeft - (scrollContainer.clientWidth / zoom - panelWidth) / 2
     const nextScrollTop =
-      panelOffsetTop - (scrollContainer.clientHeight - panelRect.height) / 2
+      panelOffsetTop - (scrollContainer.clientHeight / zoom - panelHeight) / 2
     const maxScrollLeft = Math.max(0, scrollContainer.scrollWidth - scrollContainer.clientWidth)
     const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight)
+    const targetScrollLeft = Math.min(maxScrollLeft, Math.max(0, nextScrollLeft))
+    const targetScrollTop = Math.min(maxScrollTop, Math.max(0, nextScrollTop))
+    const startScrollLeft = scrollContainer.scrollLeft
+    const startScrollTop = scrollContainer.scrollTop
+    const deltaX = targetScrollLeft - startScrollLeft
+    const deltaY = targetScrollTop - startScrollTop
 
-    scrollContainer.scrollTo({
-      left: Math.min(maxScrollLeft, Math.max(0, nextScrollLeft)),
-      top: Math.min(maxScrollTop, Math.max(0, nextScrollTop))
-    })
+    if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) {
+      scrollContainer.scrollTo({
+        left: targetScrollLeft,
+        top: targetScrollTop
+      })
+      return
+    }
+
+    if (revealAnimationFrameRef.current !== null) {
+      cancelAnimationFrame(revealAnimationFrameRef.current)
+    }
+
+    const durationMs = 160
+    const animationStart = performance.now()
+
+    const animate = (timestamp: number) => {
+      const elapsed = timestamp - animationStart
+      const progress = Math.min(1, elapsed / durationMs)
+
+      scrollContainer.scrollTo({
+        left: startScrollLeft + deltaX * progress,
+        top: startScrollTop + deltaY * progress
+      })
+
+      if (progress < 1) {
+        revealAnimationFrameRef.current = requestAnimationFrame(animate)
+      } else {
+        revealAnimationFrameRef.current = null
+      }
+    }
+
+    revealAnimationFrameRef.current = requestAnimationFrame(animate)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (revealAnimationFrameRef.current !== null) {
+        cancelAnimationFrame(revealAnimationFrameRef.current)
+      }
+    }
   }, [])
 
   useEffect(() => {
     if (!isFocused) return
 
     requestAnimationFrame(() => {
-      revealPanel()
+      if (autoCenterFocusedPanel) {
+        revealPanel()
+      }
 
       if (panelType === 'chat' || panelType === 'browser') {
         panelRef.current?.focus({ preventScroll: true })
       }
     })
-  }, [isFocused, panelType, revealPanel])
+  }, [autoCenterFocusedPanel, isFocused, panelType, revealPanel])
 
   // Focus this panel when user clicks into it — including iframe/terminal content.
   // Iframes swallow mouse events, so we also listen for focusin on the container
@@ -199,7 +307,9 @@ export function WorkspacePanel({
 
     const handleFocusIn = () => {
       setFocusedPanel(panelId)
-      revealPanel()
+      if (autoCenterFocusedPanel) {
+        revealPanel()
+      }
     }
     el.addEventListener('focusin', handleFocusIn)
 
@@ -213,7 +323,9 @@ export function WorkspacePanel({
         const activeEl = document.activeElement
         if (activeEl && el.contains(activeEl)) {
           setFocusedPanel(panelId)
-          revealPanel()
+          if (autoCenterFocusedPanel) {
+            revealPanel()
+          }
         }
       })
     }
@@ -223,7 +335,7 @@ export function WorkspacePanel({
       el.removeEventListener('focusin', handleFocusIn)
       window.removeEventListener('blur', handleWindowBlur)
     }
-  }, [panelId, revealPanel, setFocusedPanel])
+  }, [autoCenterFocusedPanel, panelId, revealPanel, setFocusedPanel])
 
   const onResizeStart = useCallback(
     (e: React.MouseEvent) => {
@@ -270,10 +382,13 @@ export function WorkspacePanel({
     <div
       ref={panelRef}
       data-panel-root="true"
+      data-panel-id={panelId}
       tabIndex={-1}
       onMouseDown={() => {
         setFocusedPanel(panelId)
-        revealPanel()
+        if (autoCenterFocusedPanel) {
+          revealPanel()
+        }
       }}
       className={cn(
         'relative flex flex-col rounded-lg border',
@@ -311,7 +426,13 @@ export function WorkspacePanel({
       </div>
 
       {/* Terminal content */}
-      <div className="flex-1 min-h-0 overflow-hidden relative">
+      <div className="relative flex-1 min-h-0 overflow-hidden">
+        <PanelFocusHitArea
+          panelId={panelId}
+          revealPanel={revealPanel}
+          setFocusedPanel={setFocusedPanel}
+          autoCenterFocusedPanel={autoCenterFocusedPanel}
+        />
         {panelType === 't3code' ? (
           <T3CodePanel
             panelId={panelId}
@@ -346,7 +467,7 @@ export function WorkspacePanel({
       {/* Resize handle — bottom-right corner */}
       <div
         onMouseDown={onResizeStart}
-        className="absolute bottom-0 right-0 h-6 w-6 cursor-se-resize z-10"
+        className="absolute bottom-0 right-0 z-20 h-6 w-6 cursor-se-resize"
         style={{ touchAction: 'none' }}
       >
         <svg

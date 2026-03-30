@@ -53,7 +53,9 @@ export function SettingsPage() {
     theme,
     setTheme,
     archivedTimestampFormat,
-    setArchivedTimestampFormat
+    setArchivedTimestampFormat,
+    autoCenterFocusedPanel,
+    setAutoCenterFocusedPanel
   } = useUiStore()
   const resolvedTheme = useResolvedTheme()
 
@@ -154,6 +156,78 @@ export function SettingsPage() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <h3 className="text-sm font-semibold text-text-primary">
+                Focus Camera
+              </h3>
+              <p className="mt-1 text-xs text-text-muted">
+                Choose whether focusing a panel recenters the canvas or keeps your current overview.
+              </p>
+            </div>
+            <div className="rounded-full border border-border-subtle bg-bg px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-text-muted">
+              {autoCenterFocusedPanel ? 'Auto-center' : 'Bird’s-eye'}
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-2">
+            <button
+              onClick={() => setAutoCenterFocusedPanel(true)}
+              className={cn(
+                'rounded-lg border px-3 py-3 text-left transition-colors',
+                autoCenterFocusedPanel
+                  ? 'border-accent bg-accent/10'
+                  : 'border-border bg-bg hover:bg-bg-hover'
+              )}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-text-primary">
+                  Auto-center focused panel
+                </span>
+                <span
+                  className={cn(
+                    'h-2.5 w-2.5 rounded-full border',
+                    autoCenterFocusedPanel
+                      ? 'border-accent bg-accent'
+                      : 'border-border bg-transparent'
+                  )}
+                />
+              </div>
+              <p className="mt-1 text-xs text-text-muted">
+                Keeps the active panel centered, including with blank space around the canvas edges.
+              </p>
+            </button>
+
+            <button
+              onClick={() => setAutoCenterFocusedPanel(false)}
+              className={cn(
+                'rounded-lg border px-3 py-3 text-left transition-colors',
+                !autoCenterFocusedPanel
+                  ? 'border-accent bg-accent/10'
+                  : 'border-border bg-bg hover:bg-bg-hover'
+              )}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-text-primary">
+                  Keep bird’s-eye view
+                </span>
+                <span
+                  className={cn(
+                    'h-2.5 w-2.5 rounded-full border',
+                    !autoCenterFocusedPanel
+                      ? 'border-accent bg-accent'
+                      : 'border-border bg-transparent'
+                  )}
+                />
+              </div>
+              <p className="mt-1 text-xs text-text-muted">
+                Focus changes stay local so you can watch several panels without the camera moving.
+              </p>
+            </button>
+          </div>
+        </section>
+
+        <section className="mt-4 rounded-xl border border-border bg-bg-raised p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-semibold text-text-primary">
                 Archived Panel Timestamps
               </h3>
               <p className="mt-1 text-xs text-text-muted">
@@ -200,6 +274,52 @@ export function SettingsPage() {
               )
             })}
           </div>
+        </section>
+
+        <section className="mt-6 mb-2 px-1">
+          <h3 className="text-[10px] font-semibold text-text-muted uppercase tracking-[0.16em] mb-3">
+            Acknowledgements
+          </h3>
+          <p className="text-xs text-text-muted leading-relaxed">
+            Centipede stands on the shoulders of projects that shaped its
+            direction. Huge thanks to{' '}
+            <a
+              href="https://github.com/nicepkg/aide"
+              target="_blank"
+              rel="noreferrer"
+              className="text-text-secondary hover:text-text-primary transition-colors underline underline-offset-2"
+            >
+              T3Code
+            </a>
+            ,{' '}
+            <a
+              href="https://github.com/pAIrprogio/cmux"
+              target="_blank"
+              rel="noreferrer"
+              className="text-text-secondary hover:text-text-primary transition-colors underline underline-offset-2"
+            >
+              cmux
+            </a>
+            ,{' '}
+            <a
+              href="https://github.com/nicepkg/dev-browser"
+              target="_blank"
+              rel="noreferrer"
+              className="text-text-secondary hover:text-text-primary transition-colors underline underline-offset-2"
+            >
+              dev-browser CLI
+            </a>
+            , and{' '}
+            <a
+              href="https://github.com/nicepkg/idx0"
+              target="_blank"
+              rel="noreferrer"
+              className="text-text-secondary hover:text-text-primary transition-colors underline underline-offset-2"
+            >
+              idx0
+            </a>{' '}
+            for their ideas and inspiration.
+          </p>
         </section>
       </div>
     </div>

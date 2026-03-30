@@ -17,11 +17,20 @@ export function ProjectPage() {
 
   // Fetch project data when activeProjectId or projects change
   useEffect(() => {
+    let isStale = false
+
     if (!activeProjectId) {
       setProject(null)
       return
     }
+
+    setProject(null)
+
     projectsApi.get(activeProjectId).then((p) => {
+      if (isStale) {
+        return
+      }
+
       setProject(p)
       // Only set color from backend when switching projects, not on every re-fetch
       // (to avoid overwriting optimistic local color updates)
@@ -30,6 +39,10 @@ export function ProjectPage() {
         prevProjectId.current = activeProjectId
       }
     })
+
+    return () => {
+      isStale = true
+    }
   }, [activeProjectId, projects])
 
   if (!showProjectPage || !activeProjectId || !project) {
