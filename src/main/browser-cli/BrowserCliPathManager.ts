@@ -26,6 +26,22 @@ export function getBrowserCliBinDir(): string {
   return join(getBrowserCliRoot(), 'bin')
 }
 
+export function getBrowserCommandPath(): string {
+  if (process.platform === 'win32') {
+    return join(getBrowserCliBinDir(), 'browser.js')
+  }
+
+  return join(getBrowserCliBinDir(), 'browser')
+}
+
+export function getBrowserCliCommandPath(): string {
+  if (process.platform === 'win32') {
+    return join(getBrowserCliBinDir(), 'browser-cli.js')
+  }
+
+  return join(getBrowserCliBinDir(), 'browser-cli')
+}
+
 export function getBrowserCliSessionFilePath(): string {
   return join(getUserDataPath(), 'browser-cli', 'sessions.json')
 }

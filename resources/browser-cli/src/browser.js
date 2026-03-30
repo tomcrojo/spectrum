@@ -50,16 +50,35 @@ export class BrowserCli {
     await writeStateFile(this.aliasStateFile, state);
   }
 
-  async listPages() {
-    const [panelPayload, browser] = await Promise.all([
-      this.api.post("/browser/list"),
-      this.api.getBrowser().catch(() => null),
-    ]);
-
+  async listPanels() {
+    const panelPayload = await this.api.post("/browser/list");
     const aliases = await this.loadAliasState();
     const aliasByPanelId = new Map(
       Object.entries(aliases).map(([name, panelId]) => [panelId, name])
     );
+
+    return (panelPayload.panels ?? []).map((panel) => ({
+      id: panel.panelId,
+      panelId: panel.panelId,
+      targetId: panel.targetId,
+      url: panel.url,
+      title: panel.panelTitle,
+      name: aliasByPanelId.get(panel.panelId) ?? null,
+      workspaceId: panel.workspaceId,
+      workspaceName: panel.workspaceName,
+      projectId: panel.projectId,
+      projectName: panel.projectName,
+      kind: panel.kind,
+      isFocused: panel.isFocused,
+      isVisible: panel.isVisible,
+    }));
+  }
+
+  async listPages() {
+    const [panels, browser] = await Promise.all([
+      this.listPanels(),
+      this.api.getBrowser().catch(() => null),
+    ]);
 
     let pagesByTargetId = new Map();
 
@@ -72,7 +91,7 @@ export class BrowserCli {
     }
 
     return Promise.all(
-      (panelPayload.panels ?? []).map(async (panel) => {
+      panels.map(async (panel) => {
         const page = panel.targetId ? pagesByTargetId.get(panel.targetId) ?? null : null;
         return {
           id: panel.panelId,
@@ -97,8 +116,8 @@ export class BrowserCli {
     const started = Date.now();
 
     while (Date.now() - started < timeoutMs) {
-      const pages = await this.listPages();
-      const summary = pages.find((entry) => entry.panelId === panelId);
+      const panels = await this.listPanels();
+      const summary = panels.find((entry) => entry.panelId === panelId);
       if (summary?.targetId) {
         const browser = await this.api.getBrowser();
         for (const page of browser.contexts().flatMap((context) => context.pages())) {
@@ -119,15 +138,72 @@ export class BrowserCli {
   }
 
   async resolvePanelReference(idOrName) {
-    const pages = await this.listPages();
+    const panels = await this.listPanels();
     const aliases = await this.loadAliasState();
     const aliasPanelId = aliases[idOrName];
     return (
-      pages.find((entry) => entry.panelId === idOrName) ??
-      pages.find((entry) => entry.targetId === idOrName) ??
-      (aliasPanelId ? pages.find((entry) => entry.panelId === aliasPanelId) : null) ??
+      panels.find((entry) => entry.panelId === idOrName) ??
+      panels.find((entry) => entry.targetId === idOrName) ??
+      (aliasPanelId ? panels.find((entry) => entry.panelId === aliasPanelId) : null) ??
       null
     );
+  }
+
+  async getPanel(idOrName) {
+    if (typeof idOrName !== "string" || idOrName.trim().length === 0) {
+      throw new BrowserCliError("browser.getPanel(...) requires a panel id or alias", {
+        code: "INVALID_PANEL_REFERENCE",
+      });
+    }
+
+    return this.resolvePanelReference(idOrName);
+  }
+
+  async openPanel(options = {}) {
+    const payload = await this.api.post("/browser/open", {
+      url: options.url ?? "about:blank",
+      width: options.width,
+      height: options.height,
+    });
+
+    if (options.focus !== false) {
+      await this.api.post("/browser/activate", { panelId: payload.panelId }).catch(() => {});
+    }
+
+    if (typeof options.name === "string" && options.name.trim()) {
+      const aliases = await this.loadAliasState();
+      aliases[options.name] = payload.panelId;
+      await this.saveAliasState(aliases);
+    }
+
+    return {
+      panelId: payload.panelId,
+      ...(await this.resolvePanelReference(payload.panelId)),
+    };
+  }
+
+  async focusPanel(idOrName) {
+    const summary = await this.resolvePanelReference(idOrName);
+    if (!summary) {
+      throw new BrowserCliError(`Unknown panel: ${idOrName}`, {
+        code: "PANEL_NOT_FOUND",
+      });
+    }
+
+    await this.api.post("/browser/activate", { panelId: summary.panelId });
+    return this.resolvePanelReference(summary.panelId);
+  }
+
+  async navigatePanel(idOrName, url) {
+    const summary = await this.resolvePanelReference(idOrName);
+    if (!summary) {
+      throw new BrowserCliError(`Unknown panel: ${idOrName}`, {
+        code: "PANEL_NOT_FOUND",
+      });
+    }
+
+    await this.api.post("/browser/navigate", { panelId: summary.panelId, url });
+    return this.resolvePanelReference(summary.panelId);
   }
 
   async getPage(idOrPredicate) {
@@ -158,32 +234,34 @@ export class BrowserCli {
   }
 
   async newPage(options = {}) {
-    const payload = await this.api.post("/browser/open", {
-      url: options.url ?? "about:blank",
-      width: options.width,
-      height: options.height,
-    });
+    const panel = await this.openPanel(options);
 
-    await this.api.post("/browser/activate", { panelId: payload.panelId }).catch(() => {});
+    try {
+      return await this.waitForPanel(panel.panelId);
+    } catch (error) {
+      if (error instanceof BrowserCliError && error.code === "TARGET_NOT_READY") {
+        throw new BrowserCliError(
+          `Browser panel opened as ${panel.panelId}, but Playwright attachment is not ready yet.`,
+          {
+            code: "TARGET_NOT_READY",
+            hints: [
+              "The panel was created successfully inside Centipede.",
+              "For fire-and-forget panel creation, prefer `browser open <url>` or `browser.openPanel(...)`.",
+              `Retry attachment with \`await browser.getPage("${panel.panelId}")\` once the panel is mounted.`,
+            ],
+          }
+        );
+      }
 
-    if (typeof options.name === "string" && options.name.trim()) {
-      const aliases = await this.loadAliasState();
-      aliases[options.name] = payload.panelId;
-      await this.saveAliasState(aliases);
+      throw error;
     }
-
-    const page = await this.waitForPanel(payload.panelId);
-    if (options.url && options.url !== "about:blank") {
-      await page.goto(options.url);
-    }
-    return page;
   }
 
-  async closePage(idOrName) {
+  async closePanel(idOrName) {
     const summary = await this.resolvePanelReference(idOrName);
     if (!summary) {
-      throw new BrowserCliError(`Unknown page: ${idOrName}`, {
-        code: "PAGE_NOT_FOUND",
+      throw new BrowserCliError(`Unknown panel: ${idOrName}`, {
+        code: "PANEL_NOT_FOUND",
       });
     }
 
@@ -194,6 +272,29 @@ export class BrowserCli {
       Object.entries(aliases).filter(([, panelId]) => panelId !== summary.panelId)
     );
     await this.saveAliasState(nextAliases);
+  }
+
+  async closePage(idOrName) {
+    return this.closePanel(idOrName);
+  }
+
+  async getStatus() {
+    const [panels, cdpEndpoint] = await Promise.all([
+      this.listPanels(),
+      this.api.getCdpEndpoint().catch(() => null),
+    ]);
+
+    return {
+      session: {
+        projectId: this.api.session.projectId,
+        projectName: this.api.session.projectName,
+        workspaceId: this.api.session.workspaceId,
+        workspaceName: this.api.session.workspaceName,
+        focusedBrowserPanelId: this.api.session.focusedBrowserPanelId,
+        cdpEndpoint,
+      },
+      panels,
+    };
   }
 }
 

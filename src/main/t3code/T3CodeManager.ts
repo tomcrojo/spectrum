@@ -9,6 +9,8 @@ import { getT3CodeConfig } from './config'
 import { getApiPort } from '../api/BrowserApiServer'
 import { registerToken, revokeToken } from '../api/TokenRegistry'
 import {
+  getBrowserCliCommandPath,
+  getBrowserCommandPath,
   getBrowserCliSessionFilePath,
   prependBrowserCliToPath
 } from '../browser-cli/BrowserCliPathManager'
@@ -362,6 +364,8 @@ export async function startT3Code(
     delete env.ELECTRON_RUN_AS_NODE
     delete env.T3CODE_AUTH_TOKEN
     env.PATH = prependBrowserCliToPath(env.PATH)
+    env.CENTIPEDE_BROWSER = getBrowserCommandPath()
+    env.CENTIPEDE_BROWSER_CLI = getBrowserCliCommandPath()
     env.CENTIPEDE_BROWSER_SESSION_FILE = getBrowserCliSessionFilePath()
     env.T3CODE_MODE = 'web'
     env.T3CODE_HOST = '127.0.0.1'

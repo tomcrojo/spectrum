@@ -224,6 +224,39 @@ function getShell(): string {
   return process.env.SHELL || '/bin/zsh'
 }
 
+function getBrowserCliBinDir(): string {
+  return join(process.cwd(), 'resources', 'browser-cli', 'bin')
+}
+
+function prependBrowserCliToPath(existingPath: string | undefined): string {
+  const binDir = getBrowserCliBinDir()
+  if (!existingPath) {
+    return binDir
+  }
+
+  return [binDir, ...existingPath.split(':').filter(Boolean)].join(':')
+}
+
+function getBrowserCommandPath(): string {
+  if (process.platform === 'win32') {
+    return join(getBrowserCliBinDir(), 'browser.js')
+  }
+
+  return join(getBrowserCliBinDir(), 'browser')
+}
+
+function getBrowserCliCommandPath(): string {
+  if (process.platform === 'win32') {
+    return join(getBrowserCliBinDir(), 'browser-cli.js')
+  }
+
+  return join(getBrowserCliBinDir(), 'browser-cli')
+}
+
+function getBrowserCliSessionFilePath(): string {
+  return join(dataDir, 'browser-cli', 'sessions.json')
+}
+
 function registerBrowserToken(token: string, workspaceId: string, projectId: string): void {
   browserTokens.set(token, { workspaceId, projectId })
 }
@@ -764,6 +797,10 @@ const handlers: Record<string, Handler> = {
     }
     env.TERM = 'xterm-256color'
     env.COLORTERM = 'truecolor'
+    env.PATH = prependBrowserCliToPath(env.PATH)
+    env.CENTIPEDE_BROWSER = getBrowserCommandPath()
+    env.CENTIPEDE_BROWSER_CLI = getBrowserCliCommandPath()
+    env.CENTIPEDE_BROWSER_SESSION_FILE = getBrowserCliSessionFilePath()
     const browserApiToken = nanoid(32)
     registerBrowserToken(browserApiToken, args.workspaceId, args.projectId)
     if (browserApiPort !== null) {

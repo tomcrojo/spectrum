@@ -8,7 +8,8 @@ It controls browser panels inside a running Centipede workspace. It does not ope
 
 - a Centipede workspace session is the browser session
 - a browser panel is a page
-- `browser.newPage()` creates a new browser panel inside that workspace
+- `browser search <query>` opens search results in a new browser panel
+- `browser open <url>` or `browser.openPanel(...)` creates a new browser panel inside that workspace
 - `browser.listPages()` only lists mounted browser panels in the connected workspace
 - `--connect` attaches to the active Centipede workspace session, not to arbitrary Chrome or a random DevTools endpoint
 
@@ -19,6 +20,7 @@ Before using `browser-cli`:
 - Centipede must already be running
 - a project/workspace must be active
 - if you want CDP-backed page control, the workspace must have a mounted browser panel
+- inside Centipede-managed shells, prefer `$CENTIPEDE_BROWSER` if `browser` is not on `PATH`
 
 If you are trying to open a standalone Chrome window, this is the wrong tool.
 
@@ -26,6 +28,9 @@ If you are trying to open a standalone Chrome window, this is the wrong tool.
 
 ```bash
 browser --help
+"$CENTIPEDE_BROWSER" --help
+browser search "folagor" --engine youtube --focus
+browser open "https://www.youtube.com/results?search_query=folagor" --name "YouTube: folagor" --focus
 
 browser --connect <<'EOF'
 const pages = await browser.listPages();
@@ -47,25 +52,26 @@ EOF
 Create a new browser panel:
 
 ```bash
-browser --connect <<'EOF'
-const page = await browser.newPage({ url: 'https://example.com' });
-await page.focus();
-console.log(page.id());
-EOF
+browser open "https://example.com" --name "docs" --focus
+```
+
+Search directly:
+
+```bash
+browser search "edm music" --engine youtube --focus
+browser search "best espresso madrid" --engine google --focus
 ```
 
 List mounted browser panels:
 
 ```bash
-browser --connect <<'EOF'
-console.log(JSON.stringify(await browser.listPages(), null, 2));
-EOF
+browser list --json
 ```
 
 Inspect the current workspace session:
 
 ```bash
-browser --json
+browser status --json
 ```
 
 Run a saved script:
@@ -74,10 +80,21 @@ Run a saved script:
 browser run script.js
 ```
 
+Use advanced DOM automation only when you need a Playwright page:
+
+```bash
+browser --connect <<'EOF'
+const page = await browser.getPage("docs");
+console.log(await page.title());
+EOF
+```
+
 ## Common mistakes
 
 - `browser-cli open`
-  This command does not exist. Use `browser.newPage(...)` inside a script.
+  Prefer `browser open <url>`.
+- `browser-cli search`
+  Use `browser search <query> --engine youtube` or omit `--engine` to default to Google.
 - `browser-cli connect`
   `connect` is a flag, not a subcommand. Use `browser --connect <<'EOF' ... EOF`.
 - expecting external Chrome control

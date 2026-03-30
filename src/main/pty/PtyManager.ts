@@ -6,6 +6,8 @@ import { nanoid } from 'nanoid'
 import { getApiPort } from '../api/BrowserApiServer'
 import { registerToken, revokeToken } from '../api/TokenRegistry'
 import {
+  getBrowserCliCommandPath,
+  getBrowserCommandPath,
   getBrowserCliSessionFilePath,
   prependBrowserCliToPath
 } from '../browser-cli/BrowserCliPathManager'
@@ -44,6 +46,8 @@ export function createPty(
   // Unset ELECTRON_RUN_AS_NODE so child shells behave normally
   delete env.ELECTRON_RUN_AS_NODE
   env.PATH = prependBrowserCliToPath(env.PATH)
+  env.CENTIPEDE_BROWSER = getBrowserCommandPath()
+  env.CENTIPEDE_BROWSER_CLI = getBrowserCliCommandPath()
   env.CENTIPEDE_BROWSER_SESSION_FILE = getBrowserCliSessionFilePath()
 
   const browserApiToken = nanoid(32)
