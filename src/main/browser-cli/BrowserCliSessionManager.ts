@@ -1,3 +1,4 @@
+import { BrowserWindow } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
@@ -30,6 +31,7 @@ interface RendererSessionState {
 }
 
 const appInstanceId = randomUUID()
+const SESSION_STALE_MS = 15_000
 let currentScope: RendererSessionState = {
   activeProjectId: null,
   activeWorkspaceId: null,
@@ -41,13 +43,35 @@ let heartbeatTimer: NodeJS.Timeout | null = null
 let currentProjectName: string | null = null
 let currentWorkspaceName: string | null = null
 
+function isProcessAlive(processId: number): boolean {
+  if (!Number.isInteger(processId) || processId <= 0) {
+    return false
+  }
+
+  try {
+    process.kill(processId, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function isFreshHeartbeat(value: string): boolean {
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) && Date.now() - timestamp <= SESSION_STALE_MS
+}
+
 function readSessionFile(): BrowserCliSessionRecord[] {
   const sessionFile = getBrowserCliSessionFilePath()
 
   try {
     const raw = readFileSync(sessionFile, 'utf8')
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? (parsed as BrowserCliSessionRecord[]) : []
+    return Array.isArray(parsed)
+      ? (parsed as BrowserCliSessionRecord[]).filter(
+          (entry) => isFreshHeartbeat(entry.lastHeartbeatAt) && isProcessAlive(entry.processId)
+        )
+      : []
   } catch {
     return []
   }
@@ -89,7 +113,7 @@ function buildSessionRecord(): BrowserCliSessionRecord | null {
     browserApiToken: currentToken,
     cdpEndpoint: cdpPort ? `http://127.0.0.1:${cdpPort}` : null,
     focusedBrowserPanelId: currentScope.focusedBrowserPanelId,
-    focused: true,
+    focused: BrowserWindow.getAllWindows().some((window) => window.isVisible() && window.isFocused()),
     lastHeartbeatAt: new Date().toISOString()
   }
 }

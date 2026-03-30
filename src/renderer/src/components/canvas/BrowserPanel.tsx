@@ -260,41 +260,73 @@ export function BrowserPanel({
           onChange={(event) => setInputValue(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
+              event.preventDefault()
               navigateToInput()
+            } else if (event.key === 'Escape') {
+              setInputValue(currentUrl)
+              ;(event.currentTarget as HTMLInputElement).blur()
             }
           }}
-          className="min-w-0 flex-1 rounded bg-bg px-2 py-1 text-xs text-text-primary outline-none ring-1 ring-transparent transition focus:ring-accent/40"
+          className="h-5 min-w-0 flex-1 rounded border border-border bg-bg px-2 font-mono text-[12px] text-text-secondary outline-none focus:border-accent/50"
           spellCheck={false}
         />
+
+        <button
+          type="button"
+          className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-bg-hover hover:text-text-primary"
+          title="Go"
+          onClick={navigateToInput}
+        >
+          {'→'}
+        </button>
 
         {warningBadge}
       </div>
 
+      {isLoading ? <div className="h-[2px] w-full animate-pulse bg-accent/70" /> : null}
+
       <div className="relative min-h-0 flex-1">
         {isElectron ? (
           <webview
-            ref={webviewRef}
+            ref={(element) => {
+              webviewRef.current = element as HTMLWebViewElement | null
+            }}
             src={currentUrl}
-            className="h-full w-full"
-            allowpopups="true"
-            webpreferences="contextIsolation=yes"
+            partition={`persist:project-${projectId}`}
+            className="h-full w-full bg-bg"
+            allowpopups="false"
             style={{ opacity: isResizing ? 0.85 : 1 }}
           />
         ) : (
           <iframe
             ref={iframeRef}
             src={currentUrl}
-            title={`Browser ${panelId}`}
-            className="h-full w-full border-0"
+            title="Browser panel fallback"
+            className="h-full w-full border-0 bg-bg"
+            tabIndex={-1}
+            onLoad={() => {
+              setIsLoading(false)
+              setLoadError(null)
+            }}
           />
         )}
-      </div>
 
-      {loadError ? (
-        <div className="border-t border-border-subtle bg-red-500/10 px-3 py-2 text-[11px] text-red-300">
-          {loadError}
-        </div>
-      ) : null}
+        {loadError ? (
+          <div className="absolute inset-4 rounded border border-red-500/30 bg-bg-raised/95 p-3">
+            <p className="text-xs font-semibold text-red-300">Navigation failed</p>
+            <p className="mt-2 text-xs leading-5 text-text-secondary">{loadError}</p>
+            <button
+              type="button"
+              className="mt-3 rounded border border-border px-2 py-1 text-xs text-text-primary hover:bg-bg-hover"
+              onClick={navigateToInput}
+            >
+              Retry
+            </button>
+          </div>
+        ) : null}
+
+        {isResizing ? <div className="absolute inset-0 z-20 bg-transparent" /> : null}
+      </div>
     </div>
   )
 }

@@ -11,7 +11,7 @@ import {
 } from './browser/BrowserPanelManager'
 import { startApiServer, stopApiServer } from './api/BrowserApiServer'
 import { shutdownCdpProxies } from './cdp/CdpProxyManager'
-import { clearBrowserCliSession } from './browser-cli/BrowserCliSessionManager'
+import { clearBrowserCliSession, touchBrowserCliSession } from './browser-cli/BrowserCliSessionManager'
 
 app.whenReady().then(() => {
   // Initialize database
@@ -23,6 +23,12 @@ app.whenReady().then(() => {
   const mainWindow = createMainWindow()
   setBrowserPanelMainWindow(mainWindow)
   initWebviewSecurity(mainWindow)
+  mainWindow.on('focus', () => {
+    touchBrowserCliSession()
+  })
+  mainWindow.on('blur', () => {
+    touchBrowserCliSession()
+  })
   void startApiServer()
 
   app.on('activate', () => {
@@ -30,6 +36,12 @@ app.whenReady().then(() => {
       const window = createMainWindow()
       setBrowserPanelMainWindow(window)
       initWebviewSecurity(window)
+      window.on('focus', () => {
+        touchBrowserCliSession()
+      })
+      window.on('blur', () => {
+        touchBrowserCliSession()
+      })
     }
   })
 })
