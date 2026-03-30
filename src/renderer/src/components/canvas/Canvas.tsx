@@ -18,6 +18,9 @@ import type { Project } from '@shared/project.types'
 const VIRTUAL_PADDING = 5000
 const GRID_SIZE = 24
 const FIT_CONTENT_PADDING = 96
+const MIN_GRID_OPACITY = 0.18
+const FIT_ZOOM_TOLERANCE = 0.02
+const FIT_SCROLL_TOLERANCE = 24
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
@@ -29,6 +32,16 @@ function isEditableTarget(target: EventTarget | null): boolean {
 
 function clampScroll(value: number, max: number): number {
   return Math.min(Math.max(0, value), max)
+}
+
+function getGridOpacity(zoom: number): number {
+  if (zoom >= 1) {
+    return 1
+  }
+
+  const minZoom = CANVAS_ZOOM_STEPS[0]
+  const normalized = (zoom - minZoom) / (1 - minZoom)
+  return Math.max(MIN_GRID_OPACITY, Math.min(1, MIN_GRID_OPACITY + normalized * (1 - MIN_GRID_OPACITY)))
 }
 
 function isCentipedeProject(project: Project): boolean {
@@ -96,6 +109,7 @@ export function Canvas() {
   const { projects } = useProjectsStore()
   const didAutoOpenRef = useRef<string | null>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
+  const canvasWheelCleanupRef = useRef<(() => void) | null>(null)
   const contentMeasureRef = useRef<HTMLDivElement>(null)
   const previousZoomRef = useRef(canvasZoom)
   const [showCreateMenu, setShowCreateMenu] = useState(false)
@@ -148,6 +162,7 @@ export function Canvas() {
     }),
     [canvasInsets]
   )
+  const gridOpacity = useMemo(() => getGridOpacity(canvasZoom), [canvasZoom])
 
   // Load workspaces when project changes and restore saved panel state
   useEffect(() => {
@@ -204,6 +219,15 @@ export function Canvas() {
       t3codeApi.stop(panelId).catch(() => {})
     }
   }, [activeProject, projectWorkspaces])
+
+  useEffect(() => {
+    if (!activeProjectId) {
+      return
+    }
+
+    previousZoomRef.current = 1
+    setCanvasZoom(1)
+  }, [activeProjectId, setCanvasZoom])
 
   useLayoutEffect(() => {
     const content = contentMeasureRef.current
@@ -329,12 +353,24 @@ export function Canvas() {
     })
   }, [activeProjectId])
 
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
+  const setCanvasNode = useCallback((node: HTMLDivElement | null) => {
+    if (canvasWheelCleanupRef.current) {
+      canvasWheelCleanupRef.current()
+      canvasWheelCleanupRef.current = null
+    }
+
+    canvasRef.current = node
+
+    if (!node) {
+      return
+    }
 
     const handleWheel = (event: WheelEvent) => {
       if (!event.ctrlKey && !event.metaKey) {
+        return
+      }
+
+      if (!(event.target instanceof Node) || !node.contains(event.target)) {
         return
       }
 
@@ -347,10 +383,9 @@ export function Canvas() {
       }
     }
 
-    canvas.addEventListener('wheel', handleWheel, { passive: false })
-
-    return () => {
-      canvas.removeEventListener('wheel', handleWheel)
+    window.addEventListener('wheel', handleWheel, { capture: true, passive: false })
+    canvasWheelCleanupRef.current = () => {
+      window.removeEventListener('wheel', handleWheel, true)
     }
   }, [zoomIn, zoomOut])
 
@@ -664,22 +699,65 @@ export function Canvas() {
         )
       )
     )
+    const fitScrollLeft =
+      paddedInsets.left + ((bounds.left + bounds.right) / 2) * nextZoom - canvas.clientWidth / 2
+    const fitScrollTop =
+      paddedInsets.top + ((bounds.top + bounds.bottom) / 2) * nextZoom - canvas.clientHeight / 2
+    const targetFitScrollLeft = clampScroll(
+      fitScrollLeft,
+      canvas.scrollWidth - canvas.clientWidth
+    )
+    const targetFitScrollTop = clampScroll(
+      fitScrollTop,
+      canvas.scrollHeight - canvas.clientHeight
+    )
+    const isAlreadyShowingEverything =
+      Math.abs(canvasZoom - nextZoom) <= FIT_ZOOM_TOLERANCE &&
+      Math.abs(canvas.scrollLeft - targetFitScrollLeft) <= FIT_SCROLL_TOLERANCE &&
+      Math.abs(canvas.scrollTop - targetFitScrollTop) <= FIT_SCROLL_TOLERANCE
+
+    if (isAlreadyShowingEverything && focusedPanelId) {
+      const focusedPanelElement = content.querySelector<HTMLElement>(
+        `[data-panel-id="${focusedPanelId}"]`
+      )
+
+      if (focusedPanelElement) {
+        const focusedPanelRect = focusedPanelElement.getBoundingClientRect()
+        const left = (focusedPanelRect.left - contentRect.left) / canvasZoom
+        const top = (focusedPanelRect.top - contentRect.top) / canvasZoom
+        const width = focusedPanelRect.width / canvasZoom
+        const height = focusedPanelRect.height / canvasZoom
+        const detailZoom = 1
+
+        setCanvasZoom(detailZoom)
+
+        requestAnimationFrame(() => {
+          const detailScrollLeft =
+            paddedInsets.left + (left + width / 2) * detailZoom - canvas.clientWidth / 2
+          const detailScrollTop =
+            paddedInsets.top + (top + height / 2) * detailZoom - canvas.clientHeight / 2
+
+          canvas.scrollTo({
+            left: clampScroll(detailScrollLeft, canvas.scrollWidth - canvas.clientWidth),
+            top: clampScroll(detailScrollTop, canvas.scrollHeight - canvas.clientHeight),
+            behavior: 'smooth'
+          })
+        })
+
+        return
+      }
+    }
 
     setCanvasZoom(nextZoom)
 
     requestAnimationFrame(() => {
-      const centeredScrollLeft =
-        paddedInsets.left + ((bounds.left + bounds.right) / 2) * nextZoom - canvas.clientWidth / 2
-      const centeredScrollTop =
-        paddedInsets.top + ((bounds.top + bounds.bottom) / 2) * nextZoom - canvas.clientHeight / 2
-
       canvas.scrollTo({
-        left: clampScroll(centeredScrollLeft, canvas.scrollWidth - canvas.clientWidth),
-        top: clampScroll(centeredScrollTop, canvas.scrollHeight - canvas.clientHeight),
+        left: targetFitScrollLeft,
+        top: targetFitScrollTop,
         behavior: 'smooth'
       })
     })
-  }, [canvasZoom, paddedInsets.left, paddedInsets.top, setCanvasZoom])
+  }, [canvasZoom, focusedPanelId, paddedInsets.left, paddedInsets.top, setCanvasZoom])
 
   if (!activeProjectId) {
     return (
@@ -719,7 +797,7 @@ export function Canvas() {
         />
       </div>
       <div
-        ref={canvasRef}
+        ref={setCanvasNode}
         data-canvas-scroll-root="true"
         onMouseDown={handleCanvasPointerDown}
         className={cn(
@@ -727,6 +805,7 @@ export function Canvas() {
           isPanning ? 'cursor-grabbing select-none' : 'cursor-grab'
         )}
         style={{
+          backgroundImage: `radial-gradient(circle, color-mix(in srgb, var(--color-border) ${Math.round(gridOpacity * 100)}%, transparent) 1px, transparent 1px)`,
           backgroundSize: `${GRID_SIZE * canvasZoom}px ${GRID_SIZE * canvasZoom}px`
         }}
       >

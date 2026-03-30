@@ -425,7 +425,15 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
   },
 
   setActivePanels: (panels) => {
-    set({ activePanels: panels, focusedPanelId: null })
+    const focusedPanelId = panels[0]?.panelId ?? null
+    const lastFocusedPanelByWorkspace =
+      focusedPanelId && panels[0]
+        ? {
+            [panels[0].workspaceId]: focusedPanelId
+          }
+        : {}
+
+    set({ activePanels: panels, focusedPanelId, lastFocusedPanelByWorkspace })
     // When clearing panels (project switch), don't save empty state
     // When restoring panels, the layout is already in sync
   },
@@ -671,6 +679,15 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
     for (const ws of workspaces) {
       panels.push(...buildPanelsFromWorkspace(ws, cwd))
     }
-    set({ activePanels: panels })
+
+    const focusedPanelId = panels[0]?.panelId ?? null
+    const lastFocusedPanelByWorkspace =
+      focusedPanelId && panels[0]
+        ? {
+            [panels[0].workspaceId]: focusedPanelId
+          }
+        : {}
+
+    set({ activePanels: panels, focusedPanelId, lastFocusedPanelByWorkspace })
   }
 }))
