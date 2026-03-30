@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Modal } from '@renderer/components/shared/Modal'
 import { Input } from '@renderer/components/shared/Input'
 import { Button } from '@renderer/components/shared/Button'
+import { useResolvedTheme } from '@renderer/lib/theme'
+import { getRandomProjectColorForTheme } from '@renderer/lib/project-colors'
 import { useProjectsStore } from '@renderer/stores/projects.store'
 import { useUiStore } from '@renderer/stores/ui.store'
 import { dialogsApi } from '@renderer/lib/ipc'
@@ -9,6 +11,7 @@ import { dialogsApi } from '@renderer/lib/ipc'
 export function NewProjectModal() {
   const { showNewProjectModal, setShowNewProjectModal, setActiveProject } = useUiStore()
   const { createProject } = useProjectsStore()
+  const resolvedTheme = useResolvedTheme()
   const [name, setName] = useState('')
   const [repoPath, setRepoPath] = useState('')
   const [description, setDescription] = useState('')
@@ -33,7 +36,8 @@ export function NewProjectModal() {
       const project = await createProject({
         name: name.trim(),
         repoPath: repoPath.trim(),
-        description: description.trim()
+        description: description.trim(),
+        color: getRandomProjectColorForTheme(resolvedTheme)
       })
       setActiveProject(project.id)
       handleClose()
