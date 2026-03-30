@@ -5,6 +5,7 @@ import type {
   CreateProjectInput,
   UpdateProjectInput
 } from '@shared/project.types'
+import { getRandomProjectColor, normalizeProjectColor } from '@shared/project.types'
 
 function rowToProject(row: any): Project {
   return {
@@ -13,7 +14,7 @@ function rowToProject(row: any): Project {
     repoPath: row.repo_path,
     description: row.description,
     progress: row.progress as 0 | 1 | 2 | 3,
-    color: row.color || 'blue',
+    color: normalizeProjectColor(row.color),
     gitWorkspacesEnabled: Boolean(row.git_workspaces_enabled),
     defaultBrowserCookiePolicy: row.default_browser_cookie_policy,
     defaultTerminalMode: row.default_terminal_mode,
@@ -41,11 +42,12 @@ export function createProject(input: CreateProjectInput): Project {
   const db = getDb()
   const id = nanoid()
   const now = new Date().toISOString()
+  const color = input.color || getRandomProjectColor()
 
   db.prepare(
     `INSERT INTO projects (id, name, repo_path, description, color, git_workspaces_enabled, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, input.name, input.repoPath, input.description || '', input.color || 'blue', input.gitWorkspacesEnabled ? 1 : 0, now, now)
+  ).run(id, input.name, input.repoPath, input.description || '', color, input.gitWorkspacesEnabled ? 1 : 0, now, now)
 
   return getProject(id)!
 }

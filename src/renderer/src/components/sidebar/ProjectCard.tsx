@@ -15,7 +15,7 @@ const progressLabels = ['Starting', 'In Progress', 'Almost Done', 'Complete'] as
 export function ProjectCard({ project, active, onClick }: ProjectCardProps) {
   const { showProjectPage, toggleProjectPage } = useUiStore()
   const isProjectPageOpen = active && showProjectPage
-  const colorHex = PROJECT_COLOR_HEX[project.color || 'blue']
+  const colorHex = PROJECT_COLOR_HEX[project.color]
 
   const handleArrowClick = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -38,11 +38,13 @@ export function ProjectCard({ project, active, onClick }: ProjectCardProps) {
           : 'hover:bg-bg-hover'
       )}
     >
-      <div className="flex items-center gap-2 min-w-0">
+      <div className="flex items-start gap-2 min-w-0">
         <ProgressIcon progress={project.progress} />
-        <span className="text-sm font-medium text-text-primary truncate flex-1">
-          {project.name}
-        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium text-text-primary truncate">
+            {project.name}
+          </div>
+        </div>
         <div
           onClick={handleArrowClick}
           className={cn(
@@ -77,7 +79,7 @@ export function ProjectCard({ project, active, onClick }: ProjectCardProps) {
           </svg>
         </div>
       </div>
-      <div className="mt-0.5 ml-5 text-xs text-text-muted truncate">
+      <div className="mt-1 ml-5 text-xs text-text-muted truncate">
         {progressLabels[project.progress]}
         {project.description && ` · ${project.description}`}
       </div>

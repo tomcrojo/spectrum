@@ -4,15 +4,14 @@ import { useProjectsStore } from '@renderer/stores/projects.store'
 import { ProjectHeader } from './ProjectHeader'
 import { TaskList } from './TaskList'
 import { WorkspaceList } from './WorkspaceList'
-import { ProjectSettings } from './ProjectSettings'
 import { PROJECT_COLOR_HEX } from '@renderer/lib/project-colors'
-import type { Project, ProjectColor } from '@shared/project.types'
+import { DEFAULT_PROJECT_COLOR, type Project, type ProjectColor } from '@shared/project.types'
 import { projectsApi } from '@renderer/lib/ipc'
 
 export function ProjectPage() {
   const { activeProjectId, showProjectPage, setShowProjectPage } = useUiStore()
   const [project, setProject] = useState<Project | null>(null)
-  const [localColor, setLocalColor] = useState<ProjectColor>('blue')
+  const [localColor, setLocalColor] = useState<ProjectColor>(DEFAULT_PROJECT_COLOR)
   const { projects, updateProject } = useProjectsStore()
   const prevProjectId = useRef<string | null>(null)
 
@@ -27,7 +26,7 @@ export function ProjectPage() {
       // Only set color from backend when switching projects, not on every re-fetch
       // (to avoid overwriting optimistic local color updates)
       if (p && activeProjectId !== prevProjectId.current) {
-        setLocalColor(p.color || 'blue')
+        setLocalColor(p.color)
         prevProjectId.current = activeProjectId
       }
     })
@@ -67,7 +66,11 @@ export function ProjectPage() {
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto">
         <div className="px-4 py-4">
-          <ProjectHeader project={project} />
+          <ProjectHeader
+            project={project}
+            color={localColor}
+            onColorChange={handleColorChange}
+          />
 
           <div className="space-y-8">
             {/* Open Workspaces */}
@@ -108,14 +111,6 @@ export function ProjectPage() {
               <p className="text-xs text-text-muted">
                 Coming in Phase 4
               </p>
-            </section>
-
-            {/* Project Settings */}
-            <section className="pb-6">
-              <ProjectSettings
-                color={localColor}
-                onColorChange={handleColorChange}
-              />
             </section>
           </div>
         </div>

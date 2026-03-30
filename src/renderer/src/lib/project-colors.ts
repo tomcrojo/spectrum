@@ -1,20 +1,15 @@
-import type { ProjectColor } from '@shared/project.types'
+import { PROJECT_COLOR_PALETTE, type ProjectColor } from '@shared/project.types'
 
-/** Hex color for each project color option */
-export const PROJECT_COLOR_HEX: Record<ProjectColor, string> = {
-  slate: '#64748b',
-  red: '#ef4444',
-  orange: '#f97316',
-  amber: '#f59e0b',
-  emerald: '#10b981',
-  teal: '#14b8a6',
-  cyan: '#06b6d4',
-  sky: '#0ea5e9',
-  blue: '#3b82f6',
-  indigo: '#6366f1',
-  violet: '#8b5cf6',
-  purple: '#a855f7',
-  fuchsia: '#d946ef',
-  pink: '#ec4899',
-  rose: '#f43f5e',
+export const PROJECT_COLORS = PROJECT_COLOR_PALETTE
+
+export const PROJECT_COLOR_HEX: Record<ProjectColor, string> = Object.fromEntries(
+  PROJECT_COLORS.map((color) => [color.id, color.hex])
+) as Record<ProjectColor, string>
+
+export const PROJECT_COLOR_NAME: Record<ProjectColor, string> = Object.fromEntries(
+  PROJECT_COLORS.map((color) => [color.id, color.name])
+) as Record<ProjectColor, string>
+
+export function getProjectColorMeta(color: ProjectColor) {
+  return PROJECT_COLORS.find((entry) => entry.id === color) ?? PROJECT_COLORS[0]
 }

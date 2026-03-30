@@ -25,6 +25,7 @@ import {
   stopAllT3Code
 } from '../main/t3code/T3CodeManager'
 import { BROWSER_CHANNELS } from '../shared/ipc-channels'
+import { getRandomProjectColor, normalizeProjectColor } from '@shared/project.types'
 
 // ─── Database Setup ────────────────────────────────────────────────────
 
@@ -83,6 +84,7 @@ function rowToProject(row: any) {
     repoPath: row.repo_path,
     description: row.description,
     progress: row.progress,
+    color: normalizeProjectColor(row.color),
     gitWorkspacesEnabled: Boolean(row.git_workspaces_enabled),
     defaultBrowserCookiePolicy: row.default_browser_cookie_policy,
     defaultTerminalMode: row.default_terminal_mode,
@@ -483,14 +485,16 @@ const handlers: Record<string, Handler> = {
   'project:create': (input: any) => {
     const id = nanoid()
     const now = new Date().toISOString()
+    const color = input.color || getRandomProjectColor()
     db.prepare(
-      `INSERT INTO projects (id, name, repo_path, description, git_workspaces_enabled, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO projects (id, name, repo_path, description, color, git_workspaces_enabled, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       id,
       input.name,
       input.repoPath,
       input.description || '',
+      color,
       input.gitWorkspacesEnabled ? 1 : 0,
       now,
       now
@@ -519,6 +523,10 @@ const handlers: Record<string, Handler> = {
     if (input.progress !== undefined) {
       updates.push('progress = ?')
       values.push(input.progress)
+    }
+    if (input.color !== undefined) {
+      updates.push('color = ?')
+      values.push(input.color)
     }
     if (input.gitWorkspacesEnabled !== undefined) {
       updates.push('git_workspaces_enabled = ?')
