@@ -76,7 +76,7 @@ export function TerminalPanel({
   autoFocus
 }: TerminalPanelProps) {
   const resolvedTheme = useResolvedTheme()
-  const updatePanel = useWorkspacesStore((state) => state.updatePanel)
+  const updatePanelLayout = useWorkspacesStore((state) => state.updatePanelLayout)
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -135,7 +135,7 @@ export function TerminalPanel({
         titleDisposable = term.onTitleChange((title) => {
           const nextTitle = title.trim()
           if (nextTitle) {
-            updatePanel(terminalId, { panelTitle: nextTitle })
+            updatePanelLayout(terminalId, { panelTitle: nextTitle })
           }
         })
 
@@ -171,7 +171,7 @@ export function TerminalPanel({
       ptyIdRef.current = null
       mountedRef.current = false
     }
-  }, [cwd, projectId, terminalId, updatePanel, workspaceId])
+  }, [cwd, projectId, terminalId, updatePanelLayout, workspaceId])
 
   useEffect(() => {
     if (!autoFocus) {

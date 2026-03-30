@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { getProject } from '../db/projects.repo'
-import { listWorkspaces } from '../db/workspaces.repo'
+import { getDb } from '../db/database'
 import { getApiPort } from '../api/BrowserApiServer'
 import { registerToken, revokeToken } from '../api/TokenRegistry'
 import { getCdpProxyPort } from '../cdp/CdpProxyManager'
@@ -38,6 +38,8 @@ let currentScope: RendererSessionState = {
 let currentToken: string | null = null
 let currentTokenScope: { projectId: string; workspaceId: string } | null = null
 let heartbeatTimer: NodeJS.Timeout | null = null
+let currentProjectName: string | null = null
+let currentWorkspaceName: string | null = null
 
 function readSessionFile(): BrowserCliSessionRecord[] {
   const sessionFile = getBrowserCliSessionFilePath()
@@ -57,11 +59,11 @@ function writeSessionFile(records: BrowserCliSessionRecord[]): void {
   writeFileSync(sessionFile, JSON.stringify(records, null, 2))
 }
 
-function resolveWorkspaceName(projectId: string, workspaceId: string): string | null {
-  const workspace = listWorkspaces({ projectId, includeArchived: true }).find(
-    (entry) => entry.id === workspaceId
-  )
-  return workspace?.name ?? null
+function resolveWorkspaceName(workspaceId: string): string | null {
+  const row = getDb()
+    .prepare('SELECT name FROM workspaces WHERE id = ?')
+    .get(workspaceId) as { name?: string } | undefined
+  return row?.name ?? null
 }
 
 function buildSessionRecord(): BrowserCliSessionRecord | null {
@@ -69,13 +71,7 @@ function buildSessionRecord(): BrowserCliSessionRecord | null {
     return null
   }
 
-  const project = getProject(currentScope.activeProjectId)
-  const workspaceName = resolveWorkspaceName(
-    currentScope.activeProjectId,
-    currentScope.activeWorkspaceId
-  )
-
-  if (!project || !workspaceName) {
+  if (!currentProjectName || !currentWorkspaceName) {
     return null
   }
 
@@ -85,10 +81,10 @@ function buildSessionRecord(): BrowserCliSessionRecord | null {
   return {
     appInstanceId,
     processId: process.pid,
-    projectId: project.id,
+    projectId: currentScope.activeProjectId,
     workspaceId: currentScope.activeWorkspaceId,
-    projectName: project.name,
-    workspaceName,
+    projectName: currentProjectName,
+    workspaceName: currentWorkspaceName,
     browserApiBaseUrl,
     browserApiToken: currentToken,
     cdpEndpoint: cdpPort ? `http://127.0.0.1:${cdpPort}` : null,
@@ -149,8 +145,24 @@ export function updateBrowserCliSessionScope(input: RendererSessionState): void 
   if (!input.activeProjectId || !input.activeWorkspaceId) {
     clearRegisteredToken()
     stopHeartbeat()
+    currentProjectName = null
+    currentWorkspaceName = null
     persistCurrentSession()
     return
+  }
+
+  if (
+    !currentProjectName ||
+    currentTokenScope?.projectId !== input.activeProjectId
+  ) {
+    currentProjectName = getProject(input.activeProjectId)?.name ?? null
+  }
+
+  if (
+    !currentWorkspaceName ||
+    currentTokenScope?.workspaceId !== input.activeWorkspaceId
+  ) {
+    currentWorkspaceName = resolveWorkspaceName(input.activeWorkspaceId)
   }
 
   const requiresNewToken =

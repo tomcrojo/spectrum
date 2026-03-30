@@ -3,6 +3,7 @@ import {
   useUiStore,
   type ArchivedTimestampFormat,
   type CanvasInteractionMode,
+  type RuntimePowerMode,
   type UiTheme
 } from '@renderer/stores/ui.store'
 import { useResolvedTheme } from '@renderer/lib/theme'
@@ -66,6 +67,28 @@ const canvasInteractionModeOptions: Array<{
   }
 ]
 
+const runtimePowerModeOptions: Array<{
+  value: RuntimePowerMode
+  label: string
+  description: string
+}> = [
+  {
+    value: 'high',
+    label: 'High',
+    description: 'Keeps browser and T3 panels live more often for the smoothest switching and best agent access.'
+  },
+  {
+    value: 'mid',
+    label: 'Mid',
+    description: 'Applies lazy restore and background monitoring, but only parks heavy panels when a workspace goes inactive.'
+  },
+  {
+    value: 'low',
+    label: 'Low',
+    description: 'Parks heavy panels aggressively to reduce steady-state CPU, memory, and battery cost on large projects.'
+  }
+]
+
 export function SettingsPage() {
   const {
     showSettingsPage,
@@ -77,7 +100,9 @@ export function SettingsPage() {
     autoCenterFocusedPanel,
     setAutoCenterFocusedPanel,
     canvasInteractionMode,
-    setCanvasInteractionMode
+    setCanvasInteractionMode,
+    runtimePowerMode,
+    setRuntimePowerMode
   } = useUiStore()
   const resolvedTheme = useResolvedTheme()
 
@@ -189,6 +214,58 @@ export function SettingsPage() {
             >
               Reset
             </Button>
+          </div>
+        </section>
+
+        <section className="mt-4 rounded-xl border border-border bg-bg-raised p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-semibold text-text-primary">
+                Runtime Lifecycle
+              </h3>
+              <p className="mt-1 text-xs text-text-muted">
+                Controls how aggressively inactive heavy panels are parked to save resources.
+              </p>
+            </div>
+            <div className="rounded-full border border-border-subtle bg-bg px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-text-muted">
+              {runtimePowerMode}
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-2">
+            {runtimePowerModeOptions.map((option) => {
+              const selected = runtimePowerMode === option.value
+
+              return (
+                <button
+                  key={option.value}
+                  onClick={() => setRuntimePowerMode(option.value)}
+                  className={cn(
+                    'rounded-lg border px-3 py-3 text-left transition-colors',
+                    selected
+                      ? 'border-accent bg-accent/10'
+                      : 'border-border bg-bg hover:bg-bg-hover'
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium text-text-primary">
+                      {option.label}
+                    </span>
+                    <span
+                      className={cn(
+                        'h-2.5 w-2.5 rounded-full border',
+                        selected
+                          ? 'border-accent bg-accent'
+                          : 'border-border bg-transparent'
+                      )}
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-text-muted">
+                    {option.description}
+                  </p>
+                </button>
+              )
+            })}
           </div>
         </section>
 

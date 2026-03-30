@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { browserApi } from '@renderer/lib/ipc'
+import { incrementDevMountCount } from '@renderer/lib/dev-performance'
 import { useWorkspacesStore } from '@renderer/stores/workspaces.store'
 
 interface BrowserPanelProps {
@@ -9,6 +10,7 @@ interface BrowserPanelProps {
   initialUrl?: string
   autoFocus: boolean
   isResizing: boolean
+  hydrationState: 'live' | 'preview' | 'cold'
 }
 
 function normalizeUrl(input: string): string {
@@ -30,25 +32,35 @@ export function BrowserPanel({
   autoFocus,
   isResizing
 }: BrowserPanelProps) {
-  const updatePanel = useWorkspacesStore((state) => state.updatePanel)
+  const updatePanelLayout = useWorkspacesStore((state) => state.updatePanelLayout)
   const isElectron = typeof window !== 'undefined' && typeof window.api !== 'undefined'
   const webviewRef = useRef<HTMLWebViewElement | null>(null)
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const webContentsIdRef = useRef<number | null>(null)
-  const [currentUrl, setCurrentUrl] = useState(() => normalizeUrl(initialUrl ?? 'https://localhost:3000'))
-  const [inputValue, setInputValue] = useState(() => normalizeUrl(initialUrl ?? 'https://localhost:3000'))
+  const [currentUrl, setCurrentUrl] = useState(() =>
+    normalizeUrl(initialUrl ?? 'https://localhost:3000')
+  )
+  const [inputValue, setInputValue] = useState(() =>
+    normalizeUrl(initialUrl ?? 'https://localhost:3000')
+  )
   const [isLoading, setIsLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [canGoBack, setCanGoBack] = useState(false)
   const [canGoForward, setCanGoForward] = useState(false)
 
   useEffect(() => {
-    updatePanel(panelId, { url: currentUrl })
-    browserApi.urlChanged({
-      panelId,
-      url: currentUrl
-    }).catch(() => {})
-  }, [currentUrl, panelId, updatePanel])
+    incrementDevMountCount('BrowserPanel')
+  }, [])
+
+  useEffect(() => {
+    updatePanelLayout(panelId, { url: currentUrl })
+    browserApi
+      .urlChanged({
+        panelId,
+        url: currentUrl
+      })
+      .catch(() => {})
+  }, [currentUrl, panelId, updatePanelLayout])
 
   useEffect(() => {
     if (!autoFocus) {
@@ -109,22 +121,26 @@ export function BrowserPanel({
         return
       }
 
-      updatePanel(panelId, { panelTitle: nextTitle })
-      browserApi.urlChanged({
-        panelId,
-        panelTitle: nextTitle
-      }).catch(() => {})
+      updatePanelLayout(panelId, { panelTitle: nextTitle })
+      browserApi
+        .urlChanged({
+          panelId,
+          panelTitle: nextTitle
+        })
+        .catch(() => {})
     }
 
     const handleDomReady = () => {
       const webContentsId = webview.getWebContentsId()
       webContentsIdRef.current = webContentsId
-      browserApi.webviewReady({
-        panelId,
-        workspaceId,
-        projectId,
-        webContentsId
-      }).catch(() => {})
+      browserApi
+        .webviewReady({
+          panelId,
+          workspaceId,
+          projectId,
+          webContentsId
+        })
+        .catch(() => {})
     }
 
     const handleNewWindow = (event: { url: string; preventDefault: () => void }) => {
@@ -153,14 +169,16 @@ export function BrowserPanel({
       webview.removeEventListener('page-title-updated', handleTitleUpdated as any)
       webview.removeEventListener('dom-ready', handleDomReady as any)
       webview.removeEventListener('new-window', handleNewWindow as any)
-      browserApi.webviewDestroyed({
-        panelId,
-        workspaceId,
-        projectId,
-        webContentsId: webContentsIdRef.current ?? undefined
-      }).catch(() => {})
+      browserApi
+        .webviewDestroyed({
+          panelId,
+          workspaceId,
+          projectId,
+          webContentsId: webContentsIdRef.current ?? undefined
+        })
+        .catch(() => {})
     }
-  }, [isElectron, panelId, projectId, updatePanel, workspaceId])
+  }, [isElectron, panelId, projectId, updatePanelLayout, workspaceId])
 
   const warningBadge = useMemo(() => {
     if (isElectron) {
@@ -242,72 +260,41 @@ export function BrowserPanel({
           onChange={(event) => setInputValue(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
-              event.preventDefault()
               navigateToInput()
-            } else if (event.key === 'Escape') {
-              setInputValue(currentUrl)
-              ;(event.currentTarget as HTMLInputElement).blur()
             }
           }}
-          className="h-5 min-w-0 flex-1 rounded border border-border bg-bg px-2 font-mono text-[12px] text-text-secondary outline-none focus:border-accent/50"
+          className="min-w-0 flex-1 rounded bg-bg px-2 py-1 text-xs text-text-primary outline-none ring-1 ring-transparent transition focus:ring-accent/40"
           spellCheck={false}
         />
-
-        <button
-          type="button"
-          className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-bg-hover hover:text-text-primary"
-          title="Go"
-          onClick={navigateToInput}
-        >
-          {'→'}
-        </button>
 
         {warningBadge}
       </div>
 
-      {isLoading ? <div className="h-[2px] w-full animate-pulse bg-accent/70" /> : null}
-
       <div className="relative min-h-0 flex-1">
         {isElectron ? (
           <webview
-            ref={(element) => {
-              webviewRef.current = element as HTMLWebViewElement | null
-            }}
+            ref={webviewRef}
             src={currentUrl}
-            partition={`persist:project-${projectId}`}
-            className="h-full w-full bg-bg"
-            allowpopups="false"
+            className="h-full w-full"
+            allowpopups="true"
+            webpreferences="contextIsolation=yes"
+            style={{ opacity: isResizing ? 0.85 : 1 }}
           />
         ) : (
           <iframe
             ref={iframeRef}
             src={currentUrl}
-            title="Browser panel fallback"
-            className="h-full w-full border-0 bg-bg"
-            tabIndex={-1}
-            onLoad={() => {
-              setIsLoading(false)
-              setLoadError(null)
-            }}
+            title={`Browser ${panelId}`}
+            className="h-full w-full border-0"
           />
         )}
-
-        {loadError ? (
-          <div className="absolute inset-4 rounded border border-red-500/30 bg-bg-raised/95 p-3">
-            <p className="text-xs font-semibold text-red-300">Navigation failed</p>
-            <p className="mt-2 text-xs leading-5 text-text-secondary">{loadError}</p>
-            <button
-              type="button"
-              className="mt-3 rounded border border-border px-2 py-1 text-xs text-text-primary hover:bg-bg-hover"
-              onClick={navigateToInput}
-            >
-              Retry
-            </button>
-          </div>
-        ) : null}
-
-        {isResizing ? <div className="absolute inset-0 z-20 bg-transparent" /> : null}
       </div>
+
+      {loadError ? (
+        <div className="border-t border-border-subtle bg-red-500/10 px-3 py-2 text-[11px] text-red-300">
+          {loadError}
+        </div>
+      ) : null}
     </div>
   )
 }

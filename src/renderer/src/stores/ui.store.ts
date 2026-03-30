@@ -3,11 +3,13 @@ import { create } from 'zustand'
 export type UiTheme = 'light' | 'dark' | 'system'
 export type ArchivedTimestampFormat = 'relative' | 'full'
 export type CanvasInteractionMode = 'structured' | 'free'
+export type RuntimePowerMode = 'low' | 'mid' | 'high'
 
 const THEME_STORAGE_KEY = 'centipede:theme'
 const ARCHIVED_TIMESTAMP_FORMAT_STORAGE_KEY = 'centipede:archived-timestamp-format'
 const AUTO_CENTER_FOCUSED_PANEL_STORAGE_KEY = 'centipede:auto-center-focused-panel'
 const CANVAS_INTERACTION_MODE_STORAGE_KEY = 'centipede:canvas-interaction-mode'
+const RUNTIME_POWER_MODE_STORAGE_KEY = 'centipede:runtime-power-mode'
 export const CANVAS_ZOOM_STORAGE_KEY = 'centipede:canvas-zoom'
 export const CANVAS_ZOOM_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3] as const
 
@@ -93,6 +95,19 @@ function getInitialCanvasInteractionMode(): CanvasInteractionMode {
   return 'structured'
 }
 
+function getInitialRuntimePowerMode(): RuntimePowerMode {
+  if (typeof window === 'undefined') {
+    return 'mid'
+  }
+
+  const stored = window.localStorage.getItem(RUNTIME_POWER_MODE_STORAGE_KEY)
+  if (stored === 'low' || stored === 'mid' || stored === 'high') {
+    return stored
+  }
+
+  return 'mid'
+}
+
 interface UiState {
   activeProjectId: string | null
   sidebarCollapsed: boolean
@@ -104,6 +119,7 @@ interface UiState {
   archivedTimestampFormat: ArchivedTimestampFormat
   autoCenterFocusedPanel: boolean
   canvasInteractionMode: CanvasInteractionMode
+  runtimePowerMode: RuntimePowerMode
   canvasZoom: number
 
   setActiveProject: (id: string | null) => void
@@ -116,6 +132,7 @@ interface UiState {
   setArchivedTimestampFormat: (format: ArchivedTimestampFormat) => void
   setAutoCenterFocusedPanel: (enabled: boolean) => void
   setCanvasInteractionMode: (mode: CanvasInteractionMode) => void
+  setRuntimePowerMode: (mode: RuntimePowerMode) => void
   setCanvasZoom: (zoom: number) => void
   zoomIn: () => void
   zoomOut: () => void
@@ -133,6 +150,7 @@ export const useUiStore = create<UiState>((set) => ({
   archivedTimestampFormat: getInitialArchivedTimestampFormat(),
   autoCenterFocusedPanel: getInitialAutoCenterFocusedPanel(),
   canvasInteractionMode: getInitialCanvasInteractionMode(),
+  runtimePowerMode: getInitialRuntimePowerMode(),
   canvasZoom: getInitialCanvasZoom(),
 
   setActiveProject: (id) =>
@@ -213,6 +231,16 @@ export const useUiStore = create<UiState>((set) => ({
       canvasInteractionMode,
       canvasZoom: canvasInteractionMode === 'structured' ? 1 : getInitialCanvasZoom()
     })
+  },
+  setRuntimePowerMode: (runtimePowerMode) => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(
+        RUNTIME_POWER_MODE_STORAGE_KEY,
+        runtimePowerMode
+      )
+    }
+
+    set({ runtimePowerMode })
   },
   setCanvasZoom: (canvasZoom) => {
     const nextZoom = clampCanvasZoom(canvasZoom)

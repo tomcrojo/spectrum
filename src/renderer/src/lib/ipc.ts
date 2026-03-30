@@ -120,7 +120,13 @@ export const t3codeApi = {
       url: string | null
       threadTitle: string | null
       lastUserMessageAt: string | null
-    }>(T3CODE_CHANNELS.GET_THREAD_INFO, { t3ThreadId })
+    }>(T3CODE_CHANNELS.GET_THREAD_INFO, { t3ThreadId }),
+  watchThread: (input: {
+    panelId: string
+    t3ThreadId: string
+    priority: 'focused' | 'active' | 'inactive'
+  }) => invoke<boolean>(T3CODE_CHANNELS.WATCH_THREAD, input),
+  unwatchThread: (panelId: string) => invoke<boolean>(T3CODE_CHANNELS.UNWATCH_THREAD, { panelId })
 }
 
 export const browserApi = {
@@ -146,6 +152,8 @@ export const browserApi = {
     projectId?: string
     webContentsId?: number
   }) => invoke<boolean>(BROWSER_CHANNELS.WEBVIEW_DESTROYED, input),
+  capturePreview: (input: { panelId: string }) =>
+    invoke<{ dataUrl: string | null }>(BROWSER_CHANNELS.CAPTURE_PREVIEW, input),
   urlChanged: (input: {
     panelId: string
     url?: string

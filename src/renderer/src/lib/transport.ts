@@ -82,7 +82,9 @@ function createWsTransport(): Transport {
             msg.type === 'browser:close' ||
             msg.type === 'browser:navigate' ||
             msg.type === 'browser:resize' ||
-            msg.type === 'browser:url-changed'
+            msg.type === 'browser:url-changed' ||
+            msg.type === 'browser:automation-state-changed' ||
+            msg.type === 't3code:thread-info-changed'
           ) {
             const set = listeners.get(msg.type)
             if (set) set.forEach((cb) => cb(msg.payload))

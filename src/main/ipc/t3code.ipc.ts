@@ -4,7 +4,9 @@ import {
   ensurePanelThread,
   ensureRuntime,
   ensureT3Project,
-  getThreadInfo
+  getThreadInfo,
+  unwatchThread,
+  watchThread
 } from '../t3code/T3CodeManager'
 
 export function registerT3CodeHandlers(): void {
@@ -39,5 +41,21 @@ export function registerT3CodeHandlers(): void {
       }
       return getThreadInfo(t3ThreadId)
     }
+  )
+
+  ipcMain.handle(
+    T3CODE_CHANNELS.WATCH_THREAD,
+    (
+      _event,
+      input: {
+        panelId: string
+        t3ThreadId: string
+        priority: 'focused' | 'active' | 'inactive'
+      }
+    ) => watchThread(input)
+  )
+
+  ipcMain.handle(T3CODE_CHANNELS.UNWATCH_THREAD, (_event, { panelId }: { panelId: string }) =>
+    unwatchThread(panelId)
   )
 }

@@ -24,7 +24,13 @@ export class CdpProxy {
   private readonly debuggerListeners = new Map<number, (...args: unknown[]) => void>()
   private readonly browserClients = new Set<WebSocket>()
 
-  constructor(private readonly workspaceId: string) {
+  constructor(
+    private readonly workspaceId: string,
+    private readonly onTargetAutomationStateChanged?: (
+      targetId: string,
+      automationAttached: boolean
+    ) => void
+  ) {
     this.server.on('upgrade', this.handleUpgrade.bind(this))
   }
 
@@ -69,6 +75,7 @@ export class CdpProxy {
       existing.title = target.title
       existing.url = target.url
       existing.webContentsId = target.webContentsId
+      this.emitAutomationStateChanged(target.id)
       return
     }
 
@@ -77,6 +84,7 @@ export class CdpProxy {
       clients: new Set<WebSocket>(),
       browserSessionIds: new Set<string>()
     })
+    this.emitAutomationStateChanged(target.id)
   }
 
   updateTarget(targetId: string, patch: { title?: string; url?: string }): void {
@@ -105,6 +113,12 @@ export class CdpProxy {
 
     this.detachDebuggerIfUnused(target.webContentsId)
     this.targets.delete(targetId)
+    this.emitAutomationStateChanged(targetId)
+  }
+
+  hasAttachedClients(targetId: string): boolean {
+    const target = this.targets.get(targetId)
+    return Boolean(target && (target.clients.size > 0 || target.browserSessionIds.size > 0))
   }
 
   async shutdown(): Promise<void> {
@@ -239,6 +253,7 @@ export class CdpProxy {
         if (target) {
           target.browserSessionIds.delete(sessionId)
           this.detachDebuggerIfUnused(target.webContentsId)
+          this.emitAutomationStateChanged(targetId)
         }
       }
       this.browserClients.delete(ws)
@@ -292,6 +307,7 @@ export class CdpProxy {
       sessionToTarget.set(nextSessionId, targetId)
       target.browserSessionIds.add(nextSessionId)
       this.ensureDebuggerAttached(target.webContentsId)
+      this.emitAutomationStateChanged(targetId)
       return { sessionId: nextSessionId }
     }
 
@@ -304,6 +320,7 @@ export class CdpProxy {
         if (target) {
           target.browserSessionIds.delete(detachedSessionId)
           this.detachDebuggerIfUnused(target.webContentsId)
+          this.emitAutomationStateChanged(targetId)
         }
       }
       return {}
@@ -349,6 +366,7 @@ export class CdpProxy {
 
     this.ensureDebuggerAttached(target.webContentsId)
     target.clients.add(ws)
+    this.emitAutomationStateChanged(targetId)
 
     ws.on('message', async (raw) => {
       let message: any
@@ -378,7 +396,12 @@ export class CdpProxy {
     ws.on('close', () => {
       target.clients.delete(ws)
       this.detachDebuggerIfUnused(target.webContentsId)
+      this.emitAutomationStateChanged(targetId)
     })
+  }
+
+  private emitAutomationStateChanged(targetId: string): void {
+    this.onTargetAutomationStateChanged?.(targetId, this.hasAttachedClients(targetId))
   }
 
   private ensureDebuggerAttached(webContentsId: number): void {

@@ -4,16 +4,20 @@ import {
   useUiStore
 } from '@renderer/stores/ui.store'
 import { useWorkspacesStore, type ActiveWorkspacePanel } from '@renderer/stores/workspaces.store'
+import { usePanelRuntimeStore } from '@renderer/stores/panel-runtime.store'
 import { useProjectsStore } from '@renderer/stores/projects.store'
-import { t3codeApi } from '@renderer/lib/ipc'
+import {
+  incrementDevMountCount,
+  recordDevPerformanceTiming,
+  setDevPerformanceCounter
+} from '@renderer/lib/dev-performance'
 import { WorkspacePanel } from './WorkspacePanel'
 import { NewCanvasItemMenu } from './NewCanvasItemMenu'
 import { CanvasToolbar } from './CanvasToolbar'
 import { EdgeButton } from './EdgeButton'
 import { cn } from '@renderer/lib/cn'
 import { nanoid } from 'nanoid'
-import type { PanelType, Workspace } from '@shared/workspace.types'
-import type { Project } from '@shared/project.types'
+import type { PanelType, PanelHydrationState, Workspace } from '@shared/workspace.types'
 
 const VIRTUAL_PADDING = 5000
 const GRID_SIZE = 24
@@ -46,28 +50,6 @@ function getGridOpacity(zoom: number): number {
   return Math.max(MIN_GRID_OPACITY, Math.min(1, MIN_GRID_OPACITY + normalized * (1 - MIN_GRID_OPACITY)))
 }
 
-function isCentipedeProject(project: Project): boolean {
-  const normalizedName = project.name.trim().toLowerCase()
-  const normalizedRepoName = project.repoPath
-    .split(/[\\/]/)
-    .filter(Boolean)
-    .at(-1)
-    ?.trim()
-    .toLowerCase() ?? ''
-  return normalizedName === 'centipede' || normalizedRepoName === 'centipede'
-}
-
-function getWarmupPanelId(workspaces: Workspace[]): string | null {
-  for (const workspace of workspaces) {
-    const panel = workspace.layoutState.panels.find((entry) => entry.type === 't3code')
-    if (panel) {
-      return panel.id
-    }
-  }
-
-  return null
-}
-
 function buildActivePanel(workspace: Workspace, cwd: string): ActiveWorkspacePanel {
   const panel = workspace.layoutState.panels[0] ?? {
     id: nanoid(),
@@ -92,6 +74,7 @@ export function Canvas() {
     activeProjectId,
     autoCenterFocusedPanel,
     canvasInteractionMode,
+    runtimePowerMode,
     canvasZoom,
     setCanvasZoom,
     zoomIn,
@@ -111,6 +94,10 @@ export function Canvas() {
     closeActivePanel,
     restorePanelsFromWorkspaces
   } = useWorkspacesStore()
+  const activeWorkspaceId = usePanelRuntimeStore((state) => state.activeWorkspaceId)
+  const panelRuntimeById = usePanelRuntimeStore((state) => state.panelRuntimeById)
+  const setActiveWorkspaceId = usePanelRuntimeStore((state) => state.setActiveWorkspaceId)
+  const setPanelHydrationState = usePanelRuntimeStore((state) => state.setPanelHydrationState)
   const { projects } = useProjectsStore()
   const didAutoOpenRef = useRef<string | null>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -171,60 +158,122 @@ export function Canvas() {
   const gridOpacity = useMemo(() => getGridOpacity(canvasZoom), [canvasZoom])
   const isFreeCanvas = canvasInteractionMode === 'free'
 
+  useEffect(() => {
+    incrementDevMountCount('Canvas')
+  }, [])
+
   // Load workspaces when project changes and restore saved panel state
   useEffect(() => {
     if (!activeProjectId) {
       setActivePanels([])
+      setActiveWorkspaceId(null)
       didAutoOpenRef.current = null
       return
     }
 
     let cancelled = false
+    const startedAt = performance.now()
 
-    loadWorkspaces(activeProjectId).then(() => {
+    loadWorkspaces(activeProjectId, false).then(() => {
       if (cancelled) return
 
       const { workspaces: loadedWorkspaces } = useWorkspacesStore.getState()
-      const projectWs = loadedWorkspaces.filter((w) => w.projectId === activeProjectId)
+      const projectWs = loadedWorkspaces.filter(
+        (workspace) => workspace.projectId === activeProjectId && !workspace.archived
+      )
 
-      // Check if any workspace has saved panels to restore
       const hasSavedPanels = projectWs.some((w) => w.layoutState.panels.length > 0)
+      const initialWorkspaceId = projectWs[0]?.id ?? null
 
       if (hasSavedPanels && activeProject) {
-        // Restore all panels from saved layout state
         didAutoOpenRef.current = activeProjectId
         restorePanelsFromWorkspaces(projectWs, activeProject.repoPath)
+        setActiveWorkspaceId(initialWorkspaceId)
       } else if (projectWs.length > 0 && activeProject) {
-        // Fallback: open the first workspace with a default panel
         didAutoOpenRef.current = activeProjectId
         setActivePanels([buildActivePanel(projectWs[0], activeProject.repoPath)])
+        setActiveWorkspaceId(projectWs[0].id)
       } else {
         setActivePanels([])
+        setActiveWorkspaceId(null)
         didAutoOpenRef.current = null
       }
+
+      recordDevPerformanceTiming('project-open', performance.now() - startedAt)
     })
 
     return () => {
       cancelled = true
     }
-  }, [activeProjectId, activeProject, loadWorkspaces])
+  }, [activeProjectId, activeProject, loadWorkspaces, restorePanelsFromWorkspaces, setActivePanels, setActiveWorkspaceId])
 
   useEffect(() => {
-    if (!activeProject || !isCentipedeProject(activeProject)) return
-
-    const panelId = getWarmupPanelId(projectWorkspaces)
-    if (!panelId) return
-
-    let cancelled = false
-
-    t3codeApi.ensureRuntime().catch(() => {
-      if (cancelled) return
-    })
-
-    return () => {
-      cancelled = true
+    if (!activeWorkspaceId && projectWorkspaces[0]) {
+      setActiveWorkspaceId(projectWorkspaces[0].id)
     }
-  }, [activeProject, projectWorkspaces])
+  }, [activeWorkspaceId, projectWorkspaces, setActiveWorkspaceId])
+
+  useEffect(() => {
+    let liveBrowserCount = 0
+    let liveT3Count = 0
+
+    for (const panel of activePanels) {
+      let nextHydrationState: PanelHydrationState = panelRuntimeById[panel.panelId]?.hydrationState ?? 'cold'
+
+      if (panel.panelType === 'browser') {
+        nextHydrationState = 'live'
+      } else if (panel.panelType === 't3code') {
+        if (runtimePowerMode === 'high') {
+          nextHydrationState = 'live'
+        } else if (panel.workspaceId === activeWorkspaceId) {
+          if (focusedPanelId === panel.panelId || runtimePowerMode === 'mid') {
+            nextHydrationState = 'live'
+          } else if (nextHydrationState === 'live') {
+            nextHydrationState = 'live'
+          } else {
+            const workspacePanels = activePanels.filter((entry) => entry.workspaceId === panel.workspaceId)
+            nextHydrationState =
+              panelRuntimeById[panel.panelId]?.lastHydratedAt == null && workspacePanels[0]?.panelId === panel.panelId
+                ? 'live'
+                : 'cold'
+          }
+        } else {
+          nextHydrationState = 'cold'
+        }
+      } else {
+        nextHydrationState = 'live'
+      }
+
+      setPanelHydrationState(panel.panelId, nextHydrationState)
+      if (panel.panelType === 'browser' && nextHydrationState === 'live') {
+        liveBrowserCount += 1
+      }
+      if (panel.panelType === 't3code' && nextHydrationState === 'live') {
+        liveT3Count += 1
+      }
+    }
+
+    setDevPerformanceCounter('live-browser-webviews', liveBrowserCount)
+    setDevPerformanceCounter('live-t3-iframes', liveT3Count)
+  }, [
+    activePanels,
+    activeWorkspaceId,
+    focusedPanelId,
+    panelRuntimeById,
+    runtimePowerMode,
+    setPanelHydrationState
+  ])
+
+  useEffect(() => {
+    setDevPerformanceCounter('workspace-shell-count', projectWorkspaces.length)
+  }, [projectWorkspaces.length])
+
+  useEffect(() => {
+    setDevPerformanceCounter(
+      'watched-t3-thread-count',
+      activePanels.filter((panel) => panel.panelType === 't3code' && Boolean(panel.t3ThreadId)).length
+    )
+  }, [activePanels])
 
   useEffect(() => {
     if (!activeProjectId) {
@@ -953,6 +1002,9 @@ export function Canvas() {
                             panelId={panel.panelId}
                             t3ProjectId={panel.t3ProjectId}
                             t3ThreadId={panel.t3ThreadId}
+                            hydrationState={panelRuntimeById[panel.panelId]?.hydrationState ?? 'cold'}
+                            isFocused={panel.panelId === focusedPanelId}
+                            isActiveWorkspace={panel.workspaceId === activeWorkspaceId}
                             onClose={() => handleClosePanel(panel.panelId)}
                             initialWidth={panel.width}
                             initialHeight={panel.height}

@@ -3,6 +3,7 @@ import { BROWSER_CHANNELS } from '@shared/ipc-channels'
 import { transport } from '@renderer/lib/transport'
 import { useProjectsStore } from '@renderer/stores/projects.store'
 import { useWorkspacesStore } from '@renderer/stores/workspaces.store'
+import { usePanelRuntimeStore } from '@renderer/stores/panel-runtime.store'
 
 interface BrowserOpenEvent {
   panelId: string
@@ -44,7 +45,7 @@ export function useBrowserApiListener(): void {
       }
 
       if (state.activePanels.some((panel) => panel.panelId === payload.panelId)) {
-        state.updatePanel(payload.panelId, {
+        state.updatePanelLayout(payload.panelId, {
           url: payload.url,
           width: payload.width,
           height: payload.height,
@@ -80,7 +81,7 @@ export function useBrowserApiListener(): void {
     const removeNavigate = transport.on(
       BROWSER_CHANNELS.NAVIGATE,
       (payload: BrowserNavigateEvent) => {
-        useWorkspacesStore.getState().updatePanel(payload.panelId, { url: payload.url })
+        useWorkspacesStore.getState().updatePanelLayout(payload.panelId, { url: payload.url })
       }
     )
 
@@ -89,7 +90,7 @@ export function useBrowserApiListener(): void {
     })
 
     const removeResize = transport.on(BROWSER_CHANNELS.RESIZE, (payload: BrowserResizeEvent) => {
-      useWorkspacesStore.getState().updatePanel(payload.panelId, {
+      useWorkspacesStore.getState().updatePanelLayout(payload.panelId, {
         width: payload.width,
         height: payload.height
       })
@@ -112,6 +113,15 @@ export function useBrowserApiListener(): void {
       }
     )
 
+    const removeAutomationStateChanged = transport.on(
+      BROWSER_CHANNELS.AUTOMATION_STATE_CHANGED,
+      (payload: { panelId: string; automationAttached: boolean }) => {
+        usePanelRuntimeStore.getState().updatePanelRuntime(payload.panelId, {
+          browserAutomationAttached: payload.automationAttached
+        })
+      }
+    )
+
     return () => {
       removeOpen()
       removeNavigate()
@@ -119,6 +129,7 @@ export function useBrowserApiListener(): void {
       removeResize()
       removeActivate()
       removeFocusChanged()
+      removeAutomationStateChanged()
     }
   }, [])
 }

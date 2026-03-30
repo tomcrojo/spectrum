@@ -5,6 +5,8 @@ import { join, dirname } from 'path'
 import net from 'net'
 import Database from 'better-sqlite3'
 import WebSocket from 'ws'
+import { BrowserWindow } from 'electron'
+import { T3CODE_CHANNELS } from '@shared/ipc-channels'
 import { getT3CodeConfig } from './config'
 import {
   getBrowserCliCommandPath,
@@ -40,6 +42,14 @@ interface ThreadMetadata {
   lastUserMessageAt: string | null
 }
 
+interface WatchedThreadState {
+  panelId: string
+  t3ThreadId: string
+  priority: 'focused' | 'active' | 'inactive'
+  lastPolledAt: number
+  lastSnapshot: ThreadMetadata | null
+}
+
 export interface T3CodeThreadInfo {
   url: string | null
   threadTitle: string | null
@@ -65,6 +75,8 @@ const pendingPanelThreadEnsures = new Map<
     lastUserMessageAt: string | null
   }>
 >()
+const watchedThreadsByPanelId = new Map<string, WatchedThreadState>()
+let watchTimer: NodeJS.Timeout | null = null
 
 function reserveLoopbackPort(): Promise<number> {
   const server = net.createServer()
@@ -347,6 +359,85 @@ function getThreadMetadata(threadId: string): ThreadMetadata {
     }
   } finally {
     db.close()
+  }
+}
+
+function emitThreadInfoChanged(payload: {
+  panelId: string
+  t3ThreadId: string
+  threadTitle: string | null
+  lastUserMessageAt: string | null
+}): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send(T3CODE_CHANNELS.THREAD_INFO_CHANGED, payload)
+    }
+  }
+}
+
+function isAppInteractive(): boolean {
+  return BrowserWindow.getAllWindows().some((window) => window.isVisible() && window.isFocused())
+}
+
+function getWatchIntervalMs(priority: WatchedThreadState['priority']): number {
+  if (priority === 'focused') {
+    return 2000
+  }
+
+  if (priority === 'active') {
+    return 10000
+  }
+
+  return 30000
+}
+
+async function pollWatchedThreads(): Promise<void> {
+  const now = Date.now()
+  const appInteractive = isAppInteractive()
+
+  for (const watch of watchedThreadsByPanelId.values()) {
+    if (watch.priority === 'inactive' && !appInteractive) {
+      continue
+    }
+
+    const intervalMs = getWatchIntervalMs(watch.priority)
+    if (now - watch.lastPolledAt < intervalMs) {
+      continue
+    }
+
+    watch.lastPolledAt = now
+    const snapshot = getThreadMetadata(watch.t3ThreadId)
+    if (
+      watch.lastSnapshot?.threadTitle === snapshot.threadTitle &&
+      watch.lastSnapshot?.lastUserMessageAt === snapshot.lastUserMessageAt
+    ) {
+      continue
+    }
+
+    watch.lastSnapshot = snapshot
+    emitThreadInfoChanged({
+      panelId: watch.panelId,
+      t3ThreadId: watch.t3ThreadId,
+      threadTitle: snapshot.threadTitle,
+      lastUserMessageAt: snapshot.lastUserMessageAt
+    })
+  }
+}
+
+function ensureWatchTimer(): void {
+  if (watchTimer || watchedThreadsByPanelId.size === 0) {
+    return
+  }
+
+  watchTimer = setInterval(() => {
+    void pollWatchedThreads()
+  }, 2000)
+}
+
+function stopWatchTimerIfIdle(): void {
+  if (watchTimer && watchedThreadsByPanelId.size === 0) {
+    clearInterval(watchTimer)
+    watchTimer = null
   }
 }
 
@@ -730,6 +821,33 @@ export async function getThreadInfo(t3ThreadId: string): Promise<T3CodeThreadInf
   }
 }
 
+export function watchThread(input: {
+  panelId: string
+  t3ThreadId: string
+  priority: 'focused' | 'active' | 'inactive'
+}): boolean {
+  const metadata = getThreadMetadata(input.t3ThreadId)
+  watchedThreadsByPanelId.set(input.panelId, {
+    panelId: input.panelId,
+    t3ThreadId: input.t3ThreadId,
+    priority: input.priority,
+    lastPolledAt: 0,
+    lastSnapshot: metadata
+  })
+  ensureWatchTimer()
+  return true
+}
+
+export function unwatchThread(panelId: string): boolean {
+  const didDelete = watchedThreadsByPanelId.delete(panelId)
+  stopWatchTimerIfIdle()
+  return didDelete
+}
+
+export function getWatchedThreadCount(): number {
+  return watchedThreadsByPanelId.size
+}
+
 export function getT3CodeLastUserMessageAt(t3ThreadId: string): string | null {
   return getThreadMetadata(t3ThreadId).lastUserMessageAt
 }
@@ -746,5 +864,7 @@ export function stopSharedRuntime(): void {
 }
 
 export function stopAllT3Code(): void {
+  watchedThreadsByPanelId.clear()
+  stopWatchTimerIfIdle()
   stopSharedRuntime()
 }

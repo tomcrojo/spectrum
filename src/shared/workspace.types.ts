@@ -1,4 +1,5 @@
 export type PanelType = 'terminal' | 'browser' | 'chat' | 't3code'
+export type PanelHydrationState = 'live' | 'preview' | 'cold'
 
 export interface PanelConfig {
   id: string

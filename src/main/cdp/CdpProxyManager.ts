@@ -7,9 +7,19 @@ interface WorkspaceProxyState {
 
 const workspaceProxies = new Map<string, WorkspaceProxyState>()
 const targetWorkspaceById = new Map<string, string>()
+const panelIdByTargetId = new Map<string, string>()
+let automationStateListener:
+  | ((payload: { workspaceId: string; panelId: string; automationAttached: boolean }) => void)
+  | null = null
 
 function targetIdFromWebContentsId(webContentsId: number): string {
   return String(webContentsId)
+}
+
+export function setCdpAutomationStateListener(
+  listener: ((payload: { workspaceId: string; panelId: string; automationAttached: boolean }) => void) | null
+): void {
+  automationStateListener = listener
 }
 
 export async function registerCdpTarget(input: {
@@ -21,7 +31,19 @@ export async function registerCdpTarget(input: {
 }): Promise<number> {
   let state = workspaceProxies.get(input.workspaceId)
   if (!state) {
-    const proxy = new CdpProxy(input.workspaceId)
+    const proxy = new CdpProxy(input.workspaceId, (targetId, automationAttached) => {
+      const workspaceId = targetWorkspaceById.get(targetId)
+      const panelId = panelIdByTargetId.get(targetId)
+      if (!workspaceId || !panelId || !automationStateListener) {
+        return
+      }
+
+      automationStateListener({
+        workspaceId,
+        panelId,
+        automationAttached
+      })
+    })
     const port = await proxy.start()
     state = { proxy, port }
     workspaceProxies.set(input.workspaceId, state)
@@ -29,6 +51,7 @@ export async function registerCdpTarget(input: {
 
   const targetId = targetIdFromWebContentsId(input.webContentsId)
   targetWorkspaceById.set(targetId, input.workspaceId)
+  panelIdByTargetId.set(targetId, input.panelId)
 
   state.proxy.registerTarget({
     id: targetId,
@@ -73,6 +96,7 @@ export async function unregisterCdpTarget(input: {
 
   const targetId = targetIdFromWebContentsId(input.webContentsId)
   targetWorkspaceById.delete(targetId)
+  panelIdByTargetId.delete(targetId)
   state.proxy.unregisterTarget(targetId)
 
   if (state.proxy.listTargets().length > 0) {
@@ -87,10 +111,20 @@ export function getCdpProxyPort(workspaceId: string): number | null {
   return workspaceProxies.get(workspaceId)?.port ?? null
 }
 
+export function hasAttachedAutomationClients(workspaceId: string, webContentsId: number): boolean {
+  const state = workspaceProxies.get(workspaceId)
+  if (!state) {
+    return false
+  }
+
+  return state.proxy.hasAttachedClients(targetIdFromWebContentsId(webContentsId))
+}
+
 export async function shutdownCdpProxies(): Promise<void> {
   for (const [, state] of workspaceProxies) {
     await state.proxy.shutdown()
   }
   workspaceProxies.clear()
   targetWorkspaceById.clear()
+  panelIdByTargetId.clear()
 }

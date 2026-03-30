@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { ipcMain, webContents } from 'electron'
 import { BROWSER_CHANNELS } from '@shared/ipc-channels'
 import {
   activateBrowserPanel,
@@ -11,6 +11,7 @@ import {
 } from '../browser/BrowserPanelManager'
 import {
   registerCdpTarget,
+  setCdpAutomationStateListener,
   unregisterCdpTarget,
   updateCdpTarget
 } from '../cdp/CdpProxyManager'
@@ -45,6 +46,10 @@ interface SessionSyncPayload {
 }
 
 export function registerBrowserHandlers(): void {
+  setCdpAutomationStateListener((payload) => {
+    _eventSender(payload)
+  })
+
   ipcMain.handle(BROWSER_CHANNELS.WEBVIEW_READY, async (_event, payload: WebviewReadyPayload) => {
     if (!isKnownWebviewId(payload.webContentsId)) {
       throw new Error(`Unknown webview id: ${payload.webContentsId}`)
@@ -147,4 +152,35 @@ export function registerBrowserHandlers(): void {
       return Boolean(panel)
     }
   )
+
+  ipcMain.handle(BROWSER_CHANNELS.CAPTURE_PREVIEW, async (_event, payload: { panelId: string }) => {
+    const panel = getBrowserPanel(payload.panelId)
+    if (!panel || typeof panel.webContentsId !== 'number') {
+      return { dataUrl: null }
+    }
+
+    const guestContents = webContents.fromId(panel.webContentsId)
+    if (!guestContents || guestContents.isDestroyed()) {
+      return { dataUrl: null }
+    }
+
+    const image = await guestContents.capturePage()
+    const resized = image.resize({
+      width: 640,
+      height: 400,
+      quality: 'good'
+    })
+
+    return {
+      dataUrl: `data:image/jpeg;base64,${resized.toJPEG(60).toString('base64')}`
+    }
+  })
+}
+
+function _eventSender(payload: { panelId: string; automationAttached: boolean }): void {
+  for (const window of webContents.getAllWebContents()) {
+    if (window.getType() === 'window') {
+      window.send(BROWSER_CHANNELS.AUTOMATION_STATE_CHANGED, payload)
+    }
+  }
 }

@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import { WORKSPACE_CHANNELS } from '@shared/ipc-channels'
 import {
   listWorkspaces,
+  scheduleWorkspaceLastPanelEditedAtReconcile,
   createWorkspace,
   updateWorkspace,
   updateWorkspaceLayout,
@@ -20,6 +21,8 @@ import type {
 
 export function registerWorkspaceHandlers(): void {
   ipcMain.handle(WORKSPACE_CHANNELS.LIST, (_event, input: string | ListWorkspacesInput) => {
+    const projectId = typeof input === 'string' ? input : input.projectId
+    scheduleWorkspaceLastPanelEditedAtReconcile(projectId)
     return listWorkspaces(input)
   })
 

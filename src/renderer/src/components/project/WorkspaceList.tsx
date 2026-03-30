@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { nanoid } from 'nanoid'
+import { usePanelRuntimeStore } from '@renderer/stores/panel-runtime.store'
 import { useWorkspacesStore } from '@renderer/stores/workspaces.store'
 import { useProjectsStore } from '@renderer/stores/projects.store'
 import { useUiStore } from '@renderer/stores/ui.store'
@@ -7,7 +8,6 @@ import { ProgressIcon } from '@renderer/components/shared/ProgressIcon'
 import { Button } from '@renderer/components/shared/Button'
 import { Input } from '@renderer/components/shared/Input'
 import { formatWorkspaceLastEditedAt } from '@renderer/lib/dates'
-import { t3codeApi } from '@renderer/lib/ipc'
 import type { PanelType } from '@shared/workspace.types'
 
 interface WorkspaceListProps {
@@ -18,7 +18,7 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
   const {
     workspaces,
     activePanels,
-    loadWorkspaces,
+    loadArchivedWorkspaces,
     createWorkspace,
     updateWorkspace,
     archiveWorkspace,
@@ -28,9 +28,9 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
     closeActivePanel,
     focusWorkspace,
     focusedPanelId,
-    setFocusedPanel,
-    updateWorkspaceLastPanelEditedAt
+    setFocusedPanel
   } = useWorkspacesStore()
+  const activeWorkspaceId = usePanelRuntimeStore((state) => state.activeWorkspaceId)
   const projects = useProjectsStore((s) => s.projects)
   const activeProjectId = useUiStore((s) => s.activeProjectId)
   const archivedTimestampFormat = useUiStore((s) => s.archivedTimestampFormat)
@@ -47,12 +47,6 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
   /** Guard against double-commit from blur + unmount */
   const isCommitting = useRef(false)
   const workspaceClickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const hydratedT3CodePanelIdsRef = useRef<Set<string>>(new Set())
-
-  useEffect(() => {
-    loadWorkspaces(projectId)
-    hydratedT3CodePanelIdsRef.current = new Set()
-  }, [projectId, loadWorkspaces])
 
   useEffect(() => {
     return () => {
@@ -120,51 +114,10 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
   }, [archivedExpanded, archivedTimestampFormat, archivedWorkspaces.length])
 
   useEffect(() => {
-    if (!repoPath) {
-      return
+    if (archivedExpanded) {
+      void loadArchivedWorkspaces(projectId)
     }
-
-    const t3CodePanels = workspaces.flatMap((workspace) =>
-      workspace.layoutState.panels
-        .filter((panel) => panel.type === 't3code')
-        .map((panel) => ({
-          workspaceId: workspace.id,
-          panelId: panel.id
-        }))
-        .filter(({ panelId }) => !hydratedT3CodePanelIdsRef.current.has(panelId))
-    )
-
-    if (t3CodePanels.length === 0) {
-      return
-    }
-
-    for (const { panelId } of t3CodePanels) {
-      hydratedT3CodePanelIdsRef.current.add(panelId)
-    }
-
-    let cancelled = false
-
-    void Promise.allSettled(
-      t3CodePanels.map(async ({ workspaceId, panelId }) => {
-        const workspace = workspaces.find((entry) => entry.id === workspaceId)
-        const panel = workspace?.layoutState.panels.find((entry) => entry.id === panelId)
-        if (!panel?.t3ThreadId) {
-          return
-        }
-
-        const threadInfo = await t3codeApi.getThreadInfo(panel.t3ThreadId)
-        if (cancelled || !threadInfo.lastUserMessageAt) {
-          return
-        }
-
-        await updateWorkspaceLastPanelEditedAt(workspaceId, threadInfo.lastUserMessageAt)
-      })
-    )
-
-    return () => {
-      cancelled = true
-    }
-  }, [updateWorkspaceLastPanelEditedAt, workspaces])
+  }, [archivedExpanded, loadArchivedWorkspaces, projectId])
 
   const commitRename = useCallback(
     async (workspaceId: string, currentName: string) => {
@@ -340,7 +293,7 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
               key={workspace.workspaceId}
               onClick={() => handleWorkspaceClick(workspace.workspaceId)}
               className={`group rounded transition-colors cursor-pointer ${
-                selectedWorkspaceId === workspace.workspaceId
+                (selectedWorkspaceId ?? activeWorkspaceId) === workspace.workspaceId
                   ? 'bg-bg-hover'
                   : 'hover:bg-bg-hover'
               }`}
@@ -411,7 +364,7 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
                     void handleArchive(workspace.workspaceId)
                   }}
                   className={`flex h-7 w-7 items-center justify-center rounded-md text-text-muted transition-all hover:bg-bg-active hover:text-text-primary ${
-                    selectedWorkspaceId === workspace.workspaceId ||
+                    (selectedWorkspaceId ?? activeWorkspaceId) === workspace.workspaceId ||
                     editingWorkspaceId === workspace.workspaceId
                       ? 'opacity-100'
                       : 'opacity-0 group-hover:opacity-100'

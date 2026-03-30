@@ -44,29 +44,6 @@ function getLatestT3CodePanelActivityAt(
   }, null)
 }
 
-function backfillWorkspaceLastPanelEditedAt(
-  row: any,
-  projectPath: string
-): any {
-  const layoutState = JSON.parse(row.layout_state) as WorkspaceLayoutState
-  const nextTimestamp = getNewerTimestamp(
-    row.last_panel_edited_at ?? null,
-    getLatestT3CodePanelActivityAt(layoutState)
-  )
-
-  if (!nextTimestamp || nextTimestamp === row.last_panel_edited_at) {
-    return row
-  }
-
-  const db = getDb()
-  db.prepare('UPDATE workspaces SET last_panel_edited_at = ? WHERE id = ?').run(nextTimestamp, row.id)
-
-  return {
-    ...row,
-    last_panel_edited_at: nextTimestamp
-  }
-}
-
 function rowToWorkspace(row: any): Workspace {
   return {
     id: row.id,
@@ -100,9 +77,51 @@ export function listWorkspaces(input: string | ListWorkspacesInput): Workspace[]
            ORDER BY w.created_at ASC`
     )
     .all(projectId)
-  return rows
-    .map((row) => backfillWorkspaceLastPanelEditedAt(row, row.repo_path))
-    .map(rowToWorkspace)
+  return rows.map(rowToWorkspace)
+}
+
+const pendingReconcileByProjectId = new Map<string, NodeJS.Timeout>()
+
+export function scheduleWorkspaceLastPanelEditedAtReconcile(projectId: string): void {
+  const existing = pendingReconcileByProjectId.get(projectId)
+  if (existing) {
+    clearTimeout(existing)
+  }
+
+  const timer = setTimeout(() => {
+    pendingReconcileByProjectId.delete(projectId)
+    const db = getDb()
+    const rows = db
+      .prepare('SELECT id, layout_state, last_panel_edited_at FROM workspaces WHERE project_id = ?')
+      .all(projectId) as Array<{
+      id: string
+      layout_state: string
+      last_panel_edited_at: string | null
+    }>
+
+    for (const row of rows) {
+      let layoutState: WorkspaceLayoutState
+
+      try {
+        layoutState = JSON.parse(row.layout_state) as WorkspaceLayoutState
+      } catch {
+        continue
+      }
+
+      const nextTimestamp = getNewerTimestamp(
+        row.last_panel_edited_at ?? null,
+        getLatestT3CodePanelActivityAt(layoutState)
+      )
+
+      if (!nextTimestamp || nextTimestamp === row.last_panel_edited_at) {
+        continue
+      }
+
+      db.prepare('UPDATE workspaces SET last_panel_edited_at = ? WHERE id = ?').run(nextTimestamp, row.id)
+    }
+  }, 1500)
+
+  pendingReconcileByProjectId.set(projectId, timer)
 }
 
 export function createWorkspace(input: CreateWorkspaceInput): Workspace {

@@ -42,7 +42,10 @@ export const T3CODE_CHANNELS = {
   ENSURE_RUNTIME: 't3code:ensure-runtime',
   ENSURE_PROJECT: 't3code:ensure-project',
   ENSURE_PANEL_THREAD: 't3code:ensure-panel-thread',
-  GET_THREAD_INFO: 't3code:get-thread-info'
+  GET_THREAD_INFO: 't3code:get-thread-info',
+  WATCH_THREAD: 't3code:watch-thread',
+  UNWATCH_THREAD: 't3code:unwatch-thread',
+  THREAD_INFO_CHANGED: 't3code:thread-info-changed'
 } as const
 
 export const BROWSER_CHANNELS = {
@@ -58,7 +61,9 @@ export const BROWSER_CHANNELS = {
   URL_CHANGED: 'browser:url-changed',
   FOCUS_CHANGED: 'browser:focus-changed',
   WEBVIEW_READY: 'browser:webview-ready',
-  WEBVIEW_DESTROYED: 'browser:webview-destroyed'
+  WEBVIEW_DESTROYED: 'browser:webview-destroyed',
+  CAPTURE_PREVIEW: 'browser:capture-preview',
+  AUTOMATION_STATE_CHANGED: 'browser:automation-state-changed'
 } as const
 
 // Provider channels

@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { T3CODE_CHANNELS } from '@shared/ipc-channels'
 import { t3codeApi } from '@renderer/lib/ipc'
+import { transport } from '@renderer/lib/transport'
+import { incrementDevMountCount } from '@renderer/lib/dev-performance'
+import { usePanelRuntimeStore } from '@renderer/stores/panel-runtime.store'
 import { useWorkspacesStore } from '@renderer/stores/workspaces.store'
 
 interface T3CodePanelProps {
@@ -12,6 +16,8 @@ interface T3CodePanelProps {
   t3ThreadId?: string
   theme: 'light' | 'dark'
   autoFocus: boolean
+  hydrationState: 'live' | 'cold'
+  watchPriority: 'focused' | 'active' | 'inactive'
 }
 
 interface ThreadBinding {
@@ -26,6 +32,33 @@ interface ThreadInfo {
   lastUserMessageAt: string | null
 }
 
+function T3CodeShell({
+  label,
+  threadTitle,
+  lastUserMessageAt
+}: {
+  label: string
+  threadTitle?: string | null
+  lastUserMessageAt?: string | null
+}) {
+  return (
+    <div className="flex h-full items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.12),_transparent_50%),linear-gradient(180deg,_rgba(20,20,20,0.98),_rgba(10,10,10,1))] px-6">
+      <div className="w-full max-w-sm rounded-xl border border-border-subtle bg-bg-raised/70 p-4 shadow-lg shadow-black/20 backdrop-blur-sm">
+        <p className="text-sm font-medium text-text-primary">{threadTitle?.trim() || label}</p>
+        <p className="mt-1 text-xs text-text-secondary">Background thread still running</p>
+        <p className="mt-3 text-xs leading-5 text-text-muted">
+          The conversation is parked to reduce UI cost. Return focus to re-open the live thread view instantly.
+        </p>
+        {lastUserMessageAt ? (
+          <p className="mt-3 text-[11px] uppercase tracking-wide text-text-muted">
+            Last activity {new Date(lastUserMessageAt).toLocaleString()}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 export function T3CodePanel({
   panelId,
   workspaceId,
@@ -35,16 +68,27 @@ export function T3CodePanel({
   t3ProjectId,
   t3ThreadId,
   theme,
-  autoFocus
+  autoFocus,
+  hydrationState,
+  watchPriority
 }: T3CodePanelProps) {
-  const updatePanel = useWorkspacesStore((state) => state.updatePanel)
+  const updatePanelLayout = useWorkspacesStore((state) => state.updatePanelLayout)
   const updateWorkspaceLastPanelEditedAt = useWorkspacesStore(
     (state) => state.updateWorkspaceLastPanelEditedAt
   )
+  const updatePanelRuntime = usePanelRuntimeStore((state) => state.updatePanelRuntime)
   const [binding, setBinding] = useState<ThreadBinding | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [iframeUrl, setIframeUrl] = useState<string | null>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const parkedThreadTitle = usePanelRuntimeStore((state) => state.panelRuntimeById[panelId]?.t3ThreadTitle)
+  const parkedLastUserMessageAt = usePanelRuntimeStore(
+    (state) => state.panelRuntimeById[panelId]?.t3LastUserMessageAt
+  )
+
+  useEffect(() => {
+    incrementDevMountCount('T3CodePanel')
+  }, [])
 
   useEffect(() => {
     if (!t3ProjectId || !t3ThreadId) {
@@ -60,26 +104,27 @@ export function T3CodePanel({
     )
   }, [t3ProjectId, t3ThreadId])
 
-  const postTheme = () => {
-    iframeRef.current?.contentWindow?.postMessage(
-      {
-        type: 'centipede:set-theme',
-        theme
-      },
-      '*'
-    )
-  }
-
   useEffect(() => {
+    if (hydrationState !== 'live') {
+      setIframeUrl(null)
+      return
+    }
+
     let cancelled = false
 
     const applyThreadInfo = (threadInfo: ThreadInfo) => {
-      if (cancelled) return
+      if (cancelled) {
+        return
+      }
 
       if (threadInfo.threadTitle?.trim()) {
-        updatePanel(panelId, { panelTitle: threadInfo.threadTitle.trim() })
+        updatePanelLayout(panelId, { panelTitle: threadInfo.threadTitle.trim() })
       }
       if (threadInfo.lastUserMessageAt) {
+        updatePanelRuntime(panelId, {
+          t3ThreadTitle: threadInfo.threadTitle,
+          t3LastUserMessageAt: threadInfo.lastUserMessageAt
+        })
         void updateWorkspaceLastPanelEditedAt(workspaceId, threadInfo.lastUserMessageAt)
       }
     }
@@ -103,7 +148,6 @@ export function T3CodePanel({
           t3ProjectId: runtime.t3ProjectId,
           t3ThreadId: runtime.t3ThreadId
         })
-        setIframeUrl(null)
         setError(null)
 
         if (
@@ -111,7 +155,7 @@ export function T3CodePanel({
           runtime.t3ThreadId !== t3ThreadId ||
           runtime.threadTitle?.trim()
         ) {
-          updatePanel(panelId, {
+          updatePanelLayout(panelId, {
             t3ProjectId: runtime.t3ProjectId,
             t3ThreadId: runtime.t3ThreadId,
             panelTitle: runtime.threadTitle?.trim() || undefined
@@ -120,9 +164,9 @@ export function T3CodePanel({
 
         applyThreadInfo(runtime)
       })
-      .catch((err: Error) => {
+      .catch((nextError: Error) => {
         if (!cancelled) {
-          setError(err.message)
+          setError(nextError.message)
         }
       })
 
@@ -130,50 +174,76 @@ export function T3CodePanel({
       cancelled = true
     }
   }, [
+    hydrationState,
     panelId,
     projectId,
     projectName,
     projectPath,
     t3ProjectId,
     t3ThreadId,
-    updatePanel,
+    updatePanelLayout,
+    updatePanelRuntime,
     updateWorkspaceLastPanelEditedAt,
     workspaceId
   ])
 
   useEffect(() => {
-    if (!binding?.t3ThreadId) {
+    const watchedThreadId = binding?.t3ThreadId ?? t3ThreadId
+    if (!watchedThreadId) {
       return
     }
 
-    let cancelled = false
-
-    const poll = () => {
-      t3codeApi
-        .getThreadInfo(binding.t3ThreadId)
-        .then((threadInfo) => {
-          if (cancelled) {
-            return
-          }
-
-          if (threadInfo.threadTitle?.trim()) {
-            updatePanel(panelId, { panelTitle: threadInfo.threadTitle.trim() })
-          }
-          if (threadInfo.lastUserMessageAt) {
-            void updateWorkspaceLastPanelEditedAt(workspaceId, threadInfo.lastUserMessageAt)
-          }
-        })
-        .catch(() => {})
-    }
-
-    poll()
-    const pollId = window.setInterval(poll, 2000)
+    t3codeApi
+      .watchThread({
+        panelId,
+        t3ThreadId: watchedThreadId,
+        priority: watchPriority
+      })
+      .catch(() => {})
 
     return () => {
-      cancelled = true
-      window.clearInterval(pollId)
+      t3codeApi.unwatchThread(panelId).catch(() => {})
     }
-  }, [binding?.t3ThreadId, panelId, updatePanel, updateWorkspaceLastPanelEditedAt, workspaceId])
+  }, [binding?.t3ThreadId, panelId, t3ThreadId, watchPriority])
+
+  useEffect(() => {
+    const remove = transport.on(
+      T3CODE_CHANNELS.THREAD_INFO_CHANGED,
+      (payload: {
+        panelId: string
+        t3ThreadId: string
+        threadTitle: string | null
+        lastUserMessageAt: string | null
+      }) => {
+        if (payload.panelId !== panelId) {
+          return
+        }
+
+        if (payload.threadTitle?.trim()) {
+          updatePanelLayout(panelId, { panelTitle: payload.threadTitle.trim() })
+        }
+        updatePanelRuntime(panelId, {
+          t3ThreadTitle: payload.threadTitle,
+          t3LastUserMessageAt: payload.lastUserMessageAt
+        })
+        if (payload.lastUserMessageAt) {
+          void updateWorkspaceLastPanelEditedAt(workspaceId, payload.lastUserMessageAt)
+        }
+      }
+    )
+
+    return remove
+  }, [panelId, updatePanelLayout, updatePanelRuntime, updateWorkspaceLastPanelEditedAt, workspaceId])
+
+  const postTheme = () => {
+    iframeRef.current?.contentWindow?.postMessage(
+      {
+        type: 'centipede:set-theme',
+        theme
+      },
+      '*'
+    )
+  }
 
   const themedUrl = useMemo(() => {
     if (!binding?.baseUrl || !binding.t3ThreadId) {
@@ -187,7 +257,7 @@ export function T3CodePanel({
   }, [binding, theme])
 
   useEffect(() => {
-    if (!themedUrl || !binding?.baseUrl) {
+    if (hydrationState !== 'live' || !themedUrl || !binding?.baseUrl) {
       setIframeUrl(null)
       return
     }
@@ -210,10 +280,8 @@ export function T3CodePanel({
 
           return
         } catch {
-          // retry
+          await new Promise((resolve) => setTimeout(resolve, 200))
         }
-
-        await new Promise((resolve) => setTimeout(resolve, 200))
       }
 
       if (!cancelled) {
@@ -226,19 +294,21 @@ export function T3CodePanel({
     return () => {
       cancelled = true
     }
-  }, [binding?.baseUrl, themedUrl])
+  }, [binding?.baseUrl, hydrationState, themedUrl])
 
   useEffect(() => {
     postTheme()
   }, [theme, iframeUrl])
 
   useEffect(() => {
-    if (!autoFocus || !iframeUrl) return
+    if (!autoFocus || !iframeUrl || hydrationState !== 'live') {
+      return
+    }
 
     requestAnimationFrame(() => {
       iframeRef.current?.focus({ preventScroll: true })
     })
-  }, [autoFocus, iframeUrl])
+  }, [autoFocus, hydrationState, iframeUrl])
 
   if (error) {
     return (
@@ -248,6 +318,16 @@ export function T3CodePanel({
           <p className="text-xs text-text-muted">{error}</p>
         </div>
       </div>
+    )
+  }
+
+  if (hydrationState !== 'live') {
+    return (
+      <T3CodeShell
+        label="T3Code parked"
+        threadTitle={parkedThreadTitle}
+        lastUserMessageAt={parkedLastUserMessageAt}
+      />
     )
   }
 
@@ -263,10 +343,9 @@ export function T3CodePanel({
     <iframe
       ref={iframeRef}
       src={iframeUrl}
-      title="T3Code"
+      title={`T3Code ${panelId}`}
       className="h-full w-full border-0 bg-bg"
-      onLoad={postTheme}
-      tabIndex={-1}
+      allow="clipboard-read; clipboard-write"
     />
   )
 }
