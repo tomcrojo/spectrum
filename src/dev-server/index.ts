@@ -18,13 +18,16 @@ import { homedir, tmpdir } from 'os'
 import { nanoid } from 'nanoid'
 import * as pty from 'node-pty'
 import {
+  ensureRuntime,
+  ensureT3Project,
+  ensurePanelThread,
+  getThreadInfo,
   getT3CodeLastUserMessageAt,
-  getT3CodeThreadInfo,
-  startT3Code,
-  stopT3Code,
+  unwatchThread,
+  watchThread,
   stopAllT3Code
 } from '../main/t3code/T3CodeManager'
-import { BROWSER_CHANNELS } from '../shared/ipc-channels'
+import { BROWSER_CHANNELS, T3CODE_CHANNELS } from '../shared/ipc-channels'
 import { getRandomProjectColor, normalizeProjectColor } from '@shared/project.types'
 
 // ─── Database Setup ────────────────────────────────────────────────────
@@ -885,9 +888,11 @@ const handlers: Record<string, Handler> = {
       throw new Error('Missing T3Code panel instance id')
     }
 
-    return startT3Code(resolvedInstanceId, args.projectPath, {
-      workspaceId: args.workspaceId,
-      projectId: args.projectId
+    return ensurePanelThread({
+      panelId: resolvedInstanceId,
+      centipedeProjectId: args.projectId ?? resolvedInstanceId,
+      projectPath: args.projectPath,
+      projectName: args.projectPath.split('/').filter(Boolean).at(-1) ?? 'Project'
     })
   },
 
@@ -901,21 +906,68 @@ const handlers: Record<string, Handler> = {
       throw new Error('Missing T3Code panel instance id')
     }
 
-    stopT3Code(resolvedInstanceId)
+    stopAllT3Code()
   },
 
   't3code:get-thread-info': (args: {
+    t3ThreadId?: string
     instanceId?: string
     workspaceId?: string
-    projectPath: string
   }) => {
-    const resolvedInstanceId = args.instanceId ?? args.workspaceId
-    if (!resolvedInstanceId) {
-      throw new Error('Missing T3Code panel instance id')
+    const resolvedThreadId = args.t3ThreadId ?? args.instanceId ?? args.workspaceId
+    if (!resolvedThreadId) {
+      throw new Error('Missing T3Code thread id')
     }
 
-    return getT3CodeThreadInfo(resolvedInstanceId, args.projectPath)
+    return getThreadInfo(resolvedThreadId)
   },
+
+  [T3CODE_CHANNELS.ENSURE_RUNTIME]: () => ensureRuntime(),
+
+  [T3CODE_CHANNELS.ENSURE_PROJECT]: (args: {
+    centipedeProjectId: string
+    projectPath: string
+    projectName: string
+    existingT3ProjectId?: string
+  }) =>
+    ensureT3Project({
+      centipedeProjectId: args.centipedeProjectId,
+      projectPath: args.projectPath,
+      projectName: args.projectName,
+      existingT3ProjectId: args.existingT3ProjectId
+    }),
+
+  [T3CODE_CHANNELS.ENSURE_PANEL_THREAD]: (args: {
+    panelId: string
+    centipedeProjectId: string
+    projectPath: string
+    projectName: string
+    existingT3ProjectId?: string
+    existingT3ThreadId?: string
+  }) =>
+    ensurePanelThread({
+      panelId: args.panelId,
+      centipedeProjectId: args.centipedeProjectId,
+      projectPath: args.projectPath,
+      projectName: args.projectName,
+      existingT3ProjectId: args.existingT3ProjectId,
+      existingT3ThreadId: args.existingT3ThreadId
+    }),
+
+  [T3CODE_CHANNELS.GET_THREAD_INFO]: (args: { t3ThreadId: string }) => getThreadInfo(args.t3ThreadId),
+
+  [T3CODE_CHANNELS.WATCH_THREAD]: (args: {
+    panelId: string
+    t3ThreadId: string
+    priority: 'focused' | 'active' | 'inactive'
+  }) =>
+    watchThread({
+      panelId: args.panelId,
+      t3ThreadId: args.t3ThreadId,
+      priority: args.priority
+    }),
+
+  [T3CODE_CHANNELS.UNWATCH_THREAD]: (args: { panelId: string }) => unwatchThread(args.panelId),
 
   [BROWSER_CHANNELS.WEBVIEW_READY]: () => true,
 

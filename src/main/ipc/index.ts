@@ -3,6 +3,7 @@ import { registerWorkspaceHandlers } from './workspace.ipc'
 import { registerTerminalHandlers } from './terminal.ipc'
 import { registerT3CodeHandlers } from './t3code.ipc'
 import { registerBrowserHandlers } from './browser.ipc'
+import { registerFileHandlers } from './files.ipc'
 
 export function registerAllHandlers(): void {
   registerProjectHandlers()
@@ -10,4 +11,5 @@ export function registerAllHandlers(): void {
   registerTerminalHandlers()
   registerT3CodeHandlers()
   registerBrowserHandlers()
+  registerFileHandlers()
 }

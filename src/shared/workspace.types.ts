@@ -1,10 +1,14 @@
-export type PanelType = 'terminal' | 'browser' | 'chat' | 't3code'
+export type PanelType = 'terminal' | 'browser' | 'chat' | 't3code' | 'file'
 export type PanelHydrationState = 'live' | 'preview' | 'cold'
 
 export interface PanelConfig {
   id: string
   type: PanelType
   title: string
+  providerId?: string
+  filePath?: string
+  cursorLine?: number
+  cursorColumn?: number
   /** T3Code project binding for persisted t3code panels */
   t3ProjectId?: string
   /** T3Code thread binding for persisted t3code panels */

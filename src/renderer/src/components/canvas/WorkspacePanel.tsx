@@ -7,7 +7,9 @@ import { useWorkspacesStore } from '@renderer/stores/workspaces.store'
 import { TerminalPanel } from './TerminalPanel'
 import { T3CodePanel } from './T3CodePanel'
 import { BrowserPanel } from './BrowserPanel'
+import { FilePanel } from './FilePanel'
 import { PanelPlaceholder } from './PanelPlaceholder'
+import { PanelGlyph } from '@renderer/components/shared/PanelIcons'
 import type { PanelHydrationState, PanelType } from '@shared/workspace.types'
 
 const PANEL_FOCUS_HIT_AREA_PX = 7
@@ -20,7 +22,11 @@ interface WorkspacePanelProps {
   cwd: string
   panelType: PanelType
   panelTitle: string
+  filePath?: string
+  cursorLine?: number
+  cursorColumn?: number
   panelId: string
+  providerId?: string
   t3ProjectId?: string
   t3ThreadId?: string
   hydrationState: PanelHydrationState
@@ -33,50 +39,6 @@ interface WorkspacePanelProps {
   initialUrl?: string
 }
 
-function PanelTypeIcon({ panelType }: { panelType: PanelType }) {
-  if (panelType === 'terminal') {
-    return (
-      <svg className="h-3.5 w-3.5 text-text-secondary" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-        <path
-          d="M3 4.5L6.5 8L3 11.5"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path d="M8.5 11.5H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-    )
-  }
-
-  if (panelType === 'browser') {
-    return (
-      <svg className="h-3.5 w-3.5 text-text-secondary" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-        <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.5" />
-        <path
-          d="M2.8 6H13.2M2.8 10H13.2M8 2.5C9.5 4 10.4 5.9 10.4 8C10.4 10.1 9.5 12 8 13.5C6.5 12 5.6 10.1 5.6 8C5.6 5.9 6.5 4 8 2.5Z"
-          stroke="currentColor"
-          strokeWidth="1.2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    )
-  }
-
-  return (
-    <svg className="h-3.5 w-3.5 text-text-secondary" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path
-        d="M4.5 4.5H11.5C12.3284 4.5 13 5.17157 13 6V10C13 10.8284 12.3284 11.5 11.5 11.5H7.5L4.5 13V11.5H4.5C3.67157 11.5 3 10.8284 3 10V6C3 5.17157 3.67157 4.5 4.5 4.5Z"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
 function getPanelLabel(panelType: PanelType, panelTitle: string) {
   const trimmed = panelTitle.trim()
   if (trimmed) {
@@ -85,6 +47,7 @@ function getPanelLabel(panelType: PanelType, panelTitle: string) {
 
   if (panelType === 't3code') return 'T3Code'
   if (panelType === 'browser') return 'Browser'
+  if (panelType === 'file') return 'Files'
   if (panelType === 'chat') return 'Chat'
   return 'Terminal'
 }
@@ -146,7 +109,11 @@ function WorkspacePanelImpl({
   cwd,
   panelType,
   panelTitle,
+  filePath,
+  cursorLine,
+  cursorColumn,
   panelId,
+  providerId,
   t3ProjectId,
   t3ThreadId,
   hydrationState,
@@ -162,10 +129,12 @@ function WorkspacePanelImpl({
   const autoCenterFocusedPanel = useUiStore((state) => state.autoCenterFocusedPanel)
   const updatePanelLayout = useWorkspacesStore((state) => state.updatePanelLayout)
   const setFocusedPanel = useWorkspacesStore((state) => state.setFocusedPanel)
+  const isDirty = useWorkspacesStore((state) => Boolean(state.dirtyPanelIds[panelId]))
   const markPanelVisible = usePanelRuntimeStore((state) => state.markPanelVisible)
   const [isResizing, setIsResizing] = useState(false)
+  const defaultWidth = panelType === 't3code' || panelType === 'chat' ? 400 : 700
   const [size, setSize] = useState(() => ({
-    width: initialWidth ?? 700,
+    width: initialWidth ?? defaultWidth,
     height:
       initialHeight ??
       (typeof window === 'undefined' ? 450 : Math.max(250, Math.round(window.innerHeight * 0.8)))
@@ -334,8 +303,13 @@ function WorkspacePanelImpl({
     >
       <div className="flex h-8 items-center justify-between gap-2 rounded-t-lg border-b border-border-subtle bg-bg-raised px-2.5 flex-shrink-0">
         <div className="flex min-w-0 items-center gap-2">
-          <PanelTypeIcon panelType={panelType} />
+          <PanelGlyph panelType={panelType} providerId={providerId} className="text-text-secondary" />
           <span className="truncate text-xs font-medium text-text-primary">{panelLabel}</span>
+          {isDirty ? (
+            <span className="rounded-full border border-warning/30 bg-warning/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning">
+              Dirty
+            </span>
+          ) : null}
         </div>
         <button onClick={onClose} className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary">
           <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none">
@@ -382,6 +356,17 @@ function WorkspacePanelImpl({
             autoFocus={isFocused}
             isResizing={isResizing}
             hydrationState={hydrationState}
+          />
+        ) : panelType === 'file' ? (
+          <FilePanel
+            panelId={panelId}
+            workspaceId={workspaceId}
+            projectId={projectId}
+            projectPath={cwd}
+            initialFilePath={filePath}
+            initialCursorLine={cursorLine}
+            initialCursorColumn={cursorColumn}
+            autoFocus={isFocused}
           />
         ) : (
           <PanelPlaceholder type={panelType} />

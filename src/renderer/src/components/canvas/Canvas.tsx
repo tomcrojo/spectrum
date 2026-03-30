@@ -64,6 +64,10 @@ function buildActivePanel(workspace: Workspace, cwd: string): ActiveWorkspacePan
     cwd,
     panelType: panel.type,
     panelTitle: panel.title,
+    providerId: panel.providerId,
+    filePath: panel.filePath,
+    cursorLine: panel.cursorLine,
+    cursorColumn: panel.cursorColumn,
     t3ProjectId: panel.t3ProjectId,
     t3ThreadId: panel.t3ThreadId
   }
@@ -91,7 +95,7 @@ export function Canvas() {
     addActivePanel,
     insertPanelAfter,
     prependPanelToWorkspace,
-    closeActivePanel,
+    requestClosePanel,
     restorePanelsFromWorkspaces
   } = useWorkspacesStore()
   const activeWorkspaceId = usePanelRuntimeStore((state) => state.activeWorkspaceId)
@@ -552,7 +556,9 @@ export function Canvas() {
           ? 'Browser'
           : panelType === 'chat'
             ? 'Chat'
-            : 'Terminal'
+            : panelType === 'file'
+              ? 'Files'
+              : 'Terminal'
 
     const newPanel: ActiveWorkspacePanel = {
       panelId: nanoid(),
@@ -584,7 +590,9 @@ export function Canvas() {
           ? 'Browser'
           : panelType === 'chat'
             ? 'Chat'
-            : 'Terminal'
+            : panelType === 'file'
+              ? 'Files'
+              : 'Terminal'
 
     const newPanel: ActiveWorkspacePanel = {
       panelId: nanoid(),
@@ -611,7 +619,9 @@ export function Canvas() {
           ? 'Browser'
           : panelType === 'chat'
             ? 'Chat'
-            : 'Terminal'
+            : panelType === 'file'
+              ? 'Files'
+              : 'Terminal'
 
     const newPanel: ActiveWorkspacePanel = {
       panelId: nanoid(),
@@ -632,8 +642,8 @@ export function Canvas() {
   }, [activeProject, projectWorkspaces, activePanels, insertPanelAfter, addActivePanel])
 
   const handleClosePanel = useCallback((panelId: string) => {
-    closeActivePanel(panelId)
-  }, [closeActivePanel])
+    void requestClosePanel(panelId)
+  }, [requestClosePanel])
 
   const handleCanvasPointerDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     if (!isFreeCanvas) return
@@ -696,6 +706,14 @@ export function Canvas() {
           setShowCreateMenu(false)
           void handleAddPanel('browser')
         }
+      },
+      {
+        label: 'File Editor',
+        description: 'Browse project files and edit code inside the workspace.',
+        onSelect: () => {
+          setShowCreateMenu(false)
+          void handleAddPanel('file')
+        }
       }
     ],
     [handleAddPanel]
@@ -729,6 +747,11 @@ export function Canvas() {
         label: 'Browser',
         description: 'Open a browser panel in this workspace.',
         onSelect: () => void handleAppendPanelToWorkspace('browser', workspaceId)
+      },
+      {
+        label: 'File Editor',
+        description: 'Browse project files and edit code inside the workspace.',
+        onSelect: () => void handleAppendPanelToWorkspace('file', workspaceId)
       }
     ],
     [handleAppendPanelToWorkspace]
@@ -999,7 +1022,11 @@ export function Canvas() {
                             cwd={panel.cwd}
                             panelType={panel.panelType}
                             panelTitle={panel.panelTitle}
+                            filePath={panel.filePath}
+                            cursorLine={panel.cursorLine}
+                            cursorColumn={panel.cursorColumn}
                             panelId={panel.panelId}
+                            providerId={panel.providerId}
                             t3ProjectId={panel.t3ProjectId}
                             t3ThreadId={panel.t3ThreadId}
                             hydrationState={panelRuntimeById[panel.panelId]?.hydrationState ?? 'cold'}

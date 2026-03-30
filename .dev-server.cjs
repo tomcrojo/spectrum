@@ -23,7 +23,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 
 // src/dev-server/index.ts
 var import_ws2 = require("ws");
-var import_better_sqlite33 = __toESM(require("better-sqlite3"));
+var import_better_sqlite32 = __toESM(require("better-sqlite3"));
 var import_child_process2 = require("child_process");
 var import_node_http = __toESM(require("node:http"));
 var import_path4 = require("path");
@@ -69,7 +69,37 @@ var import_fs2 = require("fs");
 var import_os2 = require("os");
 var import_path3 = require("path");
 var import_net = __toESM(require("net"));
-var import_better_sqlite32 = __toESM(require("better-sqlite3"));
+var import_better_sqlite3 = __toESM(require("better-sqlite3"));
+var import_ws = __toESM(require("ws"));
+var import_electron2 = require("electron");
+
+// src/shared/ipc-channels.ts
+var T3CODE_CHANNELS = {
+  ENSURE_RUNTIME: "t3code:ensure-runtime",
+  ENSURE_PROJECT: "t3code:ensure-project",
+  ENSURE_PANEL_THREAD: "t3code:ensure-panel-thread",
+  GET_THREAD_INFO: "t3code:get-thread-info",
+  WATCH_THREAD: "t3code:watch-thread",
+  UNWATCH_THREAD: "t3code:unwatch-thread",
+  THREAD_INFO_CHANGED: "t3code:thread-info-changed"
+};
+var BROWSER_CHANNELS = {
+  NAVIGATE: "browser:navigate",
+  OPEN: "browser:open",
+  CLOSE: "browser:close",
+  RESIZE: "browser:resize",
+  ACTIVATE: "browser:activate",
+  LIST: "browser:list",
+  GET: "browser:get",
+  SESSION: "browser:session",
+  SESSION_SYNC: "browser:session-sync",
+  URL_CHANGED: "browser:url-changed",
+  FOCUS_CHANGED: "browser:focus-changed",
+  WEBVIEW_READY: "browser:webview-ready",
+  WEBVIEW_DESTROYED: "browser:webview-destroyed",
+  CAPTURE_PREVIEW: "browser:capture-preview",
+  AUTOMATION_STATE_CHANGED: "browser:automation-state-changed"
+};
 
 // src/main/t3code/config.ts
 var import_fs = require("fs");
@@ -157,39 +187,687 @@ function getT3CodeConfig() {
   return cachedConfig;
 }
 
-// src/shared/ipc-channels.ts
-var BROWSER_CHANNELS = {
-  NAVIGATE: "browser:navigate",
-  OPEN: "browser:open",
-  CLOSE: "browser:close",
-  RESIZE: "browser:resize",
-  ACTIVATE: "browser:activate",
-  LIST: "browser:list",
-  GET: "browser:get",
-  SESSION: "browser:session",
-  SESSION_SYNC: "browser:session-sync",
-  URL_CHANGED: "browser:url-changed",
-  FOCUS_CHANGED: "browser:focus-changed",
-  WEBVIEW_READY: "browser:webview-ready",
-  WEBVIEW_DESTROYED: "browser:webview-destroyed"
-};
-
-// src/main/cdp/CdpProxy.ts
+// src/main/browser-cli/BrowserCliPathManager.ts
 var import_electron = require("electron");
-var import_ws = require("ws");
-
-// src/main/api/TokenRegistry.ts
-var tokenScopes = /* @__PURE__ */ new Map();
-function registerToken(token, workspaceId, projectId) {
-  tokenScopes.set(token, { workspaceId, projectId });
+var import_os = require("os");
+var import_path2 = require("path");
+function getProjectRoot() {
+  if (typeof import_electron.app?.getAppPath === "function") {
+    return import_electron.app.getAppPath();
+  }
+  return process.cwd();
 }
-function revokeToken(token) {
-  tokenScopes.delete(token);
+function getUserDataPath() {
+  if (typeof import_electron.app?.getPath === "function") {
+    return import_electron.app.getPath("userData");
+  }
+  return (0, import_path2.join)((0, import_os.homedir)(), ".centipede-dev");
+}
+function getBrowserCliRoot() {
+  return (0, import_path2.join)(getProjectRoot(), "resources", "browser-cli");
+}
+function getBrowserCliBinDir() {
+  return (0, import_path2.join)(getBrowserCliRoot(), "bin");
+}
+function getBrowserCommandPath() {
+  if (process.platform === "win32") {
+    return (0, import_path2.join)(getBrowserCliBinDir(), "browser.js");
+  }
+  return (0, import_path2.join)(getBrowserCliBinDir(), "browser");
+}
+function getBrowserCliCommandPath() {
+  if (process.platform === "win32") {
+    return (0, import_path2.join)(getBrowserCliBinDir(), "browser-cli.js");
+  }
+  return (0, import_path2.join)(getBrowserCliBinDir(), "browser-cli");
+}
+function getBrowserCliSessionFilePath() {
+  return (0, import_path2.join)(getUserDataPath(), "browser-cli", "sessions.json");
+}
+function prependBrowserCliToPath(existingPath) {
+  const binDir = getBrowserCliBinDir();
+  if (!existingPath) {
+    return binDir;
+  }
+  return [binDir, ...existingPath.split(import_path2.delimiter).filter(Boolean)].join(import_path2.delimiter);
 }
 
-// src/main/db/database.ts
-var import_better_sqlite3 = __toESM(require("better-sqlite3"));
-var import_electron2 = require("electron");
+// src/main/t3code/T3CodeManager.ts
+var GLOBAL_RUNTIME_ID = "global";
+var DEFAULT_MODEL_SELECTION = {
+  provider: "codex",
+  model: "gpt-5.4"
+};
+var runtime = null;
+var pendingRuntimeStart = null;
+var pendingProjectEnsures = /* @__PURE__ */ new Map();
+var pendingPanelThreadEnsures = /* @__PURE__ */ new Map();
+var watchedThreadsByPanelId = /* @__PURE__ */ new Map();
+var watchTimer = null;
+function reserveLoopbackPort() {
+  const server = import_net.default.createServer();
+  return new Promise((resolve2, reject) => {
+    server.on("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.close();
+        reject(new Error("Failed to reserve loopback port"));
+        return;
+      }
+      const port = address.port;
+      server.close(() => resolve2(port));
+    });
+  });
+}
+function getFreePort() {
+  return reserveLoopbackPort();
+}
+function getLatestModifiedTime(targetPath) {
+  if (!(0, import_fs2.existsSync)(targetPath)) {
+    return 0;
+  }
+  const stats = (0, import_fs2.statSync)(targetPath);
+  if (!stats.isDirectory()) {
+    return stats.mtimeMs;
+  }
+  let latest = stats.mtimeMs;
+  for (const entry of (0, import_fs2.readdirSync)(targetPath, { withFileTypes: true })) {
+    if (entry.name === "node_modules" || entry.name === "dist" || entry.name === ".git") {
+      continue;
+    }
+    latest = Math.max(latest, getLatestModifiedTime((0, import_path3.join)(targetPath, entry.name)));
+  }
+  return latest;
+}
+function shouldRebuild(sourcePath, entrypointPath) {
+  if (!(0, import_fs2.existsSync)(entrypointPath)) {
+    return true;
+  }
+  const webDistPath = (0, import_path3.join)(sourcePath, "apps", "web", "dist", "index.html");
+  if (!(0, import_fs2.existsSync)(webDistPath)) {
+    return true;
+  }
+  const latestSourceChange = Math.max(
+    getLatestModifiedTime((0, import_path3.join)(sourcePath, "package.json")),
+    getLatestModifiedTime((0, import_path3.join)(sourcePath, "apps", "web", "src")),
+    getLatestModifiedTime((0, import_path3.join)(sourcePath, "apps", "web", "index.html")),
+    getLatestModifiedTime((0, import_path3.join)(sourcePath, "apps", "server", "src"))
+  );
+  const latestBuildOutput = Math.min(
+    (0, import_fs2.statSync)(entrypointPath).mtimeMs,
+    (0, import_fs2.statSync)(webDistPath).mtimeMs
+  );
+  return latestSourceChange > latestBuildOutput;
+}
+function ensureBuilt(sourcePath, installCommand, buildCommand) {
+  const entrypointPath = (0, import_path3.join)(sourcePath, getT3CodeConfig().entrypoint);
+  if (!shouldRebuild(sourcePath, entrypointPath)) {
+    return;
+  }
+  const install = (0, import_child_process.spawnSync)("/bin/zsh", ["-lc", installCommand], {
+    cwd: sourcePath,
+    stdio: "inherit"
+  });
+  if (install.status !== 0) {
+    throw new Error("Failed to install T3Code dependencies");
+  }
+  const build = (0, import_child_process.spawnSync)("/bin/zsh", ["-lc", buildCommand], {
+    cwd: sourcePath,
+    stdio: "inherit"
+  });
+  if (build.status !== 0) {
+    throw new Error("Failed to build T3Code");
+  }
+}
+async function waitForReady(baseUrl, timeoutMs = 3e4) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const response = await fetch(`${baseUrl}/global/health`);
+      if (response.ok) {
+        return;
+      }
+    } catch {
+    }
+    await new Promise((resolve2) => setTimeout(resolve2, 500));
+  }
+  throw new Error("Timed out waiting for T3Code to become ready");
+}
+async function waitForAppShell(baseUrl, timeoutMs = 3e4) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const response = await fetch(baseUrl);
+      if (response.ok) {
+        return;
+      }
+    } catch {
+    }
+    await new Promise((resolve2) => setTimeout(resolve2, 250));
+  }
+  throw new Error("Timed out waiting for T3Code app shell");
+}
+async function waitForWebSocketReady(baseUrl, timeoutMs = 1e4) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      await sendWsRequest(baseUrl, { _tag: "orchestration.getSnapshot" });
+      return;
+    } catch {
+    }
+    await new Promise((resolve2) => setTimeout(resolve2, 200));
+  }
+  throw new Error("Timed out waiting for T3Code websocket readiness");
+}
+function getStateDir() {
+  return (0, import_path3.join)((0, import_os2.homedir)(), ".centipede-dev", "t3code-state", GLOBAL_RUNTIME_ID);
+}
+function getLogPath() {
+  const logsDir = (0, import_path3.join)((0, import_os2.homedir)(), ".centipede-dev", "t3code-logs");
+  (0, import_fs2.mkdirSync)(logsDir, { recursive: true });
+  return (0, import_path3.join)(logsDir, `${GLOBAL_RUNTIME_ID}.log`);
+}
+function getStateDbPath(stateDir = getStateDir()) {
+  return (0, import_path3.join)(stateDir, "userdata", "state.sqlite");
+}
+function openStateDb(options) {
+  const stateDbPath = getStateDbPath();
+  if (!(0, import_fs2.existsSync)(stateDbPath)) {
+    return null;
+  }
+  return new import_better_sqlite3.default(stateDbPath, options);
+}
+function getProjectBindingId(centipedeProjectId) {
+  return `centipede-project:${centipedeProjectId}`;
+}
+function parseModelSelection(raw) {
+  if (!raw) {
+    return DEFAULT_MODEL_SELECTION;
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      return parsed;
+    }
+  } catch {
+  }
+  return DEFAULT_MODEL_SELECTION;
+}
+function getProjectById(projectId) {
+  const db2 = openStateDb({ readonly: true });
+  if (!db2) {
+    return null;
+  }
+  try {
+    return db2.prepare(
+      `SELECT
+             project_id AS projectId,
+             title,
+             workspace_root AS workspaceRoot,
+             default_model_selection_json AS defaultModelSelectionJson
+           FROM projection_projects
+           WHERE project_id = ?
+             AND deleted_at IS NULL`
+    ).get(projectId) ?? null;
+  } finally {
+    db2.close();
+  }
+}
+function getThreadById(threadId) {
+  const db2 = openStateDb({ readonly: true });
+  if (!db2) {
+    return null;
+  }
+  try {
+    return db2.prepare(
+      `SELECT
+             thread_id AS threadId,
+             project_id AS projectId,
+             title,
+             model_selection_json AS modelSelectionJson,
+             deleted_at AS deletedAt
+           FROM projection_threads
+           WHERE thread_id = ?`
+    ).get(threadId) ?? null;
+  } finally {
+    db2.close();
+  }
+}
+function getThreadMetadata(threadId) {
+  const db2 = openStateDb({ readonly: true });
+  if (!db2) {
+    return {
+      threadTitle: null,
+      lastUserMessageAt: null,
+      providerId: null
+    };
+  }
+  try {
+    const threadRow = db2.prepare(
+      `SELECT
+           title,
+           model_selection_json AS modelSelectionJson
+         FROM projection_threads
+         WHERE thread_id = ?
+           AND deleted_at IS NULL`
+    ).get(threadId);
+    const messageRow = db2.prepare(
+      `SELECT created_at AS lastUserMessageAt
+         FROM projection_thread_messages
+         WHERE thread_id = ?
+           AND role = 'user'
+         ORDER BY created_at DESC
+         LIMIT 1`
+    ).get(threadId);
+    return {
+      threadTitle: threadRow?.title ?? null,
+      lastUserMessageAt: messageRow?.lastUserMessageAt ?? null,
+      providerId: getProviderIdFromModelSelection(threadRow?.modelSelectionJson)
+    };
+  } finally {
+    db2.close();
+  }
+}
+function getProviderIdFromModelSelection(modelSelectionJson) {
+  const parsed = parseModelSelection(modelSelectionJson);
+  const providerId = parsed.provider;
+  return typeof providerId === "string" && providerId.trim().length > 0 ? providerId : null;
+}
+function emitThreadInfoChanged(payload) {
+  for (const window of import_electron2.BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send(T3CODE_CHANNELS.THREAD_INFO_CHANGED, payload);
+    }
+  }
+}
+function isAppInteractive() {
+  return import_electron2.BrowserWindow.getAllWindows().some((window) => window.isVisible() && window.isFocused());
+}
+function getWatchIntervalMs(priority) {
+  if (priority === "focused") {
+    return 2e3;
+  }
+  if (priority === "active") {
+    return 1e4;
+  }
+  return 3e4;
+}
+async function pollWatchedThreads() {
+  const now = Date.now();
+  const appInteractive = isAppInteractive();
+  for (const watch of watchedThreadsByPanelId.values()) {
+    if (watch.priority === "inactive" && !appInteractive) {
+      continue;
+    }
+    const intervalMs = getWatchIntervalMs(watch.priority);
+    if (now - watch.lastPolledAt < intervalMs) {
+      continue;
+    }
+    watch.lastPolledAt = now;
+    const snapshot = getThreadMetadata(watch.t3ThreadId);
+    if (watch.lastSnapshot?.threadTitle === snapshot.threadTitle && watch.lastSnapshot?.lastUserMessageAt === snapshot.lastUserMessageAt && watch.lastSnapshot?.providerId === snapshot.providerId) {
+      continue;
+    }
+    watch.lastSnapshot = snapshot;
+    emitThreadInfoChanged({
+      panelId: watch.panelId,
+      t3ThreadId: watch.t3ThreadId,
+      threadTitle: snapshot.threadTitle,
+      lastUserMessageAt: snapshot.lastUserMessageAt,
+      providerId: snapshot.providerId
+    });
+  }
+}
+function ensureWatchTimer() {
+  if (watchTimer || watchedThreadsByPanelId.size === 0) {
+    return;
+  }
+  watchTimer = setInterval(() => {
+    void pollWatchedThreads();
+  }, 2e3);
+}
+function stopWatchTimerIfIdle() {
+  if (watchTimer && watchedThreadsByPanelId.size === 0) {
+    clearInterval(watchTimer);
+    watchTimer = null;
+  }
+}
+async function waitForProject(projectId, timeoutMs = 5e3) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const project = getProjectById(projectId);
+    if (project) {
+      return project;
+    }
+    await new Promise((resolve2) => setTimeout(resolve2, 100));
+  }
+  throw new Error(`Timed out waiting for T3Code project ${projectId}`);
+}
+async function waitForThread(threadId, timeoutMs = 5e3) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const thread = getThreadById(threadId);
+    if (thread && !thread.deletedAt) {
+      return thread;
+    }
+    await new Promise((resolve2) => setTimeout(resolve2, 100));
+  }
+  throw new Error(`Timed out waiting for T3Code thread ${threadId}`);
+}
+async function sendWsRequest(baseUrl, body) {
+  const started = Date.now();
+  let lastError = null;
+  while (Date.now() - started < 1e4) {
+    try {
+      return await new Promise((resolve2, reject) => {
+        const wsUrl = baseUrl.replace(/^http/, "ws");
+        const socket = new import_ws.default(wsUrl);
+        const requestId = `centipede-${crypto.randomUUID()}`;
+        let settled = false;
+        const finish = (callback) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          clearTimeout(timeout);
+          socket.removeAllListeners();
+          try {
+            socket.close();
+          } catch {
+          }
+          callback();
+        };
+        const timeout = setTimeout(() => {
+          finish(
+            () => reject(new Error(`Timed out waiting for T3Code websocket response: ${String(body._tag)}`))
+          );
+        }, 3e4);
+        socket.on("open", () => {
+          socket.send(
+            JSON.stringify({
+              id: requestId,
+              body
+            })
+          );
+        });
+        socket.on("message", (raw) => {
+          let parsed;
+          try {
+            parsed = JSON.parse(raw.toString());
+          } catch {
+            return;
+          }
+          if (parsed.type === "push" || parsed.id !== requestId) {
+            return;
+          }
+          if (parsed.error?.message) {
+            finish(() => reject(new Error(parsed.error.message)));
+            return;
+          }
+          finish(() => resolve2(parsed.result));
+        });
+        socket.on("error", (error) => {
+          finish(() => reject(error));
+        });
+        socket.on("close", () => {
+          if (!settled) {
+            finish(() => reject(new Error("T3Code websocket connection closed unexpectedly")));
+          }
+        });
+      });
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (!/ECONNREFUSED|closed unexpectedly/i.test(lastError.message) && !lastError.code?.includes?.("ECONNREFUSED")) {
+        throw lastError;
+      }
+      await new Promise((resolve2) => setTimeout(resolve2, 200));
+    }
+  }
+  throw lastError ?? new Error("Timed out connecting to T3Code websocket");
+}
+function buildEmbeddedThreadUrl(baseUrl, threadId) {
+  return new URL(`/embed/thread/${threadId}`, `${baseUrl}/`).toString();
+}
+async function ensureRuntime() {
+  if (runtime && runtime.process.exitCode === null) {
+    return { baseUrl: runtime.baseUrl, logPath: runtime.logPath };
+  }
+  if (pendingRuntimeStart) {
+    return pendingRuntimeStart;
+  }
+  const config = getT3CodeConfig();
+  if (!(0, import_fs2.existsSync)(config.sourcePath)) {
+    throw new Error(`T3Code source not found at ${config.sourcePath}`);
+  }
+  pendingRuntimeStart = (async () => {
+    ensureBuilt(config.sourcePath, config.installCommand, config.buildCommand);
+    const port = await getFreePort();
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const entrypoint = (0, import_path3.join)(config.sourcePath, config.entrypoint);
+    const stateDir = getStateDir();
+    const logPath = getLogPath();
+    (0, import_fs2.mkdirSync)(stateDir, { recursive: true });
+    (0, import_fs2.mkdirSync)((0, import_path3.dirname)(logPath), { recursive: true });
+    const logFd = (0, import_fs2.openSync)(logPath, "a");
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    delete env.T3CODE_AUTH_TOKEN;
+    env.PATH = prependBrowserCliToPath(env.PATH);
+    env.CENTIPEDE_BROWSER = getBrowserCommandPath();
+    env.CENTIPEDE_BROWSER_CLI = getBrowserCliCommandPath();
+    env.CENTIPEDE_BROWSER_SESSION_FILE = getBrowserCliSessionFilePath();
+    env.T3CODE_MODE = "web";
+    env.T3CODE_HOST = "127.0.0.1";
+    env.T3CODE_PORT = String(port);
+    env.T3CODE_NO_BROWSER = "1";
+    env.T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD = "0";
+    env.T3CODE_HOME = stateDir;
+    env.T3CODE_STATE_DIR = stateDir;
+    const child = (0, import_child_process.spawn)(
+      "node",
+      [
+        entrypoint,
+        "--mode",
+        "web",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        String(port),
+        "--home-dir",
+        stateDir,
+        "--auth-token",
+        "",
+        "--no-browser"
+      ],
+      {
+        cwd: config.sourcePath,
+        env,
+        stdio: ["ignore", logFd, logFd]
+      }
+    );
+    child.on("exit", () => {
+      runtime = null;
+      pendingRuntimeStart = null;
+      (0, import_fs2.closeSync)(logFd);
+    });
+    runtime = {
+      process: child,
+      baseUrl,
+      logPath,
+      stateDir
+    };
+    try {
+      await waitForReady(baseUrl);
+      await waitForAppShell(baseUrl);
+      await waitForWebSocketReady(baseUrl);
+      return { baseUrl, logPath };
+    } catch (error) {
+      child.kill();
+      runtime = null;
+      throw error;
+    } finally {
+      pendingRuntimeStart = null;
+    }
+  })();
+  return pendingRuntimeStart;
+}
+async function ensureT3Project(input) {
+  const pendingKey = input.existingT3ProjectId || getProjectBindingId(input.centipedeProjectId);
+  const pending = pendingProjectEnsures.get(pendingKey);
+  if (pending) {
+    return pending;
+  }
+  const ensurePromise = (async () => {
+    const { baseUrl } = await ensureRuntime();
+    const t3ProjectId = input.existingT3ProjectId || getProjectBindingId(input.centipedeProjectId);
+    const existing = getProjectById(t3ProjectId);
+    if (existing) {
+      if (existing.workspaceRoot !== input.projectPath || existing.title !== input.projectName) {
+        await sendWsRequest(baseUrl, {
+          _tag: "orchestration.dispatchCommand",
+          command: {
+            type: "project.meta.update",
+            commandId: crypto.randomUUID(),
+            projectId: t3ProjectId,
+            title: input.projectName,
+            workspaceRoot: input.projectPath
+          }
+        });
+        await waitForProject(t3ProjectId);
+      }
+      return { t3ProjectId };
+    }
+    try {
+      await sendWsRequest(baseUrl, {
+        _tag: "orchestration.dispatchCommand",
+        command: {
+          type: "project.create",
+          commandId: crypto.randomUUID(),
+          projectId: t3ProjectId,
+          title: input.projectName,
+          workspaceRoot: input.projectPath,
+          defaultModelSelection: DEFAULT_MODEL_SELECTION,
+          createdAt: (/* @__PURE__ */ new Date()).toISOString()
+        }
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/already exists and cannot be created twice/i.test(message)) {
+        throw error;
+      }
+    }
+    await waitForProject(t3ProjectId);
+    return { t3ProjectId };
+  })();
+  pendingProjectEnsures.set(pendingKey, ensurePromise);
+  try {
+    return await ensurePromise;
+  } finally {
+    pendingProjectEnsures.delete(pendingKey);
+  }
+}
+async function createThread(projectId) {
+  const activeProject = await waitForProject(projectId);
+  const { baseUrl } = await ensureRuntime();
+  const threadId = crypto.randomUUID();
+  const modelSelection = parseModelSelection(activeProject.defaultModelSelectionJson);
+  await sendWsRequest(baseUrl, {
+    _tag: "orchestration.dispatchCommand",
+    command: {
+      type: "thread.create",
+      commandId: crypto.randomUUID(),
+      threadId,
+      projectId,
+      title: "New thread",
+      modelSelection,
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      createdAt: (/* @__PURE__ */ new Date()).toISOString()
+    }
+  });
+  return waitForThread(threadId);
+}
+async function ensurePanelThread(input) {
+  const pending = pendingPanelThreadEnsures.get(input.panelId);
+  if (pending) {
+    return pending;
+  }
+  const ensurePromise = (async () => {
+    const { baseUrl } = await ensureRuntime();
+    const { t3ProjectId } = await ensureT3Project({
+      centipedeProjectId: input.centipedeProjectId,
+      projectPath: input.projectPath,
+      projectName: input.projectName,
+      existingT3ProjectId: input.existingT3ProjectId
+    });
+    let thread = input.existingT3ThreadId ? getThreadById(input.existingT3ThreadId) : null;
+    if (!thread || thread.deletedAt || thread.projectId !== t3ProjectId) {
+      thread = await createThread(t3ProjectId);
+    }
+    const metadata = getThreadMetadata(thread.threadId);
+    return {
+      baseUrl,
+      t3ProjectId,
+      t3ThreadId: thread.threadId,
+      threadTitle: metadata.threadTitle,
+      lastUserMessageAt: metadata.lastUserMessageAt,
+      providerId: metadata.providerId
+    };
+  })();
+  pendingPanelThreadEnsures.set(input.panelId, ensurePromise);
+  try {
+    return await ensurePromise;
+  } finally {
+    pendingPanelThreadEnsures.delete(input.panelId);
+  }
+}
+async function getThreadInfo(t3ThreadId) {
+  const activeRuntime = runtime;
+  const metadata = getThreadMetadata(t3ThreadId);
+  return {
+    url: activeRuntime && activeRuntime.process.exitCode === null ? buildEmbeddedThreadUrl(activeRuntime.baseUrl, t3ThreadId) : null,
+    threadTitle: metadata.threadTitle,
+    lastUserMessageAt: metadata.lastUserMessageAt,
+    providerId: metadata.providerId
+  };
+}
+function watchThread(input) {
+  const metadata = getThreadMetadata(input.t3ThreadId);
+  watchedThreadsByPanelId.set(input.panelId, {
+    panelId: input.panelId,
+    t3ThreadId: input.t3ThreadId,
+    priority: input.priority,
+    lastPolledAt: 0,
+    lastSnapshot: metadata
+  });
+  ensureWatchTimer();
+  return true;
+}
+function unwatchThread(panelId) {
+  const didDelete = watchedThreadsByPanelId.delete(panelId);
+  stopWatchTimerIfIdle();
+  return didDelete;
+}
+function getT3CodeLastUserMessageAt(t3ThreadId) {
+  return getThreadMetadata(t3ThreadId).lastUserMessageAt;
+}
+function stopSharedRuntime() {
+  const activeRuntime = runtime;
+  runtime = null;
+  pendingRuntimeStart = null;
+  if (!activeRuntime) {
+    return;
+  }
+  activeRuntime.process.kill();
+}
+function stopAllT3Code() {
+  watchedThreadsByPanelId.clear();
+  stopWatchTimerIfIdle();
+  stopSharedRuntime();
+}
 
 // src/shared/project.types.ts
 var PROJECT_COLOR_PALETTE = [
@@ -260,408 +938,11 @@ function getRandomProjectColor() {
   return PROJECT_COLOR_PALETTE[index].id;
 }
 
-// src/main/browser-cli/BrowserCliSessionManager.ts
-var import_node_crypto2 = require("node:crypto");
-
-// src/main/browser-cli/BrowserCliPathManager.ts
-var import_electron3 = require("electron");
-var import_os = require("os");
-var import_path2 = require("path");
-function getProjectRoot() {
-  if (typeof import_electron3.app?.getAppPath === "function") {
-    return import_electron3.app.getAppPath();
-  }
-  return process.cwd();
-}
-function getUserDataPath() {
-  if (typeof import_electron3.app?.getPath === "function") {
-    return import_electron3.app.getPath("userData");
-  }
-  return (0, import_path2.join)((0, import_os.homedir)(), ".centipede-dev");
-}
-function getBrowserCliRoot() {
-  return (0, import_path2.join)(getProjectRoot(), "resources", "browser-cli");
-}
-function getBrowserCliBinDir() {
-  return (0, import_path2.join)(getBrowserCliRoot(), "bin");
-}
-function getBrowserCliSessionFilePath() {
-  return (0, import_path2.join)(getUserDataPath(), "browser-cli", "sessions.json");
-}
-function prependBrowserCliToPath(existingPath) {
-  const binDir = getBrowserCliBinDir();
-  if (!existingPath) {
-    return binDir;
-  }
-  return [binDir, ...existingPath.split(import_path2.delimiter).filter(Boolean)].join(import_path2.delimiter);
-}
-
-// src/main/browser-cli/BrowserCliSessionManager.ts
-var appInstanceId = (0, import_node_crypto2.randomUUID)();
-
-// src/main/api/BrowserApiServer.ts
-var apiPort = null;
-function getApiPort() {
-  if (apiPort === null) {
-    throw new Error("Browser API server is not started");
-  }
-  return apiPort;
-}
-
-// src/main/t3code/T3CodeManager.ts
-var runtimes = /* @__PURE__ */ new Map();
-var pendingStarts = /* @__PURE__ */ new Map();
-var pendingStops = /* @__PURE__ */ new Map();
-function reserveLoopbackPort() {
-  const server = import_net.default.createServer();
-  return new Promise((resolve2, reject) => {
-    server.on("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      if (!address || typeof address === "string") {
-        server.close();
-        reject(new Error("Failed to reserve loopback port"));
-        return;
-      }
-      const port = address.port;
-      server.close(() => resolve2(port));
-    });
-  });
-}
-async function getFreePort() {
-  return reserveLoopbackPort();
-}
-function getLatestModifiedTime(targetPath) {
-  if (!(0, import_fs2.existsSync)(targetPath)) {
-    return 0;
-  }
-  const stats = (0, import_fs2.statSync)(targetPath);
-  if (!stats.isDirectory()) {
-    return stats.mtimeMs;
-  }
-  let latest = stats.mtimeMs;
-  for (const entry of (0, import_fs2.readdirSync)(targetPath, { withFileTypes: true })) {
-    if (entry.name === "node_modules" || entry.name === "dist" || entry.name === ".git") {
-      continue;
-    }
-    latest = Math.max(latest, getLatestModifiedTime((0, import_path3.join)(targetPath, entry.name)));
-  }
-  return latest;
-}
-function shouldRebuild(sourcePath, entrypointPath) {
-  if (!(0, import_fs2.existsSync)(entrypointPath)) {
-    return true;
-  }
-  const webDistPath = (0, import_path3.join)(sourcePath, "apps", "web", "dist", "index.html");
-  if (!(0, import_fs2.existsSync)(webDistPath)) {
-    return true;
-  }
-  const latestSourceChange = Math.max(
-    getLatestModifiedTime((0, import_path3.join)(sourcePath, "package.json")),
-    getLatestModifiedTime((0, import_path3.join)(sourcePath, "apps", "web", "src")),
-    getLatestModifiedTime((0, import_path3.join)(sourcePath, "apps", "web", "index.html")),
-    getLatestModifiedTime((0, import_path3.join)(sourcePath, "apps", "server", "src"))
-  );
-  const latestBuildOutput = Math.min(
-    (0, import_fs2.statSync)(entrypointPath).mtimeMs,
-    (0, import_fs2.statSync)(webDistPath).mtimeMs
-  );
-  return latestSourceChange > latestBuildOutput;
-}
-function ensureBuilt(sourcePath, installCommand, buildCommand) {
-  const entrypointPath = (0, import_path3.join)(sourcePath, getT3CodeConfig().entrypoint);
-  if (!shouldRebuild(sourcePath, entrypointPath)) {
-    return;
-  }
-  const install = (0, import_child_process.spawnSync)("/bin/zsh", ["-lc", installCommand], {
-    cwd: sourcePath,
-    stdio: "inherit"
-  });
-  if (install.status !== 0) {
-    throw new Error("Failed to install T3Code dependencies");
-  }
-  const build = (0, import_child_process.spawnSync)("/bin/zsh", ["-lc", buildCommand], {
-    cwd: sourcePath,
-    stdio: "inherit"
-  });
-  if (build.status !== 0) {
-    throw new Error("Failed to build T3Code");
-  }
-}
-async function waitForReady(url, timeoutMs = 3e4) {
-  const started = Date.now();
-  while (Date.now() - started < timeoutMs) {
-    try {
-      const response = await fetch(`${url}/global/health`);
-      if (response.ok) return;
-    } catch {
-    }
-    await new Promise((resolve2) => setTimeout(resolve2, 500));
-  }
-  throw new Error("Timed out waiting for T3Code to become ready");
-}
-async function waitForAppShell(url, timeoutMs = 3e4) {
-  const started = Date.now();
-  while (Date.now() - started < timeoutMs) {
-    try {
-      const response = await fetch(url);
-      if (response.ok) return;
-    } catch {
-    }
-    await new Promise((resolve2) => setTimeout(resolve2, 250));
-  }
-  throw new Error("Timed out waiting for T3Code app shell");
-}
-function prepareLogPath(instanceId) {
-  const logsDir = (0, import_path3.join)((0, import_os2.homedir)(), ".centipede-dev", "t3code-logs");
-  (0, import_fs2.mkdirSync)(logsDir, { recursive: true });
-  return (0, import_path3.join)(logsDir, `${instanceId}.log`);
-}
-function resolveBootstrapThreadInfo(stateDir, projectPath) {
-  const stateDbPath = (0, import_path3.join)(stateDir, "userdata", "state.sqlite");
-  if (!(0, import_fs2.existsSync)(stateDbPath)) {
-    return null;
-  }
-  const db2 = new import_better_sqlite32.default(stateDbPath, { readonly: true });
-  try {
-    const row = db2.prepare(
-      `SELECT t.thread_id AS threadId, t.title AS title
-         FROM projection_threads t
-         INNER JOIN projection_projects p ON p.project_id = t.project_id
-         WHERE p.workspace_root = ? AND t.deleted_at IS NULL
-         ORDER BY COALESCE(t.updated_at, t.created_at) DESC
-         LIMIT 1`
-    ).get(projectPath);
-    if (!row?.threadId || !row.title) {
-      return null;
-    }
-    return {
-      threadId: row.threadId,
-      title: row.title
-    };
-  } catch {
-    return null;
-  } finally {
-    db2.close();
-  }
-}
-function resolveLatestUserMessageAt(stateDir, projectPath) {
-  const stateDbPath = (0, import_path3.join)(stateDir, "userdata", "state.sqlite");
-  if (!(0, import_fs2.existsSync)(stateDbPath)) {
-    return null;
-  }
-  const db2 = new import_better_sqlite32.default(stateDbPath, { readonly: true });
-  try {
-    const row = db2.prepare(
-      `SELECT m.created_at AS lastUserMessageAt
-         FROM projection_thread_messages m
-         INNER JOIN projection_threads t ON t.thread_id = m.thread_id
-         INNER JOIN projection_projects p ON p.project_id = t.project_id
-         WHERE p.workspace_root = ?
-           AND p.deleted_at IS NULL
-           AND t.deleted_at IS NULL
-           AND m.role = 'user'
-         ORDER BY m.created_at DESC
-         LIMIT 1`
-    ).get(projectPath);
-    return row?.lastUserMessageAt ?? null;
-  } catch {
-    return null;
-  } finally {
-    db2.close();
-  }
-}
-function getT3CodeLastUserMessageAt(instanceId, projectPath) {
-  const stateDir = (0, import_path3.join)((0, import_os2.homedir)(), ".centipede-dev", "t3code-state", instanceId);
-  return resolveLatestUserMessageAt(stateDir, projectPath);
-}
-function getT3CodeThreadInfo(instanceId, projectPath) {
-  const runtime = runtimes.get(instanceId);
-  const baseUrl = runtime?.url ?? null;
-  const stateDir = (0, import_path3.join)((0, import_os2.homedir)(), ".centipede-dev", "t3code-state", instanceId);
-  const threadInfo = resolveBootstrapThreadInfo(stateDir, projectPath);
-  if (!threadInfo) {
-    return {
-      url: baseUrl,
-      threadTitle: null,
-      lastUserMessageAt: getT3CodeLastUserMessageAt(instanceId, projectPath)
-    };
-  }
-  return {
-    url: baseUrl ? new URL(`/${threadInfo.threadId}`, `${baseUrl}/`).toString() : null,
-    threadTitle: threadInfo.title,
-    lastUserMessageAt: getT3CodeLastUserMessageAt(instanceId, projectPath)
-  };
-}
-async function waitForBootstrapThreadInfo(baseUrl, stateDir, projectPath, timeoutMs = 5e3) {
-  const started = Date.now();
-  while (Date.now() - started < timeoutMs) {
-    const threadInfo = resolveBootstrapThreadInfo(stateDir, projectPath);
-    if (threadInfo) {
-      return {
-        url: new URL(`/${threadInfo.threadId}`, `${baseUrl}/`).toString(),
-        threadTitle: threadInfo.title,
-        lastUserMessageAt: resolveLatestUserMessageAt(stateDir, projectPath)
-      };
-    }
-    await new Promise((resolve2) => setTimeout(resolve2, 200));
-  }
-  return {
-    url: baseUrl,
-    threadTitle: null,
-    lastUserMessageAt: resolveLatestUserMessageAt(stateDir, projectPath)
-  };
-}
-async function startT3Code(instanceId, projectPath, scope) {
-  const pendingStop = pendingStops.get(instanceId);
-  if (pendingStop) {
-    clearTimeout(pendingStop);
-    pendingStops.delete(instanceId);
-  }
-  const existing = runtimes.get(instanceId);
-  if (existing && existing.process.exitCode === null) {
-    const threadInfo = await waitForBootstrapThreadInfo(
-      existing.url,
-      (0, import_path3.join)((0, import_os2.homedir)(), ".centipede-dev", "t3code-state", instanceId),
-      existing.projectPath,
-      1500
-    );
-    return {
-      url: threadInfo.url,
-      logPath: existing.logPath,
-      threadTitle: threadInfo.threadTitle,
-      lastUserMessageAt: threadInfo.lastUserMessageAt
-    };
-  }
-  const pending = pendingStarts.get(instanceId);
-  if (pending) {
-    return pending;
-  }
-  const config = getT3CodeConfig();
-  if (!(0, import_fs2.existsSync)(config.sourcePath)) {
-    throw new Error(`T3Code source not found at ${config.sourcePath}`);
-  }
-  const startPromise = (async () => {
-    ensureBuilt(config.sourcePath, config.installCommand, config.buildCommand);
-    const port = await getFreePort();
-    const url = `http://127.0.0.1:${port}`;
-    const entrypoint = (0, import_path3.join)(config.sourcePath, config.entrypoint);
-    const logPath = prepareLogPath(instanceId);
-    (0, import_fs2.mkdirSync)((0, import_path3.dirname)(logPath), { recursive: true });
-    const logFd = (0, import_fs2.openSync)(logPath, "a");
-    const env = { ...process.env };
-    delete env.ELECTRON_RUN_AS_NODE;
-    delete env.T3CODE_AUTH_TOKEN;
-    env.PATH = prependBrowserCliToPath(env.PATH);
-    env.CENTIPEDE_BROWSER_SESSION_FILE = getBrowserCliSessionFilePath();
-    env.T3CODE_MODE = "web";
-    env.T3CODE_HOST = "127.0.0.1";
-    env.T3CODE_PORT = String(port);
-    env.T3CODE_NO_BROWSER = "1";
-    env.T3CODE_HOME = (0, import_path3.join)((0, import_os2.homedir)(), ".centipede-dev", "t3code-state", instanceId);
-    env.T3CODE_STATE_DIR = env.T3CODE_HOME;
-    (0, import_fs2.mkdirSync)(env.T3CODE_HOME, { recursive: true });
-    const browserApiToken = scope?.workspaceId && scope.projectId ? nanoid(32) : null;
-    if (browserApiToken && scope?.workspaceId && scope.projectId) {
-      registerToken(browserApiToken, scope.workspaceId, scope.projectId);
-      env.CENTIPEDE_API_PORT = String(getApiPort());
-      env.CENTIPEDE_API_TOKEN = browserApiToken;
-      env.CENTIPEDE_WORKSPACE_ID = scope.workspaceId;
-      env.CENTIPEDE_PROJECT_ID = scope.projectId;
-    }
-    const child = (0, import_child_process.spawn)("node", [
-      entrypoint,
-      "--mode",
-      "web",
-      "--host",
-      "127.0.0.1",
-      "--port",
-      String(port),
-      "--home-dir",
-      env.T3CODE_HOME,
-      "--auth-token",
-      "",
-      "--no-browser",
-      "--auto-bootstrap-project-from-cwd"
-    ], {
-      cwd: projectPath,
-      env,
-      stdio: ["ignore", logFd, logFd]
-    });
-    child.on("exit", () => {
-      if (browserApiToken) {
-        revokeToken(browserApiToken);
-      }
-      runtimes.delete(instanceId);
-      pendingStarts.delete(instanceId);
-      (0, import_fs2.closeSync)(logFd);
-    });
-    runtimes.set(instanceId, {
-      process: child,
-      url,
-      instanceId,
-      projectPath,
-      logPath,
-      browserApiToken
-    });
-    try {
-      await waitForReady(url);
-      await waitForAppShell(url);
-      await new Promise((resolve2) => setTimeout(resolve2, 350));
-      const threadInfo = await waitForBootstrapThreadInfo(url, env.T3CODE_HOME, projectPath);
-      return {
-        url: threadInfo.url,
-        logPath,
-        threadTitle: threadInfo.threadTitle,
-        lastUserMessageAt: threadInfo.lastUserMessageAt
-      };
-    } catch (error) {
-      child.kill();
-      if (browserApiToken) {
-        revokeToken(browserApiToken);
-      }
-      runtimes.delete(instanceId);
-      throw error;
-    } finally {
-      pendingStarts.delete(instanceId);
-    }
-  })();
-  pendingStarts.set(instanceId, startPromise);
-  return startPromise;
-}
-function stopT3Code(instanceId) {
-  if (pendingStops.has(instanceId)) return;
-  const timer = setTimeout(() => {
-    pendingStops.delete(instanceId);
-    const instance = runtimes.get(instanceId);
-    if (!instance) return;
-    if (instance.browserApiToken) {
-      revokeToken(instance.browserApiToken);
-    }
-    instance.process.kill();
-    runtimes.delete(instanceId);
-  }, 1500);
-  pendingStops.set(instanceId, timer);
-}
-function stopAllT3Code() {
-  for (const [, timer] of pendingStops) {
-    clearTimeout(timer);
-  }
-  pendingStops.clear();
-  for (const [instanceId, instance] of runtimes) {
-    if (instance.browserApiToken) {
-      revokeToken(instance.browserApiToken);
-    }
-    instance.process.kill();
-    runtimes.delete(instanceId);
-  }
-}
-
 // src/dev-server/index.ts
 var dataDir = (0, import_path4.join)((0, import_os3.homedir)(), ".centipede-dev");
 if (!(0, import_fs3.existsSync)(dataDir)) (0, import_fs3.mkdirSync)(dataDir, { recursive: true });
 var dbPath = (0, import_path4.join)(dataDir, "centipede-dev.db");
-var db = new import_better_sqlite33.default(dbPath);
+var db = new import_better_sqlite32.default(dbPath);
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 db.exec(`
@@ -795,6 +1076,31 @@ var browserApiPort = null;
 function getShell() {
   if (process.platform === "win32") return "powershell.exe";
   return process.env.SHELL || "/bin/zsh";
+}
+function getBrowserCliBinDir2() {
+  return (0, import_path4.join)(process.cwd(), "resources", "browser-cli", "bin");
+}
+function prependBrowserCliToPath2(existingPath) {
+  const binDir = getBrowserCliBinDir2();
+  if (!existingPath) {
+    return binDir;
+  }
+  return [binDir, ...existingPath.split(":").filter(Boolean)].join(":");
+}
+function getBrowserCommandPath2() {
+  if (process.platform === "win32") {
+    return (0, import_path4.join)(getBrowserCliBinDir2(), "browser.js");
+  }
+  return (0, import_path4.join)(getBrowserCliBinDir2(), "browser");
+}
+function getBrowserCliCommandPath2() {
+  if (process.platform === "win32") {
+    return (0, import_path4.join)(getBrowserCliBinDir2(), "browser-cli.js");
+  }
+  return (0, import_path4.join)(getBrowserCliBinDir2(), "browser-cli");
+}
+function getBrowserCliSessionFilePath2() {
+  return (0, import_path4.join)(dataDir, "browser-cli", "sessions.json");
 }
 function registerBrowserToken(token, workspaceId, projectId) {
   browserTokens.set(token, { workspaceId, projectId });
@@ -1239,6 +1545,10 @@ var handlers = {
     }
     env.TERM = "xterm-256color";
     env.COLORTERM = "truecolor";
+    env.PATH = prependBrowserCliToPath2(env.PATH);
+    env.CENTIPEDE_BROWSER = getBrowserCommandPath2();
+    env.CENTIPEDE_BROWSER_CLI = getBrowserCliCommandPath2();
+    env.CENTIPEDE_BROWSER_SESSION_FILE = getBrowserCliSessionFilePath2();
     const browserApiToken = nanoid(32);
     registerBrowserToken(browserApiToken, args.workspaceId, args.projectId);
     if (browserApiPort !== null) {
@@ -1308,9 +1618,11 @@ var handlers = {
     if (!resolvedInstanceId) {
       throw new Error("Missing T3Code panel instance id");
     }
-    return startT3Code(resolvedInstanceId, args.projectPath, {
-      workspaceId: args.workspaceId,
-      projectId: args.projectId
+    return ensurePanelThread({
+      panelId: resolvedInstanceId,
+      centipedeProjectId: args.projectId ?? resolvedInstanceId,
+      projectPath: args.projectPath,
+      projectName: args.projectPath.split("/").filter(Boolean).at(-1) ?? "Project"
     });
   },
   "t3code:stop": (payload) => {
@@ -1318,15 +1630,37 @@ var handlers = {
     if (!resolvedInstanceId) {
       throw new Error("Missing T3Code panel instance id");
     }
-    stopT3Code(resolvedInstanceId);
+    stopAllT3Code();
   },
   "t3code:get-thread-info": (args) => {
-    const resolvedInstanceId = args.instanceId ?? args.workspaceId;
-    if (!resolvedInstanceId) {
-      throw new Error("Missing T3Code panel instance id");
+    const resolvedThreadId = args.t3ThreadId ?? args.instanceId ?? args.workspaceId;
+    if (!resolvedThreadId) {
+      throw new Error("Missing T3Code thread id");
     }
-    return getT3CodeThreadInfo(resolvedInstanceId, args.projectPath);
+    return getThreadInfo(resolvedThreadId);
   },
+  [T3CODE_CHANNELS.ENSURE_RUNTIME]: () => ensureRuntime(),
+  [T3CODE_CHANNELS.ENSURE_PROJECT]: (args) => ensureT3Project({
+    centipedeProjectId: args.centipedeProjectId,
+    projectPath: args.projectPath,
+    projectName: args.projectName,
+    existingT3ProjectId: args.existingT3ProjectId
+  }),
+  [T3CODE_CHANNELS.ENSURE_PANEL_THREAD]: (args) => ensurePanelThread({
+    panelId: args.panelId,
+    centipedeProjectId: args.centipedeProjectId,
+    projectPath: args.projectPath,
+    projectName: args.projectName,
+    existingT3ProjectId: args.existingT3ProjectId,
+    existingT3ThreadId: args.existingT3ThreadId
+  }),
+  [T3CODE_CHANNELS.GET_THREAD_INFO]: (args) => getThreadInfo(args.t3ThreadId),
+  [T3CODE_CHANNELS.WATCH_THREAD]: (args) => watchThread({
+    panelId: args.panelId,
+    t3ThreadId: args.t3ThreadId,
+    priority: args.priority
+  }),
+  [T3CODE_CHANNELS.UNWATCH_THREAD]: (args) => unwatchThread(args.panelId),
   [BROWSER_CHANNELS.WEBVIEW_READY]: () => true,
   [BROWSER_CHANNELS.WEBVIEW_DESTROYED]: () => true,
   [BROWSER_CHANNELS.URL_CHANGED]: (payload) => {

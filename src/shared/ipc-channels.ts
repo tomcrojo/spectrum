@@ -66,6 +66,14 @@ export const BROWSER_CHANNELS = {
   AUTOMATION_STATE_CHANGED: 'browser:automation-state-changed'
 } as const
 
+export const FILE_CHANNELS = {
+  READ: 'file:read',
+  WRITE: 'file:write',
+  LIST_TREE: 'file:list-tree',
+  STAT: 'file:stat',
+  OPEN_IN_PANEL: 'file:open-in-panel'
+} as const
+
 // Provider channels
 export const PROVIDER_CHANNELS = {
   LIST: 'provider:list',

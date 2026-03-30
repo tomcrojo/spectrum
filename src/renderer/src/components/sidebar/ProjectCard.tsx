@@ -1,6 +1,13 @@
 import { cn } from '@renderer/lib/cn'
 import { ProgressIcon } from '@renderer/components/shared/ProgressIcon'
 import { PROJECT_COLOR_HEX } from '@renderer/lib/project-colors'
+import {
+  getDominantNotificationKind,
+  getThreadNotificationClasses,
+  getUnreadThreadNotificationKind
+} from '@renderer/lib/thread-notifications'
+import { usePanelRuntimeStore } from '@renderer/stores/panel-runtime.store'
+import { useWorkspacesStore } from '@renderer/stores/workspaces.store'
 import { useUiStore } from '@renderer/stores/ui.store'
 import type { Project } from '@shared/project.types'
 
@@ -14,8 +21,19 @@ const progressLabels = ['Starting', 'In Progress', 'Almost Done', 'Complete'] as
 
 export function ProjectCard({ project, active, onClick }: ProjectCardProps) {
   const { showProjectPage, toggleProjectPage } = useUiStore()
+  const workspaces = useWorkspacesStore((state) => state.workspaces)
+  const activePanels = useWorkspacesStore((state) => state.activePanels)
+  const panelRuntimeById = usePanelRuntimeStore((state) => state.panelRuntimeById)
   const isProjectPageOpen = active && showProjectPage
   const colorHex = PROJECT_COLOR_HEX[project.color]
+  const projectWorkspaceIds = new Set(
+    workspaces.filter((workspace) => workspace.projectId === project.id).map((workspace) => workspace.id)
+  )
+  const notificationKinds = activePanels
+    .filter((panel) => projectWorkspaceIds.has(panel.workspaceId))
+    .map((panel) => getUnreadThreadNotificationKind(panelRuntimeById[panel.panelId]))
+  const projectNotificationKind = getDominantNotificationKind(notificationKinds)
+  const hasUnreadNotification = notificationKinds.some(Boolean)
 
   const handleArrowClick = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -41,8 +59,16 @@ export function ProjectCard({ project, active, onClick }: ProjectCardProps) {
       <div className="flex items-start gap-2 min-w-0">
         <ProgressIcon progress={project.progress} />
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium text-text-primary truncate">
-            {project.name}
+          <div className="flex items-center gap-2">
+            <div className="text-sm font-medium text-text-primary truncate flex-1">
+              {project.name}
+            </div>
+            {hasUnreadNotification ? (
+              <span
+                className={`h-2.5 w-2.5 rounded-full ring-4 ${getThreadNotificationClasses(projectNotificationKind).dot}`}
+                title="Unread workspace notification"
+              />
+            ) : null}
           </div>
         </div>
         <div

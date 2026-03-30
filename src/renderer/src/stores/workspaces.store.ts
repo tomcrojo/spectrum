@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { nanoid } from 'nanoid'
+import type { OpenFileInPanelInput, OpenFileInPanelResult } from '@shared/file.types'
 import type {
   Workspace,
   CreateWorkspaceInput,
@@ -8,7 +9,7 @@ import type {
   PanelConfig,
   WorkspaceLayoutState
 } from '@shared/workspace.types'
-import { workspacesApi } from '@renderer/lib/ipc'
+import { filesApi, workspacesApi } from '@renderer/lib/ipc'
 import { usePanelRuntimeStore } from './panel-runtime.store'
 
 export interface ActiveWorkspacePanel {
@@ -18,6 +19,10 @@ export interface ActiveWorkspacePanel {
   cwd: string
   panelType: PanelType
   panelTitle: string
+  providerId?: string
+  filePath?: string
+  cursorLine?: number
+  cursorColumn?: number
   t3ProjectId?: string
   t3ThreadId?: string
   url?: string
@@ -30,6 +35,8 @@ interface WorkspacesState {
   activePanels: ActiveWorkspacePanel[]
   focusedPanelId: string | null
   lastFocusedPanelByWorkspace: Record<string, string>
+  dirtyPanelIds: Record<string, boolean>
+  closePanelGuardById: Record<string, () => boolean | Promise<boolean>>
 
   loadWorkspaces: (projectId: string, includeArchived?: boolean) => Promise<void>
   loadArchivedWorkspaces: (projectId: string) => Promise<void>
@@ -46,14 +53,30 @@ interface WorkspacesState {
   insertPanelAfterWithoutFocus: (panel: ActiveWorkspacePanel, afterPanelId: string) => void
   prependPanelToWorkspace: (panel: ActiveWorkspacePanel) => void
   closeActivePanel: (panelId: string) => void
+  requestClosePanel: (panelId: string) => Promise<void>
   setFocusedPanel: (panelId: string | null) => void
   focusWorkspace: (workspaceId: string) => void
+  openFilePanel: (input: OpenFileInPanelInput | OpenFileInPanelResult) => Promise<string>
+  setPanelDirty: (panelId: string, isDirty: boolean) => void
+  registerPanelCloseGuard: (
+    panelId: string,
+    guard: (() => boolean | Promise<boolean>) | null
+  ) => void
   updatePanelLayout: (
     panelId: string,
     patch: Partial<
       Pick<
         ActiveWorkspacePanel,
-        'url' | 'width' | 'height' | 'panelTitle' | 't3ProjectId' | 't3ThreadId'
+        | 'url'
+        | 'width'
+        | 'height'
+        | 'panelTitle'
+        | 'providerId'
+        | 't3ProjectId'
+        | 't3ThreadId'
+        | 'filePath'
+        | 'cursorLine'
+        | 'cursorColumn'
       >
     >
   ) => void
@@ -64,11 +87,39 @@ interface WorkspacesState {
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const AUTOSAVE_DELAY = 400
 
+function getFilePanelTitle(relativePath: string, filePath: string): string {
+  const candidate = relativePath.split('/').at(-1)?.split('\\').at(-1)?.trim()
+  if (candidate) {
+    return candidate
+  }
+
+  return filePath.split('/').at(-1)?.split('\\').at(-1) ?? 'Files'
+}
+
+function getProjectRootFromNormalizedPath(path: string, relativePath: string): string {
+  if (!relativePath) {
+    return path
+  }
+
+  const normalizedRelativePath = relativePath.replace(/\\/g, '/')
+  const normalizedPath = path.replace(/\\/g, '/')
+  const suffix = `/${normalizedRelativePath}`
+  if (normalizedPath.endsWith(suffix)) {
+    return path.slice(0, path.length - normalizedRelativePath.length - 1)
+  }
+
+  return path
+}
+
 function buildLayoutState(panels: ActiveWorkspacePanel[]): WorkspaceLayoutState {
   const panelConfigs: PanelConfig[] = panels.map((panel) => ({
     id: panel.panelId,
     type: panel.panelType,
     title: panel.panelTitle,
+    providerId: panel.providerId,
+    filePath: panel.filePath,
+    cursorLine: panel.cursorLine,
+    cursorColumn: panel.cursorColumn,
     t3ProjectId: panel.t3ProjectId,
     t3ThreadId: panel.t3ThreadId,
     url: panel.url,
@@ -94,6 +145,10 @@ export function buildPanelsFromWorkspace(workspace: Workspace, cwd: string): Act
     cwd,
     panelType: panel.type,
     panelTitle: panel.title,
+    providerId: panel.providerId,
+    filePath: panel.filePath,
+    cursorLine: panel.cursorLine,
+    cursorColumn: panel.cursorColumn,
     t3ProjectId: panel.t3ProjectId,
     t3ThreadId: panel.t3ThreadId,
     url: panel.url,
@@ -256,7 +311,16 @@ function patchChangesPanel(
   patch: Partial<
     Pick<
       ActiveWorkspacePanel,
-      'url' | 'width' | 'height' | 'panelTitle' | 't3ProjectId' | 't3ThreadId'
+      | 'url'
+      | 'width'
+      | 'height'
+      | 'panelTitle'
+      | 'providerId'
+      | 't3ProjectId'
+      | 't3ThreadId'
+      | 'filePath'
+      | 'cursorLine'
+      | 'cursorColumn'
     >
   >
 ): boolean {
@@ -283,6 +347,8 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
   activePanels: [],
   focusedPanelId: null,
   lastFocusedPanelByWorkspace: {},
+  dirtyPanelIds: {},
+  closePanelGuardById: {},
 
   loadWorkspaces: async (projectId, includeArchived = false) => {
     const workspaces = await workspacesApi.list({ projectId, includeArchived })
@@ -349,6 +415,16 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
         workspaces: state.workspaces.filter((entry) => entry.id !== id),
         activePanels: remainingPanels,
         focusedPanelId: nextFocusedPanelId,
+        dirtyPanelIds: Object.fromEntries(
+          Object.entries(state.dirtyPanelIds).filter(([panelId]) =>
+            remainingPanels.some((panel) => panel.panelId === panelId)
+          )
+        ),
+        closePanelGuardById: Object.fromEntries(
+          Object.entries(state.closePanelGuardById).filter(([panelId]) =>
+            remainingPanels.some((panel) => panel.panelId === panelId)
+          )
+        ),
         lastFocusedPanelByWorkspace: Object.fromEntries(
           Object.entries(state.lastFocusedPanelByWorkspace).filter(([workspaceId]) => workspaceId !== id)
         )
@@ -619,6 +695,12 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
       return {
         activePanels: nextPanels,
         focusedPanelId: nextFocusedPanelId,
+        dirtyPanelIds: Object.fromEntries(
+          Object.entries(state.dirtyPanelIds).filter(([entryPanelId]) => entryPanelId !== panelId)
+        ),
+        closePanelGuardById: Object.fromEntries(
+          Object.entries(state.closePanelGuardById).filter(([entryPanelId]) => entryPanelId !== panelId)
+        ),
         lastFocusedPanelByWorkspace:
           panel && state.lastFocusedPanelByWorkspace[panel.workspaceId] === panelId
             ? (() => {
@@ -647,6 +729,18 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
     if (panel) {
       scheduleSave(panel.workspaceId, get)
     }
+  },
+
+  requestClosePanel: async (panelId) => {
+    const guard = get().closePanelGuardById[panelId]
+    if (guard) {
+      const allowed = await guard()
+      if (!allowed) {
+        return
+      }
+    }
+
+    get().closeActivePanel(panelId)
   },
 
   setFocusedPanel: (panelId) => {
@@ -688,6 +782,104 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
           [workspaceId]: panelId
         }
       }
+    })
+  },
+
+  openFilePanel: async (input) => {
+    const normalized =
+      'relativePath' in input ? input : await filesApi.openInPanel(input)
+    const title = getFilePanelTitle(normalized.relativePath, normalized.path)
+    const panelId = nanoid()
+
+    set((state) => {
+      const workspace = state.workspaces.find((entry) => entry.id === normalized.workspaceId)
+      const workspacePanels = state.activePanels.filter(
+        (panel) => panel.workspaceId === normalized.workspaceId
+      )
+      const projectRoot =
+        workspacePanels[0]?.cwd ??
+        getProjectRootFromNormalizedPath(normalized.path, normalized.relativePath)
+
+      const nextPanel: ActiveWorkspacePanel = {
+        panelId,
+        workspaceId: normalized.workspaceId,
+        workspaceName: workspace?.name ?? workspacePanels[0]?.workspaceName ?? 'Workspace',
+        cwd: projectRoot,
+        panelType: 'file',
+        panelTitle: title,
+        filePath: normalized.path,
+        cursorLine: normalized.line,
+        cursorColumn: normalized.column
+      }
+
+      const focusedPanel =
+        state.focusedPanelId &&
+        state.activePanels.find((panel) => panel.panelId === state.focusedPanelId)
+      const nextPanels = [...state.activePanels]
+
+      if (focusedPanel?.workspaceId === normalized.workspaceId) {
+        const focusedIndex = nextPanels.findIndex((panel) => panel.panelId === focusedPanel.panelId)
+        nextPanels.splice(focusedIndex + 1, 0, nextPanel)
+      } else if (workspacePanels.length > 0) {
+        const lastPanel = workspacePanels.at(-1)
+        const lastPanelIndex = lastPanel
+          ? nextPanels.findIndex((panel) => panel.panelId === lastPanel.panelId)
+          : -1
+
+        if (lastPanelIndex >= 0) {
+          nextPanels.splice(lastPanelIndex + 1, 0, nextPanel)
+        } else {
+          nextPanels.push(nextPanel)
+        }
+      } else {
+        nextPanels.push(nextPanel)
+      }
+
+      syncRuntimePanels(nextPanels)
+      usePanelRuntimeStore.getState().setActiveWorkspaceId(normalized.workspaceId)
+
+      return {
+        activePanels: nextPanels,
+        focusedPanelId: panelId,
+        lastFocusedPanelByWorkspace: {
+          ...state.lastFocusedPanelByWorkspace,
+          [normalized.workspaceId]: panelId
+        }
+      }
+    })
+
+    scheduleSave(normalized.workspaceId, get)
+    return panelId
+  },
+
+  setPanelDirty: (panelId, isDirty) => {
+    set((state) => {
+      const currentlyDirty = Boolean(state.dirtyPanelIds[panelId])
+      if (currentlyDirty === isDirty) {
+        return state
+      }
+
+      const dirtyPanelIds = { ...state.dirtyPanelIds }
+      if (isDirty) {
+        dirtyPanelIds[panelId] = true
+      } else {
+        delete dirtyPanelIds[panelId]
+      }
+
+      return { dirtyPanelIds }
+    })
+  },
+
+  registerPanelCloseGuard: (panelId, guard) => {
+    set((state) => {
+      const closePanelGuardById = { ...state.closePanelGuardById }
+      if (guard) {
+        closePanelGuardById[panelId] = guard
+      } else {
+        delete closePanelGuardById[panelId]
+      }
+
+      return { closePanelGuardById }
     })
   },
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { T3CODE_CHANNELS } from '@shared/ipc-channels'
 import { t3codeApi } from '@renderer/lib/ipc'
+import { openFileInWorkspace } from '@renderer/lib/open-file'
 import { transport } from '@renderer/lib/transport'
 import { incrementDevMountCount } from '@renderer/lib/dev-performance'
 import { usePanelRuntimeStore } from '@renderer/stores/panel-runtime.store'
@@ -30,6 +31,34 @@ interface ThreadInfo {
   url: string | null
   threadTitle: string | null
   lastUserMessageAt: string | null
+  providerId: string | null
+}
+
+function isOpenFileMessage(
+  value: unknown
+): value is {
+  type: 'centipede:open-file'
+  payload: {
+    path: string
+    line?: number
+    column?: number
+  }
+} {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const candidate = value as {
+    type?: unknown
+    payload?: { path?: unknown; line?: unknown; column?: unknown }
+  }
+
+  return (
+    candidate.type === 'centipede:open-file' &&
+    typeof candidate.payload?.path === 'string' &&
+    (candidate.payload.line === undefined || typeof candidate.payload.line === 'number') &&
+    (candidate.payload.column === undefined || typeof candidate.payload.column === 'number')
+  )
 }
 
 function T3CodeShell({
@@ -120,6 +149,9 @@ export function T3CodePanel({
       if (threadInfo.threadTitle?.trim()) {
         updatePanelLayout(panelId, { panelTitle: threadInfo.threadTitle.trim() })
       }
+      if (threadInfo.providerId) {
+        updatePanelLayout(panelId, { providerId: threadInfo.providerId })
+      }
       if (threadInfo.lastUserMessageAt) {
         updatePanelRuntime(panelId, {
           t3ThreadTitle: threadInfo.threadTitle,
@@ -153,12 +185,14 @@ export function T3CodePanel({
         if (
           runtime.t3ProjectId !== t3ProjectId ||
           runtime.t3ThreadId !== t3ThreadId ||
-          runtime.threadTitle?.trim()
+          runtime.threadTitle?.trim() ||
+          runtime.providerId
         ) {
           updatePanelLayout(panelId, {
             t3ProjectId: runtime.t3ProjectId,
             t3ThreadId: runtime.t3ThreadId,
-            panelTitle: runtime.threadTitle?.trim() || undefined
+            panelTitle: runtime.threadTitle?.trim() || undefined,
+            providerId: runtime.providerId ?? undefined
           })
         }
 
@@ -214,14 +248,21 @@ export function T3CodePanel({
         t3ThreadId: string
         threadTitle: string | null
         lastUserMessageAt: string | null
+        providerId: string | null
       }) => {
         if (payload.panelId !== panelId) {
           return
         }
 
-        if (payload.threadTitle?.trim()) {
-          updatePanelLayout(panelId, { panelTitle: payload.threadTitle.trim() })
-        }
+        updatePanelLayout(
+          panelId,
+          payload.threadTitle?.trim()
+            ? {
+                panelTitle: payload.threadTitle.trim(),
+                providerId: payload.providerId ?? undefined
+              }
+            : { providerId: payload.providerId ?? undefined }
+        )
         updatePanelRuntime(panelId, {
           t3ThreadTitle: payload.threadTitle,
           t3LastUserMessageAt: payload.lastUserMessageAt
@@ -299,6 +340,42 @@ export function T3CodePanel({
   useEffect(() => {
     postTheme()
   }, [theme, iframeUrl])
+
+  useEffect(() => {
+    if (!binding?.baseUrl) {
+      return
+    }
+
+    const allowedOrigin = new URL(binding.baseUrl).origin
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== allowedOrigin) {
+        return
+      }
+
+      if (event.source !== iframeRef.current?.contentWindow) {
+        return
+      }
+
+      if (!isOpenFileMessage(event.data)) {
+        return
+      }
+
+      void openFileInWorkspace({
+        projectId,
+        workspaceId,
+        path: event.data.payload.path,
+        line: event.data.payload.line,
+        column: event.data.payload.column,
+        source: 't3code'
+      })
+    }
+
+    window.addEventListener('message', handleMessage)
+    return () => {
+      window.removeEventListener('message', handleMessage)
+    }
+  }, [binding?.baseUrl, projectId, workspaceId])
 
   useEffect(() => {
     if (!autoFocus || !iframeUrl || hydrationState !== 'live') {

@@ -106,3 +106,13 @@ textarea,
   background-size: 24px 24px;
   background-color: var(--color-bg);
 }
+
+.monaco-editor,
+.monaco-editor * {
+  user-select: text;
+}
+
+.monaco-editor .margin,
+.monaco-editor .monaco-editor-background {
+  background: var(--app-color-bg) !important;
+}

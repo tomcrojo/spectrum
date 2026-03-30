@@ -4,10 +4,16 @@ import { usePanelRuntimeStore } from '@renderer/stores/panel-runtime.store'
 import { useWorkspacesStore } from '@renderer/stores/workspaces.store'
 import { useProjectsStore } from '@renderer/stores/projects.store'
 import { useUiStore } from '@renderer/stores/ui.store'
+import { PanelGlyph } from '@renderer/components/shared/PanelIcons'
 import { ProgressIcon } from '@renderer/components/shared/ProgressIcon'
 import { Button } from '@renderer/components/shared/Button'
 import { Input } from '@renderer/components/shared/Input'
 import { formatWorkspaceLastEditedAt } from '@renderer/lib/dates'
+import {
+  getDominantNotificationKind,
+  getThreadNotificationClasses,
+  getUnreadThreadNotificationKind
+} from '@renderer/lib/thread-notifications'
 import type { PanelType } from '@shared/workspace.types'
 
 interface WorkspaceListProps {
@@ -25,12 +31,13 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
     unarchiveWorkspace,
     reopenWorkspace,
     addActivePanel,
-    closeActivePanel,
+    requestClosePanel,
     focusWorkspace,
     focusedPanelId,
     setFocusedPanel
   } = useWorkspacesStore()
   const activeWorkspaceId = usePanelRuntimeStore((state) => state.activeWorkspaceId)
+  const panelRuntimeById = usePanelRuntimeStore((state) => state.panelRuntimeById)
   const projects = useProjectsStore((s) => s.projects)
   const activeProjectId = useUiStore((s) => s.activeProjectId)
   const archivedTimestampFormat = useUiStore((s) => s.archivedTimestampFormat)
@@ -86,13 +93,28 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
               cwd: repoPath,
               panelType: panel.type,
               panelTitle: panel.title,
+              providerId: panel.providerId,
               url: panel.url,
               width: panel.width,
               height: panel.height
             }))
       )
     }))
+    .map((workspace) => {
+      const notificationKinds = workspace.panels.map((panel) =>
+        getUnreadThreadNotificationKind(panelRuntimeById[panel.panelId])
+      )
+
+      return {
+        ...workspace,
+        notificationCount: notificationKinds.filter(Boolean).length,
+        notificationKind: getDominantNotificationKind(notificationKinds)
+      }
+    })
   const archivedWorkspaces = workspaces.filter((workspace) => workspace.archived)
+
+  const getWorkspacePreviewPanels = (workspacePanels: typeof activeWorkspaces[number]['panels']) =>
+    Array.isArray(workspacePanels) ? workspacePanels.slice(0, 4) : []
 
   useEffect(() => {
     if (
@@ -175,6 +197,10 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
     if (editingWorkspaceId) return
     if (addPanelMenuWorkspaceId) setAddPanelMenuWorkspaceId(null)
 
+    setExpandedWorkspaceIds((current) =>
+      current.includes(workspaceId) ? current : [...current, workspaceId]
+    )
+
     clearPendingWorkspaceClick()
     workspaceClickTimeoutRef.current = setTimeout(() => {
       focusSelectedWorkspace(workspaceId)
@@ -213,6 +239,7 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
       cwd: repoPath,
       panelType: panel.type,
       panelTitle: panel.title,
+      providerId: panel.providerId,
       t3ProjectId: panel.t3ProjectId,
       t3ThreadId: panel.t3ThreadId
     })
@@ -227,7 +254,9 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
         ? 'T3Code'
         : panelType === 'browser'
           ? 'Browser'
-          : 'Terminal'
+          : panelType === 'file'
+            ? 'Files'
+            : 'Terminal'
 
     addActivePanel({
       panelId: nanoid(),
@@ -242,7 +271,7 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
 
   const handleClosePanel = (panelId: string, event: React.MouseEvent) => {
     event.stopPropagation()
-    closeActivePanel(panelId)
+    void requestClosePanel(panelId)
   }
 
   const handleArchive = async (workspaceId: string) => {
@@ -328,6 +357,18 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
                     {workspace.workspaceName}
                   </span>
                 )}
+                {workspace.notificationCount > 0 ? (
+                  <span
+                    className={`inline-flex min-w-5 items-center justify-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium leading-none ${
+                      getThreadNotificationClasses(workspace.notificationKind).badge
+                    }`}
+                    title={`${workspace.notificationCount} unread thread notification${
+                      workspace.notificationCount === 1 ? '' : 's'
+                    }`}
+                  >
+                    {workspace.notificationCount}
+                  </span>
+                ) : null}
                 <button
                   type="button"
                   onClick={(event) => {
@@ -355,6 +396,24 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
                     />
                   </svg>
                 </button>
+                {getWorkspacePreviewPanels(workspace.panels).length > 0 ? (
+                  <div className="ml-auto flex items-center pr-1">
+                    {getWorkspacePreviewPanels(workspace.panels).map((panel, index) => (
+                      <span
+                        key={panel.panelId}
+                        className={`flex h-5 w-5 items-center justify-center rounded-full border border-border bg-bg-raised text-text-secondary ${
+                          index === 0 ? '' : '-ml-1.5'
+                        }`}
+                      >
+                        <PanelGlyph
+                          panelType={panel.panelType}
+                          providerId={panel.providerId}
+                          className="h-3 w-3"
+                        />
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
                 <button
                   type="button"
                   title="Archive workspace"
@@ -396,41 +455,64 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
               {expandedWorkspaceIds.includes(workspace.workspaceId) ? (
                 <div className="border-t border-border-subtle px-6 py-2">
                   <div className="space-y-1">
-                    {workspace.panels.map((panel) => (
-                      <div
-                        key={panel.panelId}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          handlePanelClick(workspace.workspaceId, panel.panelId)
-                        }}
-                        className={`group/panel flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs transition-colors ${
-                          focusedPanelId === panel.panelId
-                            ? 'bg-bg-active text-text-primary'
-                            : 'bg-bg/40 text-text-secondary hover:bg-bg-active hover:text-text-primary'
-                        }`}
-                      >
-                        <span className="uppercase tracking-wide text-text-muted">
-                          {panel.panelType}
-                        </span>
-                        <span className="text-text-primary truncate flex-1">{panel.panelTitle}</span>
-                        <button
-                          type="button"
-                          title="Close panel"
-                          aria-label="Close panel"
-                          onClick={(event) => handleClosePanel(panel.panelId, event)}
-                          className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:text-text-primary hover:bg-bg-hover opacity-0 group-hover/panel:opacity-100 transition-all flex-shrink-0"
+                    {workspace.panels.map((panel) => {
+                      const notificationKind = getUnreadThreadNotificationKind(
+                        panelRuntimeById[panel.panelId]
+                      )
+
+                      return (
+                        <div
+                          key={panel.panelId}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            handlePanelClick(workspace.workspaceId, panel.panelId)
+                          }}
+                          className={`group/panel flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs transition-colors ${
+                            focusedPanelId === panel.panelId
+                              ? 'bg-bg-active text-text-primary'
+                              : 'bg-bg/40 text-text-secondary hover:bg-bg-active hover:text-text-primary'
+                          }`}
                         >
-                          <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
-                            <path
-                              d="M3 3L9 9M9 3L3 9"
-                              stroke="currentColor"
-                              strokeWidth={1.5}
-                              strokeLinecap="round"
+                          <span className="flex h-5 w-5 items-center justify-center rounded-full border border-border bg-bg-raised text-text-secondary">
+                            <PanelGlyph
+                              panelType={panel.panelType}
+                              providerId={panel.providerId}
+                              className="h-3 w-3"
                             />
-                          </svg>
-                        </button>
-                      </div>
-                    ))}
+                          </span>
+                          <span className="uppercase tracking-wide text-text-muted">
+                            {panel.panelType}
+                          </span>
+                          <span className="text-text-primary truncate flex-1">{panel.panelTitle}</span>
+                          {notificationKind ? (
+                            <span
+                              className={`h-2.5 w-2.5 rounded-full ring-4 ${getThreadNotificationClasses(notificationKind).dot}`}
+                              title={
+                                notificationKind === 'requires-input'
+                                  ? 'Thread requires input'
+                                  : 'Thread completed'
+                              }
+                            />
+                          ) : null}
+                          <button
+                            type="button"
+                            title="Close panel"
+                            aria-label="Close panel"
+                            onClick={(event) => handleClosePanel(panel.panelId, event)}
+                            className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:text-text-primary hover:bg-bg-hover opacity-0 group-hover/panel:opacity-100 transition-all flex-shrink-0"
+                          >
+                            <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
+                              <path
+                                d="M3 3L9 9M9 3L3 9"
+                                stroke="currentColor"
+                                strokeWidth={1.5}
+                                strokeLinecap="round"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                      )
+                    })}
                   </div>
                   <div className="relative mt-1">
                     <button
@@ -449,7 +531,7 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
                     </button>
                     {addPanelMenuWorkspaceId === workspace.workspaceId ? (
                       <div className="mt-1 rounded-lg border border-border bg-bg-raised p-1 shadow-lg">
-                        {(['t3code', 'terminal', 'browser'] as const).map((type) => (
+                        {(['t3code', 'terminal', 'browser', 'file'] as const).map((type) => (
                           <button
                             key={type}
                             type="button"
@@ -463,7 +545,9 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
                               ? 'T3Code'
                               : type === 'browser'
                                 ? 'Browser'
-                                : 'Terminal'}
+                                : type === 'file'
+                                  ? 'File Editor'
+                                  : 'Terminal'}
                           </button>
                         ))}
                       </div>

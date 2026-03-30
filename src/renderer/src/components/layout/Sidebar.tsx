@@ -6,9 +6,19 @@ import { NewProjectButton } from '@renderer/components/sidebar/NewProjectButton'
 import { Button } from '@renderer/components/shared/Button'
 import { ProgressIcon } from '@renderer/components/shared/ProgressIcon'
 import { cn } from '@renderer/lib/cn'
+import {
+  getDominantNotificationKind,
+  getThreadNotificationClasses,
+  getUnreadThreadNotificationKind
+} from '@renderer/lib/thread-notifications'
+import { usePanelRuntimeStore } from '@renderer/stores/panel-runtime.store'
+import { useWorkspacesStore } from '@renderer/stores/workspaces.store'
 
 export function Sidebar() {
   const { projects, loadProjects } = useProjectsStore()
+  const workspaces = useWorkspacesStore((state) => state.workspaces)
+  const activePanels = useWorkspacesStore((state) => state.activePanels)
+  const panelRuntimeById = usePanelRuntimeStore((state) => state.panelRuntimeById)
   const {
     activeProjectId,
     sidebarCollapsed,
@@ -73,20 +83,39 @@ export function Sidebar() {
       >
         {sidebarCollapsed
           ? projects.map((project) => (
-              <button
-                key={project.id}
-                onClick={() => setActiveProject(project.id)}
-                title={project.name}
-                aria-label={project.name}
-                className={cn(
-                  'mx-auto flex h-10 w-10 items-center justify-center rounded-lg border transition-colors',
-                  activeProjectId === project.id
-                    ? 'border-border bg-bg-active'
-                    : 'border-transparent hover:bg-bg-hover'
-                )}
-              >
-                <ProgressIcon progress={project.progress} />
-              </button>
+              (() => {
+                const projectWorkspaceIds = new Set(
+                  workspaces
+                    .filter((workspace) => workspace.projectId === project.id)
+                    .map((workspace) => workspace.id)
+                )
+                const notificationKinds = activePanels
+                  .filter((panel) => projectWorkspaceIds.has(panel.workspaceId))
+                  .map((panel) => getUnreadThreadNotificationKind(panelRuntimeById[panel.panelId]))
+                const notificationKind = getDominantNotificationKind(notificationKinds)
+
+                return (
+                  <button
+                    key={project.id}
+                    onClick={() => setActiveProject(project.id)}
+                    title={project.name}
+                    aria-label={project.name}
+                    className={cn(
+                      'relative mx-auto flex h-10 w-10 items-center justify-center rounded-lg border transition-colors',
+                      activeProjectId === project.id
+                        ? 'border-border bg-bg-active'
+                        : 'border-transparent hover:bg-bg-hover'
+                    )}
+                  >
+                    <ProgressIcon progress={project.progress} />
+                    {notificationKind ? (
+                      <span
+                        className={`absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full ring-4 ${getThreadNotificationClasses(notificationKind).dot}`}
+                      />
+                    ) : null}
+                  </button>
+                )
+              })()
             ))
           : projects.map((project) => (
               <ProjectCard

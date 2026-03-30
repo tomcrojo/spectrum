@@ -5,7 +5,8 @@ import {
   TERMINAL_CHANNELS,
   DIALOG_CHANNELS,
   T3CODE_CHANNELS,
-  BROWSER_CHANNELS
+  BROWSER_CHANNELS,
+  FILE_CHANNELS
 } from '@shared/ipc-channels'
 import type {
   Project,
@@ -22,6 +23,17 @@ import type {
   UpdateWorkspaceLayoutInput,
   UpdateWorkspaceLastPanelEditedAtInput
 } from '@shared/workspace.types'
+import type {
+  FileTreeNode,
+  OpenFileInPanelInput,
+  OpenFileInPanelResult,
+  ReadFileInput,
+  ReadFileResult,
+  StatFileInput,
+  StatFileResult,
+  WriteFileInput,
+  WriteFileResult
+} from '@shared/file.types'
 import { transport } from './transport'
 
 function invoke<T>(channel: string, ...args: any[]): Promise<T> {
@@ -114,12 +126,14 @@ export const t3codeApi = {
       t3ThreadId: string
       threadTitle: string | null
       lastUserMessageAt: string | null
+      providerId: string | null
     }>(T3CODE_CHANNELS.ENSURE_PANEL_THREAD, input),
   getThreadInfo: (t3ThreadId: string) =>
     invoke<{
       url: string | null
       threadTitle: string | null
       lastUserMessageAt: string | null
+      providerId: string | null
     }>(T3CODE_CHANNELS.GET_THREAD_INFO, { t3ThreadId }),
   watchThread: (input: {
     panelId: string
@@ -159,6 +173,15 @@ export const browserApi = {
     url?: string
     panelTitle?: string
   }) => invoke<boolean>(BROWSER_CHANNELS.URL_CHANGED, input)
+}
+
+export const filesApi = {
+  listTree: (projectId: string) => invoke<FileTreeNode>(FILE_CHANNELS.LIST_TREE, projectId),
+  read: (input: ReadFileInput) => invoke<ReadFileResult>(FILE_CHANNELS.READ, input),
+  write: (input: WriteFileInput) => invoke<WriteFileResult>(FILE_CHANNELS.WRITE, input),
+  stat: (input: StatFileInput) => invoke<StatFileResult>(FILE_CHANNELS.STAT, input),
+  openInPanel: (input: OpenFileInPanelInput) =>
+    invoke<OpenFileInPanelResult>(FILE_CHANNELS.OPEN_IN_PANEL, input)
 }
 
 // Dialogs

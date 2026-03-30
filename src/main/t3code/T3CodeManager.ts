@@ -40,6 +40,7 @@ interface ThreadRow {
 interface ThreadMetadata {
   threadTitle: string | null
   lastUserMessageAt: string | null
+  providerId: string | null
 }
 
 interface WatchedThreadState {
@@ -54,6 +55,7 @@ export interface T3CodeThreadInfo {
   url: string | null
   threadTitle: string | null
   lastUserMessageAt: string | null
+  providerId: string | null
 }
 
 const GLOBAL_RUNTIME_ID = 'global'
@@ -73,6 +75,7 @@ const pendingPanelThreadEnsures = new Map<
     t3ThreadId: string
     threadTitle: string | null
     lastUserMessageAt: string | null
+    providerId: string | null
   }>
 >()
 const watchedThreadsByPanelId = new Map<string, WatchedThreadState>()
@@ -328,19 +331,22 @@ function getThreadMetadata(threadId: string): ThreadMetadata {
   if (!db) {
     return {
       threadTitle: null,
-      lastUserMessageAt: null
+      lastUserMessageAt: null,
+      providerId: null
     }
   }
 
   try {
     const threadRow = db
       .prepare(
-        `SELECT title
+        `SELECT
+           title,
+           model_selection_json AS modelSelectionJson
          FROM projection_threads
          WHERE thread_id = ?
            AND deleted_at IS NULL`
       )
-      .get(threadId) as { title?: string } | undefined
+      .get(threadId) as { title?: string; modelSelectionJson?: string } | undefined
 
     const messageRow = db
       .prepare(
@@ -355,11 +361,18 @@ function getThreadMetadata(threadId: string): ThreadMetadata {
 
     return {
       threadTitle: threadRow?.title ?? null,
-      lastUserMessageAt: messageRow?.lastUserMessageAt ?? null
+      lastUserMessageAt: messageRow?.lastUserMessageAt ?? null,
+      providerId: getProviderIdFromModelSelection(threadRow?.modelSelectionJson)
     }
   } finally {
     db.close()
   }
+}
+
+function getProviderIdFromModelSelection(modelSelectionJson?: string | null): string | null {
+  const parsed = parseModelSelection(modelSelectionJson)
+  const providerId = parsed.provider
+  return typeof providerId === 'string' && providerId.trim().length > 0 ? providerId : null
 }
 
 function emitThreadInfoChanged(payload: {
@@ -367,6 +380,7 @@ function emitThreadInfoChanged(payload: {
   t3ThreadId: string
   threadTitle: string | null
   lastUserMessageAt: string | null
+  providerId: string | null
 }): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {
@@ -409,7 +423,8 @@ async function pollWatchedThreads(): Promise<void> {
     const snapshot = getThreadMetadata(watch.t3ThreadId)
     if (
       watch.lastSnapshot?.threadTitle === snapshot.threadTitle &&
-      watch.lastSnapshot?.lastUserMessageAt === snapshot.lastUserMessageAt
+      watch.lastSnapshot?.lastUserMessageAt === snapshot.lastUserMessageAt &&
+      watch.lastSnapshot?.providerId === snapshot.providerId
     ) {
       continue
     }
@@ -419,7 +434,8 @@ async function pollWatchedThreads(): Promise<void> {
       panelId: watch.panelId,
       t3ThreadId: watch.t3ThreadId,
       threadTitle: snapshot.threadTitle,
-      lastUserMessageAt: snapshot.lastUserMessageAt
+      lastUserMessageAt: snapshot.lastUserMessageAt,
+      providerId: snapshot.providerId
     })
   }
 }
@@ -767,6 +783,7 @@ export async function ensurePanelThread(input: {
   t3ThreadId: string
   threadTitle: string | null
   lastUserMessageAt: string | null
+  providerId: string | null
 }> {
   const pending = pendingPanelThreadEnsures.get(input.panelId)
   if (pending) {
@@ -794,7 +811,8 @@ export async function ensurePanelThread(input: {
       t3ProjectId,
       t3ThreadId: thread.threadId,
       threadTitle: metadata.threadTitle,
-      lastUserMessageAt: metadata.lastUserMessageAt
+      lastUserMessageAt: metadata.lastUserMessageAt,
+      providerId: metadata.providerId
     }
   })()
 
@@ -817,7 +835,8 @@ export async function getThreadInfo(t3ThreadId: string): Promise<T3CodeThreadInf
         ? buildEmbeddedThreadUrl(activeRuntime.baseUrl, t3ThreadId)
         : null,
     threadTitle: metadata.threadTitle,
-    lastUserMessageAt: metadata.lastUserMessageAt
+    lastUserMessageAt: metadata.lastUserMessageAt,
+    providerId: metadata.providerId
   }
 }
 
