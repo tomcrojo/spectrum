@@ -2,10 +2,12 @@ import { create } from 'zustand'
 
 export type UiTheme = 'light' | 'dark' | 'system'
 export type ArchivedTimestampFormat = 'relative' | 'full'
+export type CanvasInteractionMode = 'structured' | 'free'
 
 const THEME_STORAGE_KEY = 'centipede:theme'
 const ARCHIVED_TIMESTAMP_FORMAT_STORAGE_KEY = 'centipede:archived-timestamp-format'
 const AUTO_CENTER_FOCUSED_PANEL_STORAGE_KEY = 'centipede:auto-center-focused-panel'
+const CANVAS_INTERACTION_MODE_STORAGE_KEY = 'centipede:canvas-interaction-mode'
 export const CANVAS_ZOOM_STORAGE_KEY = 'centipede:canvas-zoom'
 export const CANVAS_ZOOM_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3] as const
 
@@ -78,6 +80,19 @@ function getInitialCanvasZoom(): number {
   return clampCanvasZoom(stored)
 }
 
+function getInitialCanvasInteractionMode(): CanvasInteractionMode {
+  if (typeof window === 'undefined') {
+    return 'structured'
+  }
+
+  const stored = window.localStorage.getItem(CANVAS_INTERACTION_MODE_STORAGE_KEY)
+  if (stored === 'structured' || stored === 'free') {
+    return stored
+  }
+
+  return 'structured'
+}
+
 interface UiState {
   activeProjectId: string | null
   sidebarCollapsed: boolean
@@ -88,6 +103,7 @@ interface UiState {
   theme: UiTheme
   archivedTimestampFormat: ArchivedTimestampFormat
   autoCenterFocusedPanel: boolean
+  canvasInteractionMode: CanvasInteractionMode
   canvasZoom: number
 
   setActiveProject: (id: string | null) => void
@@ -99,6 +115,7 @@ interface UiState {
   setTheme: (theme: UiTheme) => void
   setArchivedTimestampFormat: (format: ArchivedTimestampFormat) => void
   setAutoCenterFocusedPanel: (enabled: boolean) => void
+  setCanvasInteractionMode: (mode: CanvasInteractionMode) => void
   setCanvasZoom: (zoom: number) => void
   zoomIn: () => void
   zoomOut: () => void
@@ -115,6 +132,7 @@ export const useUiStore = create<UiState>((set) => ({
   theme: getInitialTheme(),
   archivedTimestampFormat: getInitialArchivedTimestampFormat(),
   autoCenterFocusedPanel: getInitialAutoCenterFocusedPanel(),
+  canvasInteractionMode: getInitialCanvasInteractionMode(),
   canvasZoom: getInitialCanvasZoom(),
 
   setActiveProject: (id) =>
@@ -182,6 +200,19 @@ export const useUiStore = create<UiState>((set) => ({
       )
     }
     set({ autoCenterFocusedPanel })
+  },
+  setCanvasInteractionMode: (canvasInteractionMode) => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(
+        CANVAS_INTERACTION_MODE_STORAGE_KEY,
+        canvasInteractionMode
+      )
+    }
+
+    set({
+      canvasInteractionMode,
+      canvasZoom: canvasInteractionMode === 'structured' ? 1 : getInitialCanvasZoom()
+    })
   },
   setCanvasZoom: (canvasZoom) => {
     const nextZoom = clampCanvasZoom(canvasZoom)

@@ -91,6 +91,7 @@ export function Canvas() {
   const {
     activeProjectId,
     autoCenterFocusedPanel,
+    canvasInteractionMode,
     canvasZoom,
     setCanvasZoom,
     zoomIn,
@@ -168,6 +169,7 @@ export function Canvas() {
     [canvasInsets]
   )
   const gridOpacity = useMemo(() => getGridOpacity(canvasZoom), [canvasZoom])
+  const isFreeCanvas = canvasInteractionMode === 'free'
 
   // Load workspaces when project changes and restore saved panel state
   useEffect(() => {
@@ -229,9 +231,15 @@ export function Canvas() {
       return
     }
 
+    if (!isFreeCanvas) {
+      previousZoomRef.current = 1
+      setCanvasZoom(1)
+      return
+    }
+
     previousZoomRef.current = 1
     setCanvasZoom(1)
-  }, [activeProjectId, setCanvasZoom])
+  }, [activeProjectId, isFreeCanvas, setCanvasZoom])
 
   useLayoutEffect(() => {
     const content = contentMeasureRef.current
@@ -326,6 +334,11 @@ export function Canvas() {
   }, [autoCenterFocusedPanel, focusedPanelId, activePanels])
 
   useLayoutEffect(() => {
+    if (!isFreeCanvas) {
+      previousZoomRef.current = 1
+      return
+    }
+
     const canvas = canvasRef.current
     if (!canvas) return
     if (previousZoomRef.current === canvasZoom) return
@@ -345,7 +358,7 @@ export function Canvas() {
       left: clampScroll(targetScrollLeft, canvas.scrollWidth - canvas.clientWidth),
       top: clampScroll(targetScrollTop, canvas.scrollHeight - canvas.clientHeight)
     })
-  }, [canvasZoom, paddedInsets.left, paddedInsets.top])
+  }, [canvasZoom, isFreeCanvas, paddedInsets.left, paddedInsets.top])
 
   useEffect(() => {
     return () => {
@@ -377,6 +390,10 @@ export function Canvas() {
       return
     }
 
+    if (!isFreeCanvas) {
+      return
+    }
+
     const handleWheel = (event: WheelEvent) => {
       if (!event.ctrlKey && !event.metaKey) {
         return
@@ -399,9 +416,13 @@ export function Canvas() {
     canvasWheelCleanupRef.current = () => {
       window.removeEventListener('wheel', handleWheel, true)
     }
-  }, [zoomIn, zoomOut])
+  }, [isFreeCanvas, zoomIn, zoomOut])
 
   useEffect(() => {
+    if (!isFreeCanvas) {
+      return
+    }
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((!event.ctrlKey && !event.metaKey) || isEditableTarget(event.target)) {
         return
@@ -430,7 +451,7 @@ export function Canvas() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [resetZoom, zoomIn, zoomOut])
+  }, [isFreeCanvas, resetZoom, zoomIn, zoomOut])
 
   const handleNewWorkspace = useCallback(async () => {
     if (!activeProjectId || !activeProject) return
@@ -566,6 +587,7 @@ export function Canvas() {
   }, [closeActivePanel])
 
   const handleCanvasPointerDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!isFreeCanvas) return
     if (event.button !== 0) return
     if (!(event.target instanceof HTMLElement)) return
     if (
@@ -598,7 +620,7 @@ export function Canvas() {
 
     window.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('mouseup', handleMouseUp)
-  }, [])
+  }, [isFreeCanvas])
 
   const panelOptions = useMemo(
     () => [
@@ -664,6 +686,10 @@ export function Canvas() {
   )
 
   const handleFitToContent = useCallback(() => {
+    if (!isFreeCanvas) {
+      return
+    }
+
     const canvas = canvasRef.current
     const content = contentMeasureRef.current
     if (!canvas || !content) return
@@ -814,7 +840,7 @@ export function Canvas() {
     const targetWorldCenterY = (bounds.top + bounds.bottom) / 2
 
     animateMoveThenZoom(nextZoom, targetWorldCenterX, targetWorldCenterY)
-  }, [canvasZoom, focusedPanelId, paddedInsets.left, paddedInsets.top, setCanvasZoom])
+  }, [canvasZoom, focusedPanelId, isFreeCanvas, paddedInsets.left, paddedInsets.top, setCanvasZoom])
 
   if (!activeProjectId) {
     return (
@@ -859,11 +885,15 @@ export function Canvas() {
         onMouseDown={handleCanvasPointerDown}
         className={cn(
           'canvas-grid absolute inset-0 overflow-auto',
-          isPanning ? 'cursor-grabbing select-none' : 'cursor-grab'
+          isFreeCanvas
+            ? isPanning
+              ? 'cursor-grabbing select-none'
+              : 'cursor-grab'
+            : 'cursor-default'
         )}
         style={{
           backgroundImage: `radial-gradient(circle, color-mix(in srgb, var(--color-border) ${Math.round(gridOpacity * 100)}%, transparent) 1px, transparent 1px)`,
-          backgroundSize: `${GRID_SIZE * canvasZoom}px ${GRID_SIZE * canvasZoom}px`
+          backgroundSize: `${GRID_SIZE * (isFreeCanvas ? canvasZoom : 1)}px ${GRID_SIZE * (isFreeCanvas ? canvasZoom : 1)}px`
         }}
       >
         <div
@@ -972,15 +1002,17 @@ export function Canvas() {
         )}
       </div>
 
-      <div className="pointer-events-none absolute bottom-3 left-3 z-20">
-        <CanvasToolbar
-          canvasZoom={canvasZoom}
-          onZoomIn={zoomIn}
-          onZoomOut={zoomOut}
-          onResetZoom={resetZoom}
-          onFitToContent={handleFitToContent}
-        />
-      </div>
+      {isFreeCanvas && (
+        <div className="pointer-events-none absolute bottom-3 left-3 z-20">
+          <CanvasToolbar
+            canvasZoom={canvasZoom}
+            onZoomIn={zoomIn}
+            onZoomOut={zoomOut}
+            onResetZoom={resetZoom}
+            onFitToContent={handleFitToContent}
+          />
+        </div>
+      )}
     </div>
   )
 }

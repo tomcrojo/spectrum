@@ -122,6 +122,20 @@ function buildPanelsFromWorkspace(
   }))
 }
 
+function buildInitialLastFocusedPanelMap(
+  panels: ActiveWorkspacePanel[]
+): Record<string, string> {
+  const lastFocusedPanelByWorkspace: Record<string, string> = {}
+
+  for (const panel of panels) {
+    if (!lastFocusedPanelByWorkspace[panel.workspaceId]) {
+      lastFocusedPanelByWorkspace[panel.workspaceId] = panel.panelId
+    }
+  }
+
+  return lastFocusedPanelByWorkspace
+}
+
 function getPreferredPanelIdForWorkspace(
   workspaceId: string,
   state: Pick<WorkspacesState, 'activePanels' | 'lastFocusedPanelByWorkspace'>
@@ -439,15 +453,12 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
   },
 
   setActivePanels: (panels) => {
-    const focusedPanelId = panels[0]?.panelId ?? null
-    const lastFocusedPanelByWorkspace =
-      focusedPanelId && panels[0]
-        ? {
-            [panels[0].workspaceId]: focusedPanelId
-          }
-        : {}
-
-    set({ activePanels: panels, focusedPanelId, lastFocusedPanelByWorkspace })
+    set({
+      activePanels: panels,
+      // Bulk project restores should not steal DOM focus from the sidebar/detail rail.
+      focusedPanelId: null,
+      lastFocusedPanelByWorkspace: buildInitialLastFocusedPanelMap(panels)
+    })
     // When clearing panels (project switch), don't save empty state
     // When restoring panels, the layout is already in sync
   },
@@ -694,14 +705,10 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
       panels.push(...buildPanelsFromWorkspace(ws, cwd))
     }
 
-    const focusedPanelId = panels[0]?.panelId ?? null
-    const lastFocusedPanelByWorkspace =
-      focusedPanelId && panels[0]
-        ? {
-            [panels[0].workspaceId]: focusedPanelId
-          }
-        : {}
-
-    set({ activePanels: panels, focusedPanelId, lastFocusedPanelByWorkspace })
+    set({
+      activePanels: panels,
+      focusedPanelId: null,
+      lastFocusedPanelByWorkspace: buildInitialLastFocusedPanelMap(panels)
+    })
   }
 }))

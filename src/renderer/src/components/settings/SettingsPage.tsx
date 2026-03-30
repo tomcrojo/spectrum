@@ -2,6 +2,7 @@ import { Button } from '@renderer/components/shared/Button'
 import {
   useUiStore,
   type ArchivedTimestampFormat,
+  type CanvasInteractionMode,
   type UiTheme
 } from '@renderer/stores/ui.store'
 import { useResolvedTheme } from '@renderer/lib/theme'
@@ -46,6 +47,25 @@ const archivedTimestampOptions: Array<{
   }
 ]
 
+const canvasInteractionModeOptions: Array<{
+  value: CanvasInteractionMode
+  label: string
+  description: string
+  warning?: string
+}> = [
+  {
+    value: 'structured',
+    label: 'Structured view',
+    description: 'Default layout with fixed 100% scale and predictable workspace navigation.'
+  },
+  {
+    value: 'free',
+    label: 'Free canvas',
+    description: 'Enables zoom, fit-to-content, and drag-panning across the workspace grid.',
+    warning: 'Higher GPU activity can reduce battery life and hurt performance on larger projects.'
+  }
+]
+
 export function SettingsPage() {
   const {
     showSettingsPage,
@@ -55,12 +75,32 @@ export function SettingsPage() {
     archivedTimestampFormat,
     setArchivedTimestampFormat,
     autoCenterFocusedPanel,
-    setAutoCenterFocusedPanel
+    setAutoCenterFocusedPanel,
+    canvasInteractionMode,
+    setCanvasInteractionMode
   } = useUiStore()
   const resolvedTheme = useResolvedTheme()
 
   if (!showSettingsPage) {
     return null
+  }
+
+  const handleCanvasInteractionModeChange = (mode: CanvasInteractionMode) => {
+    if (mode === canvasInteractionMode) {
+      return
+    }
+
+    if (mode === 'free') {
+      const confirmed = window.confirm(
+        'Free canvas uses more GPU and can increase battery drain. Enable it anyway?'
+      )
+
+      if (!confirmed) {
+        return
+      }
+    }
+
+    setCanvasInteractionMode(mode)
   }
 
   return (
@@ -149,6 +189,63 @@ export function SettingsPage() {
             >
               Reset
             </Button>
+          </div>
+        </section>
+
+        <section className="mt-4 rounded-xl border border-border bg-bg-raised p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-semibold text-text-primary">
+                Workspace View
+              </h3>
+              <p className="mt-1 text-xs text-text-muted">
+                Structured view is the default. Free canvas is available as an opt-in.
+              </p>
+            </div>
+            <div className="rounded-full border border-border-subtle bg-bg px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-text-muted">
+              {canvasInteractionMode === 'structured' ? 'Default' : 'Opt-in'}
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-2">
+            {canvasInteractionModeOptions.map((option) => {
+              const selected = canvasInteractionMode === option.value
+
+              return (
+                <button
+                  key={option.value}
+                  onClick={() => handleCanvasInteractionModeChange(option.value)}
+                  className={cn(
+                    'rounded-lg border px-3 py-3 text-left transition-colors',
+                    selected
+                      ? 'border-accent bg-accent/10'
+                      : 'border-border bg-bg hover:bg-bg-hover'
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium text-text-primary">
+                      {option.label}
+                    </span>
+                    <span
+                      className={cn(
+                        'h-2.5 w-2.5 rounded-full border',
+                        selected
+                          ? 'border-accent bg-accent'
+                          : 'border-border bg-transparent'
+                      )}
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-text-muted">
+                    {option.description}
+                  </p>
+                  {option.warning && (
+                    <p className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-200">
+                      Warning: {option.warning}
+                    </p>
+                  )}
+                </button>
+              )
+            })}
           </div>
         </section>
 
