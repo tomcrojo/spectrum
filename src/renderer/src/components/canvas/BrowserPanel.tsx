@@ -30,7 +30,8 @@ export function BrowserPanel({
   projectId,
   initialUrl,
   autoFocus,
-  isResizing
+  isResizing,
+  hydrationState
 }: BrowserPanelProps) {
   const updatePanelLayout = useWorkspacesStore((state) => state.updatePanelLayout)
   const isElectron = typeof window !== 'undefined' && typeof window.api !== 'undefined'
@@ -200,6 +201,29 @@ export function BrowserPanel({
     if (isElectron) {
       webviewRef.current?.loadURL(nextUrl)
     }
+  }
+
+  if (hydrationState !== 'live') {
+    return (
+      <div className="relative flex h-full min-h-0 flex-col bg-bg">
+        <div className="relative flex h-7 items-center gap-2 border-b border-border-subtle bg-bg-raised px-2">
+          <div className="min-w-0 flex-1 truncate font-mono text-[12px] text-text-secondary">
+            {currentUrl}
+          </div>
+          <span className="rounded border border-border bg-bg px-2 py-0.5 text-[10px] uppercase tracking-wide text-text-muted">
+            Parked
+          </span>
+        </div>
+        <div className="flex flex-1 items-center justify-center bg-bg">
+          <div className="max-w-sm rounded-lg border border-border bg-bg-raised px-4 py-3 text-center">
+            <p className="text-xs font-medium text-text-primary">Browser paused</p>
+            <p className="mt-1 text-xs leading-5 text-text-secondary">
+              This browser will load when you focus its workspace.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

@@ -20,6 +20,7 @@ import { nanoid } from 'nanoid'
 import type { PanelType, PanelHydrationState, Workspace } from '@shared/workspace.types'
 
 const VIRTUAL_PADDING = 5000
+const STRUCTURED_SCROLL_ALLOWANCE = 288
 const GRID_SIZE = 24
 const FIT_CONTENT_PADDING = 96
 const MIN_GRID_OPACITY = 0.18
@@ -27,7 +28,6 @@ const FIT_ZOOM_TOLERANCE = 0.02
 const FIT_SCROLL_TOLERANCE = 24
 const FIT_MOVE_DURATION_MS = 180
 const FIT_ZOOM_DURATION_MS = 140
-
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
     return false
@@ -150,17 +150,17 @@ export function Canvas() {
     () => activePanels.find((panel) => panel.panelId === focusedPanelId) ?? null,
     [activePanels, focusedPanelId]
   )
+  const isFreeCanvas = canvasInteractionMode === 'free'
   const paddedInsets = useMemo(
     () => ({
-      top: canvasInsets.top + VIRTUAL_PADDING,
-      right: canvasInsets.right + VIRTUAL_PADDING,
-      bottom: canvasInsets.bottom + VIRTUAL_PADDING,
-      left: canvasInsets.left + VIRTUAL_PADDING
+      top: canvasInsets.top + (isFreeCanvas ? VIRTUAL_PADDING : STRUCTURED_SCROLL_ALLOWANCE),
+      right: canvasInsets.right + (isFreeCanvas ? VIRTUAL_PADDING : 0),
+      bottom: canvasInsets.bottom + (isFreeCanvas ? VIRTUAL_PADDING : 0),
+      left: canvasInsets.left + (isFreeCanvas ? VIRTUAL_PADDING : STRUCTURED_SCROLL_ALLOWANCE)
     }),
-    [canvasInsets]
+    [canvasInsets, isFreeCanvas]
   )
   const gridOpacity = useMemo(() => getGridOpacity(canvasZoom), [canvasZoom])
-  const isFreeCanvas = canvasInteractionMode === 'free'
 
   useEffect(() => {
     incrementDevMountCount('Canvas')
@@ -225,7 +225,7 @@ export function Canvas() {
       let nextHydrationState: PanelHydrationState = panelRuntimeById[panel.panelId]?.hydrationState ?? 'cold'
 
       if (panel.panelType === 'browser') {
-        nextHydrationState = 'live'
+        nextHydrationState = panel.workspaceId === activeWorkspaceId ? 'live' : 'cold'
       } else if (panel.panelType === 't3code') {
         if (runtimePowerMode === 'high') {
           nextHydrationState = 'live'
@@ -355,11 +355,12 @@ export function Canvas() {
     }
 
     const updateInsets = () => {
+      const centeredHorizontalInset = Math.max(24, (canvas.clientWidth - focusedPanel.offsetWidth) / 2)
       const nextInsets = {
         top: Math.max(24, (canvas.clientHeight - focusedPanel.offsetHeight) / 2),
-        right: Math.max(24, (canvas.clientWidth - focusedPanel.offsetWidth) / 2),
+        right: centeredHorizontalInset,
         bottom: Math.max(24, (canvas.clientHeight - focusedPanel.offsetHeight) / 2),
-        left: Math.max(24, (canvas.clientWidth - focusedPanel.offsetWidth) / 2)
+        left: isFreeCanvas ? centeredHorizontalInset : 24
       }
 
       setCanvasInsets((current) =>
@@ -384,7 +385,7 @@ export function Canvas() {
     return () => {
       resizeObserver.disconnect()
     }
-  }, [autoCenterFocusedPanel, focusedPanelId, activePanels])
+  }, [autoCenterFocusedPanel, focusedPanelId, activePanels, isFreeCanvas])
 
   useLayoutEffect(() => {
     if (!isFreeCanvas) {
@@ -426,10 +427,10 @@ export function Canvas() {
     if (!canvas) return
 
     canvas.scrollTo({
-      left: VIRTUAL_PADDING,
-      top: VIRTUAL_PADDING
+      left: isFreeCanvas ? VIRTUAL_PADDING : STRUCTURED_SCROLL_ALLOWANCE,
+      top: isFreeCanvas ? VIRTUAL_PADDING : STRUCTURED_SCROLL_ALLOWANCE
     })
-  }, [activeProjectId])
+  }, [activeProjectId, isFreeCanvas])
 
   const setCanvasNode = useCallback((node: HTMLDivElement | null) => {
     if (canvasWheelCleanupRef.current) {

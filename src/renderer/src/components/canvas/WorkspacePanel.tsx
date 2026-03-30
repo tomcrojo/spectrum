@@ -39,6 +39,17 @@ interface WorkspacePanelProps {
   initialUrl?: string
 }
 
+interface FilePanelChromeState {
+  relativePath: string | null
+  isExplorerCollapsed: boolean
+  canSave: boolean
+  canReload: boolean
+  isSaving: boolean
+  onSave: (() => void) | null
+  onReload: (() => void) | null
+  onToggleExplorer: (() => void) | null
+}
+
 function getPanelLabel(panelType: PanelType, panelTitle: string) {
   const trimmed = panelTitle.trim()
   if (trimmed) {
@@ -102,6 +113,37 @@ function PanelFocusHitArea({
   )
 }
 
+function PanelIconButton({
+  label,
+  onClick,
+  disabled = false,
+  children
+}: {
+  label: string
+  onClick: () => void
+  disabled?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        'flex h-6 w-6 items-center justify-center rounded-md',
+        'text-text-secondary transition-colors',
+        'hover:bg-bg-hover hover:text-text-primary',
+        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent',
+        'disabled:pointer-events-none disabled:opacity-45'
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
 function WorkspacePanelImpl({
   workspaceId,
   projectId,
@@ -143,6 +185,16 @@ function WorkspacePanelImpl({
   const startPos = useRef({ x: 0, y: 0, w: 0, h: 0 })
   const revealAnimationFrameRef = useRef<number | null>(null)
   const panelLabel = getPanelLabel(panelType, panelTitle)
+  const [fileChromeState, setFileChromeState] = useState<FilePanelChromeState>({
+    relativePath: null,
+    isExplorerCollapsed: false,
+    canSave: false,
+    canReload: false,
+    isSaving: false,
+    onSave: null,
+    onReload: null,
+    onToggleExplorer: null
+  })
 
   const revealPanel = useCallback(() => {
     const panelElement = panelRef.current
@@ -304,18 +356,73 @@ function WorkspacePanelImpl({
       <div className="flex h-8 items-center justify-between gap-2 rounded-t-lg border-b border-border-subtle bg-bg-raised px-2.5 flex-shrink-0">
         <div className="flex min-w-0 items-center gap-2">
           <PanelGlyph panelType={panelType} providerId={providerId} className="text-text-secondary" />
-          <span className="truncate text-xs font-medium text-text-primary">{panelLabel}</span>
-          {isDirty ? (
-            <span className="rounded-full border border-warning/30 bg-warning/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning">
-              Dirty
-            </span>
-          ) : null}
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-xs font-medium text-text-primary">{panelLabel}</span>
+            {isDirty ? (
+              <span className="rounded-full border border-warning/30 bg-warning/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning">
+                Dirty
+              </span>
+            ) : null}
+          </div>
         </div>
-        <button onClick={onClose} className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary">
-          <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none">
-            <path d="M3 3L9 9M9 3L3 9" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-2">
+          {panelType === 'file' ? (
+            <>
+              <PanelIconButton
+                label={fileChromeState.isExplorerCollapsed ? 'Show file tree' : 'Hide file tree'}
+                onClick={() => fileChromeState.onToggleExplorer?.()}
+              >
+                {fileChromeState.isExplorerCollapsed ? (
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none">
+                    <path d="M2.5 4.5H13.5M2.5 8H13.5M2.5 11.5H13.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                    <path d="M5.5 3L2.5 5.5L5.5 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                ) : (
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none">
+                    <path d="M2.5 4.5H13.5M2.5 8H13.5M2.5 11.5H13.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                    <path d="M10.5 3L13.5 5.5L10.5 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </PanelIconButton>
+              <PanelIconButton
+                label="Reload file"
+                onClick={() => fileChromeState.onReload?.()}
+                disabled={!fileChromeState.canReload}
+              >
+                <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none">
+                  <path
+                    d="M12.5 5.5A5 5 0 1 0 13 9.5M12.5 5.5V2.5M12.5 5.5H9.5"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </PanelIconButton>
+              <PanelIconButton
+                label={fileChromeState.isSaving ? 'Saving file' : 'Save file'}
+                onClick={() => fileChromeState.onSave?.()}
+                disabled={!fileChromeState.canSave}
+              >
+                <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none">
+                  <path
+                    d="M3.5 2.5H10.5L12.5 4.5V13.5H3.5V2.5Z"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinejoin="round"
+                  />
+                  <path d="M5.5 2.5V6H10.5V2.5" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+                  <path d="M6 10.5H10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                </svg>
+              </PanelIconButton>
+            </>
+          ) : null}
+          <button onClick={onClose} className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary">
+            <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none">
+              <path d="M3 3L9 9M9 3L3 9" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div className="relative flex-1 min-h-0 overflow-hidden">
@@ -367,6 +474,7 @@ function WorkspacePanelImpl({
             initialCursorLine={cursorLine}
             initialCursorColumn={cursorColumn}
             autoFocus={isFocused}
+            onChromeStateChange={setFileChromeState}
           />
         ) : (
           <PanelPlaceholder type={panelType} />

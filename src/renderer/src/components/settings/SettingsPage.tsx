@@ -3,6 +3,7 @@ import {
   useUiStore,
   type ArchivedTimestampFormat,
   type CanvasInteractionMode,
+  type FollowUpBehavior,
   type RuntimePowerMode,
   type UiTheme
 } from '@renderer/stores/ui.store'
@@ -89,6 +90,23 @@ const runtimePowerModeOptions: Array<{
   }
 ]
 
+const followUpBehaviorOptions: Array<{
+  value: FollowUpBehavior
+  label: string
+  description: string
+}> = [
+  {
+    value: 'queue',
+    label: 'Queue',
+    description: 'Queue follow-ups while Codex runs.'
+  },
+  {
+    value: 'steer',
+    label: 'Steer',
+    description: 'Send follow-ups immediately to steer the current run.'
+  }
+]
+
 export function SettingsPage() {
   const {
     showSettingsPage,
@@ -102,7 +120,9 @@ export function SettingsPage() {
     canvasInteractionMode,
     setCanvasInteractionMode,
     runtimePowerMode,
-    setRuntimePowerMode
+    setRuntimePowerMode,
+    followUpBehavior,
+    setFollowUpBehavior
   } = useUiStore()
   const resolvedTheme = useResolvedTheme()
 
@@ -214,6 +234,58 @@ export function SettingsPage() {
             >
               Reset
             </Button>
+          </div>
+        </section>
+
+        <section className="mt-4 rounded-xl border border-border bg-bg-raised p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-semibold text-text-primary">
+                Follow-up Behavior
+              </h3>
+              <p className="mt-1 text-xs text-text-muted">
+                Queue follow-ups while Codex runs or steer the current run. Press ⇧⌘Enter to do the opposite for one message.
+              </p>
+            </div>
+            <div className="rounded-full border border-border-subtle bg-bg px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-text-muted">
+              {followUpBehavior}
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-2">
+            {followUpBehaviorOptions.map((option) => {
+              const selected = followUpBehavior === option.value
+
+              return (
+                <button
+                  key={option.value}
+                  onClick={() => setFollowUpBehavior(option.value)}
+                  className={cn(
+                    'rounded-lg border px-3 py-3 text-left transition-colors',
+                    selected
+                      ? 'border-accent bg-accent/10'
+                      : 'border-border bg-bg hover:bg-bg-hover'
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium text-text-primary">
+                      {option.label}
+                    </span>
+                    <span
+                      className={cn(
+                        'h-2.5 w-2.5 rounded-full border',
+                        selected
+                          ? 'border-accent bg-accent'
+                          : 'border-border bg-transparent'
+                      )}
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-text-muted">
+                    {option.description}
+                  </p>
+                </button>
+              )
+            })}
           </div>
         </section>
 
