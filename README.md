@@ -133,6 +133,17 @@ Important runtime note:
 
 Spectrum currently uses a mix of vendored helpers and git submodules for development-time workflows. See [THIRD_PARTY.md](./THIRD_PARTY.md) for the current inventory and upstream links.
 
+## Acknowledgements
+
+Spectrum stands on the shoulders of projects that shaped its direction. Huge thanks to:
+
+- [T3Code](https://github.com/pingdotgg/t3code)
+- [dev-browser](https://github.com/SawyerHood/dev-browser)
+- [IDX0](https://github.com/galz10/IDX0)
+- [cmux](https://github.com/manaflow-ai/cmux)
+
+Their ideas, tooling, and implementation patterns helped clarify where Spectrum should be opinionated and where it should stay open.
+
 ## Contributing
 
 Issues and PRs are welcome, especially around bugs, regressions, performance, Electron security hardening, workspace UX, and documentation gaps.
