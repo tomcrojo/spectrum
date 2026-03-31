@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spectrum Research Brief</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #09111f;
+        --panel: rgba(10, 18, 31, 0.86);
+        --panel-border: rgba(120, 144, 179, 0.18);
+        --text: #edf2ff;
+        --muted: #96a3bd;
+        --accent: #66b3ff;
+        --accent-2: #8ef2d5;
+        --warn: #ffd166;
+        --shadow: 0 22px 50px rgba(0, 0, 0, 0.35);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family:
+          "SF Pro Display",
+          "Inter",
+          system-ui,
+          sans-serif;
+        background:
+          radial-gradient(circle at top left, rgba(102, 179, 255, 0.18), transparent 30%),
+          radial-gradient(circle at 80% 20%, rgba(142, 242, 213, 0.12), transparent 26%),
+          linear-gradient(160deg, #07101d 0%, #0d1728 48%, #0e1320 100%);
+        color: var(--text);
+      }
+
+      main {
+        max-width: 1160px;
+        margin: 0 auto;
+        padding: 40px 28px 52px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: 1.3fr 0.9fr;
+        gap: 22px;
+        align-items: stretch;
+      }
+
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        border-radius: 24px;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(16px);
+      }
+
+      .hero-copy {
+        padding: 28px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        gap: 8px;
+        align-items: center;
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--accent-2);
+      }
+
+      h1 {
+        margin: 16px 0 14px;
+        font-size: clamp(36px, 4vw, 56px);
+        line-height: 0.98;
+        letter-spacing: -0.04em;
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .hero-copy p {
+        max-width: 58ch;
+        font-size: 16px;
+      }
+
+      .pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 22px;
+      }
+
+      .pill {
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 9px 12px;
+        font-size: 12px;
+        color: #d7dff1;
+        background: rgba(255, 255, 255, 0.03);
+      }
+
+      .snapshot {
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .snapshot h2,
+      .section h2 {
+        margin: 0;
+        font-size: 14px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #b8c4da;
+      }
+
+      .metric {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .metric div {
+        border-radius: 18px;
+        padding: 14px;
+        background: rgba(255, 255, 255, 0.03);
+      }
+
+      .metric strong {
+        display: block;
+        margin-top: 6px;
+        font-size: 22px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 22px;
+        margin-top: 22px;
+      }
+
+      .section {
+        padding: 22px;
+      }
+
+      ul {
+        padding-left: 18px;
+        margin: 14px 0 0;
+        color: var(--muted);
+      }
+
+      li + li {
+        margin-top: 10px;
+      }
+
+      .table {
+        margin-top: 16px;
+        border-radius: 18px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 1.1fr 0.8fr 1.2fr;
+        gap: 12px;
+        padding: 13px 16px;
+        background: rgba(255, 255, 255, 0.025);
+      }
+
+      .row:nth-child(even) {
+        background: rgba(255, 255, 255, 0.045);
+      }
+
+      .row.header {
+        color: #d8e3f8;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        background: rgba(102, 179, 255, 0.09);
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        padding: 5px 10px;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .tag.warn {
+        color: #ffe8a1;
+        background: rgba(255, 209, 102, 0.14);
+      }
+
+      .tag.info {
+        color: #bfe2ff;
+        background: rgba(102, 179, 255, 0.14);
+      }
+
+      .tag.good {
+        color: #b7ffe6;
+        background: rgba(142, 242, 213, 0.12);
+      }
+
+      @media (max-width: 960px) {
+        .hero,
+        .grid,
+        .metric {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <article class="card hero-copy">
+          <div class="eyebrow">Research Mode · March 31</div>
+          <h1>Open-source coding cockpit landscape</h1>
+          <p>
+            Current opportunity: tools are strong at chat and terminal loops,
+            but still weak at project memory, multi-workspace context, and
+            long-running browser-assisted investigation.
+          </p>
+          <div class="pills">
+            <span class="pill">Codex-style command flows</span>
+            <span class="pill">Workspace-level memory</span>
+            <span class="pill">Browser + file panel pairing</span>
+            <span class="pill">Open provider abstraction</span>
+          </div>
+        </article>
+
+        <aside class="card snapshot">
+          <h2>Snapshot</h2>
+          <div class="metric">
+            <div>
+              <span class="eyebrow">Priority</span>
+              <strong>High</strong>
+            </div>
+            <div>
+              <span class="eyebrow">Confidence</span>
+              <strong>0.78</strong>
+            </div>
+            <div>
+              <span class="eyebrow">Panels Needed</span>
+              <strong>3</strong>
+            </div>
+            <div>
+              <span class="eyebrow">Next Review</span>
+              <strong>48h</strong>
+            </div>
+          </div>
+          <p>
+            Capture competitor behavior in one browser panel, extract notes into
+            files, and keep agent threads parked by workspace instead of by tab.
+          </p>
+        </aside>
+      </section>
+
+      <section class="grid">
+        <article class="card section">
+          <h2>Key Findings</h2>
+          <ul>
+            <li>Project dashboards remain secondary in most coding tools.</li>
+            <li>Browser automation is usually external instead of embedded.</li>
+            <li>Workspace state is rarely promoted to a first-class artifact.</li>
+            <li>Users want low-friction context switching without losing agent state.</li>
+          </ul>
+        </article>
+
+        <article class="card section">
+          <h2>Decision Frame</h2>
+          <div class="pills">
+            <span class="tag info">Keep dashboards local-first</span>
+            <span class="tag good">Lean into multi-surface workflows</span>
+            <span class="tag warn">Avoid chat-first product framing</span>
+          </div>
+          <p style="margin-top: 16px">
+            Best positioning is as a cockpit for project execution, not as
+            another assistant shell with a few side panels bolted on.
+          </p>
+        </article>
+      </section>
+
+      <section class="card section" style="margin-top: 22px">
+        <h2>Working Comparison</h2>
+        <div class="table">
+          <div class="row header">
+            <div>Surface</div>
+            <div>Status</div>
+            <div>Implication</div>
+          </div>
+          <div class="row">
+            <div>Project memory</div>
+            <div><span class="tag good">Needed</span></div>
+            <div>Should live beside the execution canvas, not outside it.</div>
+          </div>
+          <div class="row">
+            <div>Browser research</div>
+            <div><span class="tag info">Differentiator</span></div>
+            <div>Same-project session isolation matters for reliable flows.</div>
+          </div>
+          <div class="row">
+            <div>Provider switching</div>
+            <div><span class="tag warn">Open question</span></div>
+            <div>Worth building in early so workflows do not ossify around one CLI.</div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

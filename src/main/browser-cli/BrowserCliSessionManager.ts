@@ -20,6 +20,7 @@ interface BrowserCliSessionRecord {
   browserApiToken: string
   cdpEndpoint: string | null
   focusedBrowserPanelId: string | null
+  userFocusedPanelId: string | null
   focused: boolean
   lastHeartbeatAt: string
 }
@@ -28,6 +29,7 @@ interface RendererSessionState {
   activeProjectId: string | null
   activeWorkspaceId: string | null
   focusedBrowserPanelId: string | null
+  userFocusedPanelId?: string | null
 }
 
 interface BrowserCliCapabilities {
@@ -120,6 +122,7 @@ function buildSessionRecord(): BrowserCliSessionRecord | null {
     browserApiToken: currentToken,
     cdpEndpoint: cdpPort ? `http://127.0.0.1:${cdpPort}` : null,
     focusedBrowserPanelId: currentScope.focusedBrowserPanelId,
+    userFocusedPanelId: currentScope.userFocusedPanelId ?? null,
     focused: BrowserWindow.getAllWindows().some((window) => window.isVisible() && window.isFocused()),
     lastHeartbeatAt: new Date().toISOString()
   }
@@ -231,8 +234,8 @@ export function getBrowserCliSessionSnapshot():
 
   return {
     ...record,
-    capabilities: {
-      activatePanel: false,
+      capabilities: {
+      activatePanel: true,
       createPanel: true,
       closePanel: true,
       listPanels: true

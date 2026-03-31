@@ -9,6 +9,11 @@ export interface BrowserPanelState {
   projectId: string
   url: string
   panelTitle: string
+  isTemporary?: boolean
+  parentPanelId?: string
+  returnToPanelId?: string
+  openedBy?: 'user' | 'agent' | 'popup'
+  afterPanelId?: string
   width?: number
   height?: number
   webContentsId?: number
@@ -16,8 +21,9 @@ export interface BrowserPanelState {
 
 const panelsById = new Map<string, BrowserPanelState>()
 const panelIdByWebContentsId = new Map<number, string>()
-const focusedPanelIdByWorkspace = new Map<string, string>()
+const focusedAgentPanelIdByWorkspace = new Map<string, string>()
 let mainWindow: BrowserWindow | null = null
+const TEMPORARY_BROWSER_PANEL_WIDTH = 350
 
 function emitToRenderer(channel: string, payload: unknown): void {
   if (!mainWindow || mainWindow.isDestroyed()) {
@@ -40,6 +46,7 @@ export function openBrowserPanel(input: {
   url: string
   width?: number
   height?: number
+  openedBy?: 'user' | 'agent' | 'popup'
 }): BrowserPanelState {
   const panel: BrowserPanelState = {
     panelId: nanoid(),
@@ -47,13 +54,54 @@ export function openBrowserPanel(input: {
     projectId: input.projectId,
     url: input.url,
     panelTitle: 'Browser',
+    openedBy: input.openedBy ?? 'user',
     width: input.width,
     height: input.height
   }
 
   panelsById.set(panel.panelId, panel)
-  focusedPanelIdByWorkspace.set(panel.workspaceId, panel.panelId)
+  focusedAgentPanelIdByWorkspace.set(panel.workspaceId, panel.panelId)
   emitToRenderer(BROWSER_CHANNELS.OPEN, panel)
+  return panel
+}
+
+export function openTemporaryBrowserPanel(input: {
+  workspaceId: string
+  projectId: string
+  url: string
+  parentPanelId: string
+  returnToPanelId?: string
+  width?: number
+  height?: number
+  openedBy?: 'agent' | 'popup'
+}): BrowserPanelState | null {
+  const parentPanel = panelsById.get(input.parentPanelId)
+  if (!parentPanel || parentPanel.workspaceId !== input.workspaceId) {
+    return null
+  }
+
+  const panel: BrowserPanelState = {
+    panelId: nanoid(),
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    url: input.url,
+    panelTitle: 'Browser',
+    isTemporary: true,
+    parentPanelId: input.parentPanelId,
+    returnToPanelId: input.returnToPanelId ?? input.parentPanelId,
+    openedBy: input.openedBy ?? 'popup',
+    afterPanelId: input.parentPanelId,
+    width: input.width ?? TEMPORARY_BROWSER_PANEL_WIDTH,
+    height: input.height
+  }
+
+  panelsById.set(panel.panelId, panel)
+  focusedAgentPanelIdByWorkspace.set(panel.workspaceId, panel.panelId)
+  emitToRenderer(BROWSER_CHANNELS.OPEN, panel)
+  emitToRenderer(BROWSER_CHANNELS.FOCUS_CHANGED, {
+    workspaceId: panel.workspaceId,
+    panelId: panel.panelId
+  })
   return panel
 }
 
@@ -108,8 +156,17 @@ export function closeBrowserPanel(
   }
 
   panelsById.delete(panelId)
-  if (focusedPanelIdByWorkspace.get(panel.workspaceId) === panelId) {
-    focusedPanelIdByWorkspace.delete(panel.workspaceId)
+  if (focusedAgentPanelIdByWorkspace.get(panel.workspaceId) === panelId) {
+    const nextFocusedPanelId = resolveReturnBrowserPanelId(panel)
+    if (nextFocusedPanelId) {
+      focusedAgentPanelIdByWorkspace.set(panel.workspaceId, nextFocusedPanelId)
+    } else {
+      focusedAgentPanelIdByWorkspace.delete(panel.workspaceId)
+    }
+    emitToRenderer(BROWSER_CHANNELS.FOCUS_CHANGED, {
+      workspaceId: panel.workspaceId,
+      panelId: nextFocusedPanelId
+    })
   }
   if (typeof panel.webContentsId === 'number') {
     panelIdByWebContentsId.delete(panel.webContentsId)
@@ -131,7 +188,7 @@ export function listBrowserPanels(workspaceId: string): BrowserPanelState[] {
 }
 
 export function getFocusedBrowserPanelId(workspaceId: string): string | null {
-  return focusedPanelIdByWorkspace.get(workspaceId) ?? null
+  return focusedAgentPanelIdByWorkspace.get(workspaceId) ?? null
 }
 
 export function updateBrowserPanelFromRenderer(input: {
@@ -208,7 +265,7 @@ export function setFocusedBrowserPanel(
   panelId: string | null
 ): void {
   if (!panelId) {
-    focusedPanelIdByWorkspace.delete(workspaceId)
+    focusedAgentPanelIdByWorkspace.delete(workspaceId)
     emitToRenderer(BROWSER_CHANNELS.FOCUS_CHANGED, {
       workspaceId,
       panelId: null
@@ -221,7 +278,7 @@ export function setFocusedBrowserPanel(
     return
   }
 
-  focusedPanelIdByWorkspace.set(workspaceId, panelId)
+  focusedAgentPanelIdByWorkspace.set(workspaceId, panelId)
   emitToRenderer(BROWSER_CHANNELS.FOCUS_CHANGED, {
     workspaceId,
     panelId
@@ -237,7 +294,7 @@ export function activateBrowserPanel(
     return null
   }
 
-  focusedPanelIdByWorkspace.set(workspaceId, panelId)
+  focusedAgentPanelIdByWorkspace.set(workspaceId, panelId)
   emitToRenderer(BROWSER_CHANNELS.ACTIVATE, {
     workspaceId,
     panelId
@@ -266,4 +323,34 @@ export function ensureBrowserPanelState(input: {
   }
   panelsById.set(panel.panelId, panel)
   return panel
+}
+
+function resolveReturnBrowserPanelId(panel: BrowserPanelState): string | null {
+  const preferredIds = [panel.returnToPanelId, panel.parentPanelId]
+
+  for (const preferredId of preferredIds) {
+    if (!preferredId) {
+      continue
+    }
+
+    const preferredPanel = panelsById.get(preferredId)
+    if (
+      preferredPanel &&
+      preferredPanel.workspaceId === panel.workspaceId &&
+      preferredPanel.panelId !== panel.panelId
+    ) {
+      return preferredPanel.panelId
+    }
+  }
+
+  for (const candidate of panelsById.values()) {
+    if (
+      candidate.workspaceId === panel.workspaceId &&
+      candidate.panelId !== panel.panelId
+    ) {
+      return candidate.panelId
+    }
+  }
+
+  return null
 }

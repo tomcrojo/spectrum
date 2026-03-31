@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spectrum Launch Plan</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #130c08;
+        --panel: rgba(26, 16, 10, 0.86);
+        --panel-border: rgba(255, 185, 120, 0.16);
+        --text: #fff4ea;
+        --muted: #d6b7a4;
+        --accent: #ff9f68;
+        --accent-2: #ffd166;
+        --good: #b7f5d4;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family:
+          "SF Pro Display",
+          "Inter",
+          system-ui,
+          sans-serif;
+        background:
+          radial-gradient(circle at 15% 20%, rgba(255, 159, 104, 0.18), transparent 28%),
+          radial-gradient(circle at 85% 15%, rgba(255, 209, 102, 0.14), transparent 24%),
+          linear-gradient(180deg, #120b08 0%, #1b110d 45%, #0f0b09 100%);
+        color: var(--text);
+      }
+
+      main {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 40px 28px 56px;
+      }
+
+      .hero,
+      .grid {
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 22px;
+      }
+
+      .card {
+        border-radius: 24px;
+        border: 1px solid var(--panel-border);
+        background: var(--panel);
+        box-shadow: 0 22px 48px rgba(0, 0, 0, 0.28);
+        backdrop-filter: blur(14px);
+      }
+
+      .hero-card,
+      .section {
+        padding: 26px;
+      }
+
+      .eyebrow {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        color: var(--accent-2);
+      }
+
+      h1 {
+        margin: 14px 0 12px;
+        font-size: clamp(34px, 4vw, 54px);
+        line-height: 1;
+        letter-spacing: -0.04em;
+      }
+
+      p,
+      li {
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .stack {
+        display: grid;
+        gap: 12px;
+        margin-top: 18px;
+      }
+
+      .todo {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.035);
+      }
+
+      .status {
+        border-radius: 999px;
+        padding: 6px 10px;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        white-space: nowrap;
+      }
+
+      .status.good {
+        color: #09140e;
+        background: var(--good);
+      }
+
+      .status.warn {
+        color: #2a1506;
+        background: var(--accent-2);
+      }
+
+      .status.info {
+        color: #2d1205;
+        background: var(--accent);
+      }
+
+      .grid {
+        margin-top: 22px;
+      }
+
+      .metric-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 18px;
+      }
+
+      .metric {
+        border-radius: 18px;
+        padding: 14px;
+        background: rgba(255, 255, 255, 0.035);
+      }
+
+      .metric strong {
+        display: block;
+        margin-top: 8px;
+        font-size: 24px;
+      }
+
+      ul {
+        margin: 14px 0 0;
+        padding-left: 18px;
+      }
+
+      @media (max-width: 960px) {
+        .hero,
+        .grid,
+        .metric-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <article class="card hero-card">
+          <div class="eyebrow">Release Track · Public Alpha</div>
+          <h1>Open-source launch plan</h1>
+          <p>
+            Frame the project clearly, prove the product surface with screenshots,
+            and publish with CI, contribution docs, and realistic alpha caveats.
+          </p>
+
+          <div class="stack">
+            <div class="todo">
+              <div>
+                <strong>README polish</strong>
+                <p>Add screenshots, browser-mode notes, and honest status messaging.</p>
+              </div>
+              <span class="status good">Done</span>
+            </div>
+            <div class="todo">
+              <div>
+                <strong>Repository metadata</strong>
+                <p>Set description, topics, and public visibility.</p>
+              </div>
+              <span class="status info">Active</span>
+            </div>
+            <div class="todo">
+              <div>
+                <strong>Smoke verification</strong>
+                <p>Build once and confirm browser-mode screenshots still match the product.</p>
+              </div>
+              <span class="status warn">Pending</span>
+            </div>
+          </div>
+        </article>
+
+        <aside class="card section">
+          <div class="eyebrow">Launch metrics</div>
+          <div class="metric-grid">
+            <div class="metric">
+              <span class="eyebrow">Repo visibility</span>
+              <strong>Public</strong>
+            </div>
+            <div class="metric">
+              <span class="eyebrow">Power mode</span>
+              <strong>High</strong>
+            </div>
+            <div class="metric">
+              <span class="eyebrow">Screenshots</span>
+              <strong>2</strong>
+            </div>
+            <div class="metric">
+              <span class="eyebrow">CI target</span>
+              <strong>Build</strong>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="grid">
+        <article class="card section">
+          <div class="eyebrow">Checklist</div>
+          <ul>
+            <li>Use browser-mode screenshots instead of mocked imagery.</li>
+            <li>Keep alpha limitations explicit so contributors know what is stable.</li>
+            <li>Document submodules and third-party references up front.</li>
+          </ul>
+        </article>
+
+        <article class="card section">
+          <div class="eyebrow">Release note angle</div>
+          <p>
+            Position Spectrum as a cockpit around coding work, not as another
+            chat UI with a few utilities attached.
+          </p>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

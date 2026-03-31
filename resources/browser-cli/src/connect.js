@@ -139,6 +139,7 @@ export async function createSessionClient(options = {}) {
           hints: [
             "browser-cli can create and control browser panels inside Spectrum, but it does not attach to external Chrome windows.",
             "Make sure the target workspace is open in Spectrum and at least one browser panel is mounted.",
+            "Spectrum may mount an agent-focused browser panel in the background without changing the user's visible focus.",
             "If you only need to open a panel, prefer `browser open <url>`.",
             "Use `browser.newPage(...)` only when you need a Playwright page handle after the panel is mounted."
           ]

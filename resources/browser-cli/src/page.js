@@ -79,6 +79,12 @@ export function createPageHandle(page, pageSummary, api) {
         };
       }
 
+      if (prop === "close") {
+        return async () => {
+          await api.post("/browser/close", { panelId: pageSummary.panelId });
+        };
+      }
+
       if (prop === "snapshotForAI") {
         return async (options = {}) => snapshotDom(target, options);
       }

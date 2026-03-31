@@ -6,24 +6,18 @@ import { useWorkspacesStore } from '@renderer/stores/workspaces.store'
 
 export function useBrowserCliSessionSync(): void {
   const activeProjectId = useUiStore((state) => state.activeProjectId)
-  const activePanels = useWorkspacesStore((state) => state.activePanels)
   const focusedPanelId = useWorkspacesStore((state) => state.focusedPanelId)
+  const focusedBrowserPanelId = useWorkspacesStore((state) => state.focusedBrowserPanelId)
   const activeWorkspaceId = usePanelRuntimeStore((state) => state.activeWorkspaceId)
 
   useEffect(() => {
-    const focusedPanel = focusedPanelId
-      ? activePanels.find((panel) => panel.panelId === focusedPanelId)
-      : null
-
-    const focusedBrowserPanelId =
-      focusedPanel?.panelType === 'browser' ? focusedPanel.panelId : null
-
     browserApi
       .sessionSync({
         activeProjectId,
         activeWorkspaceId,
-        focusedBrowserPanelId
+        focusedBrowserPanelId,
+        userFocusedPanelId: focusedPanelId
       })
       .catch(() => {})
-  }, [activePanels, activeProjectId, activeWorkspaceId, focusedPanelId])
+  }, [activeProjectId, activeWorkspaceId, focusedBrowserPanelId, focusedPanelId])
 }

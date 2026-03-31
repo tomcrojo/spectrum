@@ -1,12 +1,14 @@
 import http from 'node:http'
 import {
   activateBrowserPanel,
+  type BrowserPanelState,
   closeBrowserPanel,
   getBrowserPanel,
   getFocusedBrowserPanelId,
   listBrowserPanels,
   navigateBrowserPanel,
   openBrowserPanel,
+  openTemporaryBrowserPanel,
   resizeBrowserPanel
 } from '../browser/BrowserPanelManager'
 import { getCdpProxyPort } from '../cdp/CdpProxyManager'
@@ -19,8 +21,41 @@ interface BrowserApiRequestBody {
   token?: string
   url?: string
   panelId?: string
+  parentPanelId?: string
+  returnToPanelId?: string
+  openedBy?: 'user' | 'agent' | 'popup'
   width?: number
   height?: number
+}
+
+function serializeBrowserPanel(
+  panel: BrowserPanelState,
+  input: {
+    projectName: string | null
+    workspaceName: string | null
+    focusedPanelId: string | null
+  }
+) {
+  return {
+    panelId: panel.panelId,
+    workspaceId: panel.workspaceId,
+    projectId: panel.projectId,
+    projectName: input.projectName,
+    workspaceName: input.workspaceName,
+    url: panel.url,
+    panelTitle: panel.panelTitle,
+    isTemporary: panel.isTemporary ?? false,
+    parentPanelId: panel.parentPanelId ?? null,
+    returnToPanelId: panel.returnToPanelId ?? null,
+    openedBy: panel.openedBy ?? 'user',
+    width: panel.width,
+    height: panel.height,
+    isFocused: input.focusedPanelId === panel.panelId,
+    isVisible: true,
+    kind: 'spectrum-browser-panel',
+    webContentsId: panel.webContentsId ?? null,
+    targetId: typeof panel.webContentsId === 'number' ? String(panel.webContentsId) : null
+  }
 }
 
 let server: http.Server | null = null
@@ -87,9 +122,43 @@ export async function startApiServer(): Promise<number> {
           workspaceId,
           projectId,
           url,
+          openedBy: body.openedBy,
           width: typeof body.width === 'number' ? body.width : undefined,
           height: typeof body.height === 'number' ? body.height : undefined
         })
+        sendJson(res, 200, {
+          panelId: panel.panelId,
+          workspaceId,
+          projectId,
+          cwd: project?.repoPath ?? null
+        })
+        return
+      }
+
+      if (req.url === '/browser/open-temporary') {
+        if (typeof body.parentPanelId !== 'string') {
+          sendJson(res, 400, { error: 'parentPanelId is required' })
+          return
+        }
+
+        const url = typeof body.url === 'string' ? body.url : 'about:blank'
+        const panel = openTemporaryBrowserPanel({
+          workspaceId,
+          projectId,
+          url,
+          parentPanelId: body.parentPanelId,
+          returnToPanelId:
+            typeof body.returnToPanelId === 'string' ? body.returnToPanelId : undefined,
+          openedBy:
+            body.openedBy === 'agent' || body.openedBy === 'popup' ? body.openedBy : undefined,
+          width: typeof body.width === 'number' ? body.width : undefined,
+          height: typeof body.height === 'number' ? body.height : undefined
+        })
+        if (!panel) {
+          sendJson(res, 404, { error: 'Parent panel not found in workspace' })
+          return
+        }
+
         sendJson(res, 200, {
           panelId: panel.panelId,
           workspaceId,
@@ -148,22 +217,14 @@ export async function startApiServer(): Promise<number> {
       if (req.url === '/browser/list') {
         const focusedPanelId = getFocusedBrowserPanelId(workspaceId)
         sendJson(res, 200, {
-          panels: listBrowserPanels(workspaceId).map((panel) => ({
-            panelId: panel.panelId,
-            workspaceId: panel.workspaceId,
-            projectId: panel.projectId,
-            projectName: project?.name ?? null,
-            workspaceName: workspace?.name ?? null,
-            url: panel.url,
-            panelTitle: panel.panelTitle,
-            width: panel.width,
-            height: panel.height,
-            isFocused: focusedPanelId === panel.panelId,
-            isVisible: true,
-            kind: 'spectrum-browser-panel',
-            webContentsId: panel.webContentsId ?? null,
-            targetId: typeof panel.webContentsId === 'number' ? String(panel.webContentsId) : null
-          }))
+          focusedBrowserPanelId: focusedPanelId,
+          panels: listBrowserPanels(workspaceId).map((panel) =>
+            serializeBrowserPanel(panel, {
+              projectName: project?.name ?? null,
+              workspaceName: workspace?.name ?? null,
+              focusedPanelId
+            })
+          )
         })
         return
       }
@@ -180,26 +241,33 @@ export async function startApiServer(): Promise<number> {
           return
         }
 
-        sendJson(res, 200, {
-          panelId: panel.panelId,
-          workspaceId: panel.workspaceId,
-          projectId: panel.projectId,
-          projectName: project?.name ?? null,
-          workspaceName: workspace?.name ?? null,
-          url: panel.url,
-          panelTitle: panel.panelTitle,
-          width: panel.width,
-          height: panel.height,
-          isFocused: getFocusedBrowserPanelId(workspaceId) === panel.panelId,
-          isVisible: true,
-          kind: 'spectrum-browser-panel',
-          webContentsId: panel.webContentsId ?? null,
-          targetId: typeof panel.webContentsId === 'number' ? String(panel.webContentsId) : null
-        })
+        sendJson(
+          res,
+          200,
+          serializeBrowserPanel(panel, {
+            projectName: project?.name ?? null,
+            workspaceName: workspace?.name ?? null,
+            focusedPanelId: getFocusedBrowserPanelId(workspaceId)
+          })
+        )
         return
       }
 
       if (req.url === '/browser/activate') {
+        if (typeof body.panelId !== 'string') {
+          sendJson(res, 400, { error: 'panelId is required' })
+          return
+        }
+        const panel = activateBrowserPanel(workspaceId, body.panelId)
+        if (!panel) {
+          sendJson(res, 404, { error: 'Panel not found in workspace' })
+          return
+        }
+        sendJson(res, 200, { ok: true })
+        return
+      }
+
+      if (req.url === '/browser/set-agent-focus') {
         if (typeof body.panelId !== 'string') {
           sendJson(res, 400, { error: 'panelId is required' })
           return

@@ -11,6 +11,11 @@ interface BrowserOpenEvent {
   projectId: string
   url: string
   panelTitle?: string
+  isTemporary?: boolean
+  parentPanelId?: string
+  returnToPanelId?: string
+  openedBy?: 'user' | 'agent' | 'popup'
+  afterPanelId?: string
   width?: number
   height?: number
 }
@@ -61,9 +66,18 @@ export function useBrowserApiListener(): void {
         cwd: project.repoPath,
         panelType: 'browser',
         panelTitle: payload.panelTitle?.trim() || 'Browser',
+        isTemporary: payload.isTemporary,
+        parentPanelId: payload.parentPanelId,
+        returnToPanelId: payload.returnToPanelId,
+        openedBy: payload.openedBy,
         url: payload.url,
         width: payload.width,
         height: payload.height
+      }
+
+      if (payload.isTemporary && payload.afterPanelId) {
+        state.addTemporaryPanelAfter(nextPanel, payload.afterPanelId)
+        return
       }
 
       const focusedPanel = state.focusedPanelId
@@ -72,10 +86,13 @@ export function useBrowserApiListener(): void {
 
       if (focusedPanel && focusedPanel.workspaceId === payload.workspaceId) {
         state.insertPanelAfterWithoutFocus(nextPanel, focusedPanel.panelId)
-        return
+      } else {
+        state.addActivePanelWithoutFocus(nextPanel)
       }
 
-      state.addActivePanelWithoutFocus(nextPanel)
+      if (nextPanel.panelType === 'browser') {
+        state.setFocusedBrowserPanel(nextPanel.panelId)
+      }
     })
 
     const removeNavigate = transport.on(
@@ -98,15 +115,15 @@ export function useBrowserApiListener(): void {
 
     const removeActivate = transport.on(
       BROWSER_CHANNELS.ACTIVATE,
-      (_payload: { panelId: string }) => {
-        // Remote browser automation must not steal the user's canvas focus.
+      (payload: { panelId: string | null }) => {
+        useWorkspacesStore.getState().setFocusedBrowserPanel(payload.panelId)
       }
     )
 
     const removeFocusChanged = transport.on(
       BROWSER_CHANNELS.FOCUS_CHANGED,
-      (_payload: { panelId: string | null }) => {
-        // Keep browser-manager state internal; do not translate it into UI focus changes.
+      (payload: { panelId: string | null }) => {
+        useWorkspacesStore.getState().setFocusedBrowserPanel(payload.panelId)
       }
     )
 

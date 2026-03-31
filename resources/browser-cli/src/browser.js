@@ -63,6 +63,10 @@ export class BrowserCli {
       targetId: panel.targetId,
       url: panel.url,
       title: panel.panelTitle,
+      isTemporary: Boolean(panel.isTemporary),
+      parentPanelId: panel.parentPanelId,
+      returnToPanelId: panel.returnToPanelId,
+      openedBy: panel.openedBy,
       name: aliasByPanelId.get(panel.panelId) ?? null,
       workspaceId: panel.workspaceId,
       workspaceName: panel.workspaceName,
@@ -75,10 +79,14 @@ export class BrowserCli {
   }
 
   async listPages() {
-    const [panels, browser] = await Promise.all([
+    const [panels, browser, aliases] = await Promise.all([
       this.listPanels(),
       this.api.getBrowser().catch(() => null),
+      this.loadAliasState(),
     ]);
+    const aliasByPanelId = new Map(
+      Object.entries(aliases).map(([name, panelId]) => [panelId, name])
+    );
 
     let pagesByTargetId = new Map();
 
@@ -98,7 +106,11 @@ export class BrowserCli {
           panelId: panel.panelId,
           targetId: panel.targetId,
           url: page ? page.url() : panel.url,
-          title: page ? await page.title().catch(() => panel.panelTitle) : panel.panelTitle,
+          title: page ? await page.title().catch(() => panel.title) : panel.title,
+          isTemporary: panel.isTemporary,
+          parentPanelId: panel.parentPanelId,
+          returnToPanelId: panel.returnToPanelId,
+          openedBy: panel.openedBy,
           name: aliasByPanelId.get(panel.panelId) ?? null,
           workspaceId: panel.workspaceId,
           workspaceName: panel.workspaceName,
@@ -162,6 +174,7 @@ export class BrowserCli {
   async openPanel(options = {}) {
     const payload = await this.api.post("/browser/open", {
       url: options.url ?? "about:blank",
+      openedBy: options.openedBy ?? "user",
       width: options.width,
       height: options.height,
     });
@@ -169,6 +182,36 @@ export class BrowserCli {
     if (options.focus !== false) {
       await this.api.post("/browser/activate", { panelId: payload.panelId }).catch(() => {});
     }
+
+    if (typeof options.name === "string" && options.name.trim()) {
+      const aliases = await this.loadAliasState();
+      aliases[options.name] = payload.panelId;
+      await this.saveAliasState(aliases);
+    }
+
+    return {
+      panelId: payload.panelId,
+      ...(await this.resolvePanelReference(payload.panelId)),
+    };
+  }
+
+  async openTemporaryPanel(options = {}) {
+    const parentPanelId = options.parentPanelId ?? this.api.session.focusedBrowserPanelId;
+    if (!parentPanelId) {
+      return this.openPanel({
+        ...options,
+        openedBy: options.openedBy ?? "agent",
+      });
+    }
+
+    const payload = await this.api.post("/browser/open-temporary", {
+      parentPanelId,
+      returnToPanelId: options.returnToPanelId ?? parentPanelId,
+      url: options.url ?? "about:blank",
+      openedBy: options.openedBy ?? "agent",
+      width: options.width,
+      height: options.height,
+    });
 
     if (typeof options.name === "string" && options.name.trim()) {
       const aliases = await this.loadAliasState();
@@ -234,7 +277,10 @@ export class BrowserCli {
   }
 
   async newPage(options = {}) {
-    const panel = await this.openPanel(options);
+    const panel =
+      options.persistent === true
+        ? await this.openPanel({ ...options, openedBy: options.openedBy ?? "agent" })
+        : await this.openTemporaryPanel({ ...options, openedBy: options.openedBy ?? "agent" });
 
     try {
       return await this.waitForPanel(panel.panelId);
@@ -291,6 +337,7 @@ export class BrowserCli {
         workspaceId: this.api.session.workspaceId,
         workspaceName: this.api.session.workspaceName,
         focusedBrowserPanelId: this.api.session.focusedBrowserPanelId,
+        userFocusedPanelId: this.api.session.userFocusedPanelId ?? null,
         cdpEndpoint,
       },
       panels,

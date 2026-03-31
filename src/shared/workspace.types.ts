@@ -1,10 +1,15 @@
 export type PanelType = 'terminal' | 'browser' | 'chat' | 't3code' | 'file'
 export type PanelHydrationState = 'live' | 'preview' | 'cold'
+export type PanelOpenedBy = 'user' | 'agent' | 'popup'
 
 export interface PanelConfig {
   id: string
   type: PanelType
   title: string
+  isTemporary?: boolean
+  parentPanelId?: string
+  returnToPanelId?: string
+  openedBy?: PanelOpenedBy
   providerId?: string
   filePath?: string
   cursorLine?: number

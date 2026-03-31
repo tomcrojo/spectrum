@@ -97,6 +97,7 @@ export function Canvas() {
     workspaces,
     activePanels,
     focusedPanelId,
+    focusedBrowserPanelId,
     loadWorkspaces,
     createWorkspace,
     setActivePanels,
@@ -233,7 +234,10 @@ export function Canvas() {
       let nextHydrationState: PanelHydrationState = panelRuntimeById[panel.panelId]?.hydrationState ?? 'cold'
 
       if (panel.panelType === 'browser') {
-        nextHydrationState = panel.workspaceId === activeWorkspaceId ? 'live' : 'cold'
+        nextHydrationState =
+          panel.workspaceId === activeWorkspaceId || panel.panelId === focusedBrowserPanelId
+            ? 'live'
+            : 'cold'
       } else if (panel.panelType === 't3code') {
         if (runtimePowerMode === 'high') {
           nextHydrationState = 'live'
@@ -270,6 +274,7 @@ export function Canvas() {
   }, [
     activePanels,
     activeWorkspaceId,
+    focusedBrowserPanelId,
     focusedPanelId,
     panelRuntimeById,
     runtimePowerMode,

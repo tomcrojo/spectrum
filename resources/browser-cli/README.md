@@ -8,8 +8,10 @@ It controls browser panels inside a running Spectrum workspace. It does not open
 
 - a Spectrum workspace session is the browser session
 - a browser panel is a page
+- browser-cli focus is internal agent focus, not user-visible UI focus
 - `browser search <query>` opens search results in a new browser panel
 - `browser open <url>` or `browser.openPanel(...)` creates a new browser panel inside that workspace
+- `browser.newPage(...)` prefers a temporary helper panel so automation can attach without stealing the user's focus
 - `browser.listPages()` only lists mounted browser panels in the connected workspace
 - `--connect` attaches to the active Spectrum workspace session, not to arbitrary Chrome or a random DevTools endpoint
 
@@ -20,6 +22,7 @@ Before using `browser-cli`:
 - Spectrum must already be running
 - a project/workspace must be active
 - if you want CDP-backed page control, the workspace must have a mounted browser panel
+- Spectrum may mount an agent-targeted helper panel in the background while leaving the user's visible focus untouched
 - inside Spectrum-managed shells, prefer `$SPECTRUM_BROWSER` if `browser` is not on `PATH`
 
 If you are trying to open a standalone Chrome window, this is the wrong tool.

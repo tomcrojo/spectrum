@@ -235,14 +235,21 @@ interface BrowserPanelState {
   projectId: string
   url: string
   panelTitle: string
+  isTemporary?: boolean
+  parentPanelId?: string
+  returnToPanelId?: string
+  openedBy?: 'user' | 'agent' | 'popup'
+  afterPanelId?: string
   width?: number
   height?: number
 }
 
 const browserPanels = new Map<string, BrowserPanelState>()
 const browserTokens = new Map<string, { workspaceId: string; projectId: string }>()
+const focusedBrowserPanelIdByWorkspace = new Map<string, string>()
 let browserApiServer: http.Server | null = null
 let browserApiPort: number | null = null
+const TEMPORARY_BROWSER_PANEL_WIDTH = 350
 
 function getShell(): string {
   if (process.platform === 'win32') return 'powershell.exe'
@@ -362,11 +369,47 @@ function startBrowserApiServer(): Promise<number> {
         projectId: scope.projectId,
         url: typeof body.url === 'string' ? body.url : 'about:blank',
         panelTitle: 'Browser',
+        openedBy: body.openedBy === 'agent' || body.openedBy === 'popup' ? body.openedBy : 'user',
         width: typeof body.width === 'number' ? body.width : undefined,
         height: typeof body.height === 'number' ? body.height : undefined
       }
       browserPanels.set(panel.panelId, panel)
+      focusedBrowserPanelIdByWorkspace.set(scope.workspaceId, panel.panelId)
       pushBrowserEvent(BROWSER_CHANNELS.OPEN, panel)
+      sendJson(res, 200, { panelId: panel.panelId })
+      return
+    }
+
+    if (req.url === '/browser/open-temporary') {
+      const parentPanelId = typeof body.parentPanelId === 'string' ? body.parentPanelId : ''
+      const parentPanel = browserPanels.get(parentPanelId)
+      if (!parentPanel || parentPanel.workspaceId !== scope.workspaceId) {
+        sendJson(res, 404, { error: 'Parent panel not found' })
+        return
+      }
+
+      const panel: BrowserPanelState = {
+        panelId: nanoid(),
+        workspaceId: scope.workspaceId,
+        projectId: scope.projectId,
+        url: typeof body.url === 'string' ? body.url : 'about:blank',
+        panelTitle: 'Browser',
+        isTemporary: true,
+        parentPanelId,
+        returnToPanelId:
+          typeof body.returnToPanelId === 'string' ? body.returnToPanelId : parentPanelId,
+        openedBy: body.openedBy === 'popup' ? 'popup' : 'agent',
+        afterPanelId: parentPanelId,
+        width: typeof body.width === 'number' ? body.width : TEMPORARY_BROWSER_PANEL_WIDTH,
+        height: typeof body.height === 'number' ? body.height : undefined
+      }
+      browserPanels.set(panel.panelId, panel)
+      focusedBrowserPanelIdByWorkspace.set(scope.workspaceId, panel.panelId)
+      pushBrowserEvent(BROWSER_CHANNELS.OPEN, panel)
+      pushBrowserEvent(BROWSER_CHANNELS.FOCUS_CHANGED, {
+        workspaceId: scope.workspaceId,
+        panelId: panel.panelId
+      })
       sendJson(res, 200, { panelId: panel.panelId })
       return
     }
@@ -397,6 +440,23 @@ function startBrowserApiServer(): Promise<number> {
         return
       }
       browserPanels.delete(panelId)
+      if (focusedBrowserPanelIdByWorkspace.get(scope.workspaceId) === panelId) {
+        const returnPanelId =
+          panel.returnToPanelId && browserPanels.has(panel.returnToPanelId)
+            ? panel.returnToPanelId
+            : panel.parentPanelId && browserPanels.has(panel.parentPanelId)
+              ? panel.parentPanelId
+              : null
+        if (returnPanelId) {
+          focusedBrowserPanelIdByWorkspace.set(scope.workspaceId, returnPanelId)
+        } else {
+          focusedBrowserPanelIdByWorkspace.delete(scope.workspaceId)
+        }
+        pushBrowserEvent(BROWSER_CHANNELS.FOCUS_CHANGED, {
+          workspaceId: scope.workspaceId,
+          panelId: returnPanelId
+        })
+      }
       pushBrowserEvent(BROWSER_CHANNELS.CLOSE, {
         panelId,
         workspaceId: scope.workspaceId
@@ -433,10 +493,31 @@ function startBrowserApiServer(): Promise<number> {
 
     if (req.url === '/browser/list') {
       sendJson(res, 200, {
+        focusedBrowserPanelId: focusedBrowserPanelIdByWorkspace.get(scope.workspaceId) ?? null,
         panels: Array.from(browserPanels.values()).filter(
           (panel) => panel.workspaceId === scope.workspaceId
         )
       })
+      return
+    }
+
+    if (req.url === '/browser/activate' || req.url === '/browser/set-agent-focus') {
+      const panelId = typeof body.panelId === 'string' ? body.panelId : ''
+      const panel = browserPanels.get(panelId)
+      if (!panel || panel.workspaceId !== scope.workspaceId) {
+        sendJson(res, 404, { error: 'Panel not found' })
+        return
+      }
+      focusedBrowserPanelIdByWorkspace.set(scope.workspaceId, panelId)
+      pushBrowserEvent(BROWSER_CHANNELS.ACTIVATE, {
+        workspaceId: scope.workspaceId,
+        panelId
+      })
+      pushBrowserEvent(BROWSER_CHANNELS.FOCUS_CHANGED, {
+        workspaceId: scope.workspaceId,
+        panelId
+      })
+      sendJson(res, 200, { ok: true })
       return
     }
 
@@ -1015,6 +1096,57 @@ const handlers: Record<string, Handler> = {
       panel.panelTitle = payload.panelTitle.trim()
     }
     return true
+  },
+
+  [BROWSER_CHANNELS.SESSION_SYNC]: (payload: {
+    activeWorkspaceId: string | null
+    focusedBrowserPanelId: string | null
+  }) => {
+    if (payload.activeWorkspaceId) {
+      if (payload.focusedBrowserPanelId) {
+        focusedBrowserPanelIdByWorkspace.set(
+          payload.activeWorkspaceId,
+          payload.focusedBrowserPanelId
+        )
+      } else {
+        focusedBrowserPanelIdByWorkspace.delete(payload.activeWorkspaceId)
+      }
+    }
+    return true
+  },
+
+  [BROWSER_CHANNELS.OPEN_TEMPORARY]: (payload: {
+    workspaceId: string
+    projectId: string
+    parentPanelId: string
+    returnToPanelId?: string
+    url: string
+    width?: number
+    height?: number
+    openedBy?: 'agent' | 'popup'
+  }) => {
+    const panel: BrowserPanelState = {
+      panelId: nanoid(),
+      workspaceId: payload.workspaceId,
+      projectId: payload.projectId,
+      url: payload.url,
+      panelTitle: 'Browser',
+      isTemporary: true,
+      parentPanelId: payload.parentPanelId,
+      returnToPanelId: payload.returnToPanelId ?? payload.parentPanelId,
+      openedBy: payload.openedBy ?? 'popup',
+      afterPanelId: payload.parentPanelId,
+      width: payload.width ?? TEMPORARY_BROWSER_PANEL_WIDTH,
+      height: payload.height
+    }
+    browserPanels.set(panel.panelId, panel)
+    focusedBrowserPanelIdByWorkspace.set(payload.workspaceId, panel.panelId)
+    pushBrowserEvent(BROWSER_CHANNELS.OPEN, panel)
+    pushBrowserEvent(BROWSER_CHANNELS.FOCUS_CHANGED, {
+      workspaceId: payload.workspaceId,
+      panelId: panel.panelId
+    })
+    return panel
   }
 }
 

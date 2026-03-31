@@ -51,6 +51,7 @@ export const T3CODE_CHANNELS = {
 export const BROWSER_CHANNELS = {
   NAVIGATE: 'browser:navigate',
   OPEN: 'browser:open',
+  OPEN_TEMPORARY: 'browser:open-temporary',
   CLOSE: 'browser:close',
   RESIZE: 'browser:resize',
   ACTIVATE: 'browser:activate',

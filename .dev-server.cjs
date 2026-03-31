@@ -86,6 +86,7 @@ var T3CODE_CHANNELS = {
 var BROWSER_CHANNELS = {
   NAVIGATE: "browser:navigate",
   OPEN: "browser:open",
+  OPEN_TEMPORARY: "browser:open-temporary",
   CLOSE: "browser:close",
   RESIZE: "browser:resize",
   ACTIVATE: "browser:activate",
@@ -113,7 +114,7 @@ function findProjectRoot() {
   for (const candidate of candidates) {
     let current = (0, import_path.resolve)(candidate);
     while (true) {
-      const configPath = (0, import_path.join)(current, "centipede.config.json");
+      const configPath = (0, import_path.join)(current, "spectrum.config.json");
       const t3CodePackagePath = (0, import_path.join)(current, "resources", "t3code", "package.json");
       if ((0, import_fs.existsSync)(configPath) || (0, import_fs.existsSync)(t3CodePackagePath)) {
         return current;
@@ -128,9 +129,18 @@ function findProjectRoot() {
   return process.cwd();
 }
 var projectRoot = findProjectRoot();
+function getPackagedT3CodePath() {
+  const resourcesPath = process.resourcesPath;
+  if (!resourcesPath) {
+    return null;
+  }
+  const candidate = (0, import_path.join)(resourcesPath, "t3code");
+  return (0, import_fs.existsSync)((0, import_path.join)(candidate, "package.json")) ? candidate : null;
+}
 function findExistingT3CodeSourcePath(preferredPath) {
   const candidates = [
     preferredPath,
+    getPackagedT3CodePath(),
     (0, import_path.join)(projectRoot, "resources", "t3code")
   ].filter((value) => Boolean(value));
   for (const candidate of candidates) {
@@ -164,7 +174,7 @@ var defaultConfig = {
 var cachedConfig = null;
 function getT3CodeConfig() {
   if (cachedConfig) return cachedConfig;
-  const configPath = (0, import_path.join)(projectRoot, "centipede.config.json");
+  const configPath = (0, import_path.join)(projectRoot, "spectrum.config.json");
   if (!(0, import_fs.existsSync)(configPath)) {
     cachedConfig = defaultConfig;
     return cachedConfig;
@@ -201,9 +211,12 @@ function getUserDataPath() {
   if (typeof import_electron.app?.getPath === "function") {
     return import_electron.app.getPath("userData");
   }
-  return (0, import_path2.join)((0, import_os.homedir)(), ".centipede-dev");
+  return (0, import_path2.join)((0, import_os.homedir)(), ".spectrum-dev");
 }
 function getBrowserCliRoot() {
+  if (typeof import_electron.app?.isPackaged === "boolean" && import_electron.app.isPackaged) {
+    return (0, import_path2.join)(process.resourcesPath, "browser-cli");
+  }
   return (0, import_path2.join)(getProjectRoot(), "resources", "browser-cli");
 }
 function getBrowserCliBinDir() {
@@ -263,6 +276,71 @@ function reserveLoopbackPort() {
 function getFreePort() {
   return reserveLoopbackPort();
 }
+function getPackagedT3CodeRoot() {
+  return (0, import_path3.join)(process.resourcesPath, "t3code");
+}
+function isPackagedT3CodeSource(sourcePath) {
+  return (0, import_fs2.existsSync)(getPackagedT3CodeRoot()) && (0, import_path3.join)(sourcePath) === getPackagedT3CodeRoot() || (0, import_fs2.existsSync)((0, import_path3.join)(sourcePath, ".spectrum-packaged-t3code-runtime"));
+}
+function getPackagedT3CodeShadowRoot() {
+  return (0, import_path3.join)((0, import_os2.homedir)(), ".spectrum-dev", "embedded", "t3code-runtime");
+}
+function writeRuntimePackageManifest(targetPath, name) {
+  (0, import_fs2.writeFileSync)(
+    targetPath,
+    JSON.stringify(
+      {
+        name,
+        private: true,
+        type: "module"
+      },
+      null,
+      2
+    )
+  );
+}
+function ensurePackagedT3CodeRuntimeReady() {
+  const packagedRoot = getPackagedT3CodeRoot();
+  const shadowRoot = getPackagedT3CodeShadowRoot();
+  const versionFile = (0, import_path3.join)(shadowRoot, ".version");
+  const markerFile = (0, import_path3.join)(shadowRoot, ".spectrum-packaged-t3code-runtime");
+  const currentVersion = import_electron2.app.getVersion();
+  if ((0, import_fs2.existsSync)((0, import_path3.join)(shadowRoot, "apps", "server", "dist", "index.mjs")) && (0, import_fs2.existsSync)((0, import_path3.join)(shadowRoot, "node_modules")) && (0, import_fs2.existsSync)(markerFile) && (0, import_fs2.existsSync)(versionFile) && (0, import_fs2.statSync)(versionFile).isFile()) {
+    try {
+      const version = (0, import_fs2.readFileSync)(versionFile, "utf8").trim();
+      if (version === currentVersion) {
+        return shadowRoot;
+      }
+    } catch {
+    }
+  }
+  (0, import_fs2.rmSync)(shadowRoot, { recursive: true, force: true });
+  (0, import_fs2.mkdirSync)((0, import_path3.join)(shadowRoot, "apps", "server"), { recursive: true });
+  const packagedRootPackagePath = (0, import_path3.join)(packagedRoot, "package.json");
+  const packagedServerPackagePath = (0, import_path3.join)(packagedRoot, "apps", "server", "package.json");
+  if ((0, import_fs2.existsSync)(packagedRootPackagePath)) {
+    (0, import_fs2.copyFileSync)(packagedRootPackagePath, (0, import_path3.join)(shadowRoot, "package.json"));
+  } else {
+    writeRuntimePackageManifest((0, import_path3.join)(shadowRoot, "package.json"), "@spectrum/t3code-runtime");
+  }
+  if ((0, import_fs2.existsSync)(packagedServerPackagePath)) {
+    (0, import_fs2.copyFileSync)(packagedServerPackagePath, (0, import_path3.join)(shadowRoot, "apps", "server", "package.json"));
+  } else {
+    writeRuntimePackageManifest(
+      (0, import_path3.join)(shadowRoot, "apps", "server", "package.json"),
+      "@spectrum/t3code-server-runtime"
+    );
+  }
+  (0, import_fs2.cpSync)(
+    (0, import_path3.join)(packagedRoot, "apps", "server", "dist"),
+    (0, import_path3.join)(shadowRoot, "apps", "server", "dist"),
+    { recursive: true }
+  );
+  (0, import_fs2.symlinkSync)((0, import_path3.join)(packagedRoot, "runtime-node-modules"), (0, import_path3.join)(shadowRoot, "node_modules"), "dir");
+  (0, import_fs2.writeFileSync)(markerFile, "");
+  (0, import_fs2.writeFileSync)(versionFile, currentVersion);
+  return shadowRoot;
+}
 function getLatestModifiedTime(targetPath) {
   if (!(0, import_fs2.existsSync)(targetPath)) {
     return 0;
@@ -281,6 +359,9 @@ function getLatestModifiedTime(targetPath) {
   return latest;
 }
 function shouldRebuild(sourcePath, entrypointPath) {
+  if (isPackagedT3CodeSource(sourcePath)) {
+    return false;
+  }
   if (!(0, import_fs2.existsSync)(entrypointPath)) {
     return true;
   }
@@ -300,7 +381,41 @@ function shouldRebuild(sourcePath, entrypointPath) {
   );
   return latestSourceChange > latestBuildOutput;
 }
+function getLatestBuildOutputTime(sourcePath, entrypointPath) {
+  const webDistPath = (0, import_path3.join)(sourcePath, "apps", "web", "dist", "index.html");
+  return Math.max(
+    (0, import_fs2.existsSync)(entrypointPath) ? (0, import_fs2.statSync)(entrypointPath).mtimeMs : 0,
+    (0, import_fs2.existsSync)(webDistPath) ? (0, import_fs2.statSync)(webDistPath).mtimeMs : 0
+  );
+}
+async function stopRuntimeInstance(instance) {
+  if (instance.process.exitCode !== null) {
+    return;
+  }
+  await new Promise((resolve2) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      instance.process.removeListener("exit", finish);
+      resolve2();
+    };
+    instance.process.once("exit", finish);
+    try {
+      instance.process.kill();
+    } catch {
+      finish();
+      return;
+    }
+    setTimeout(finish, 5e3);
+  });
+}
 function ensureBuilt(sourcePath, installCommand, buildCommand) {
+  if (import_electron2.app.isPackaged || isPackagedT3CodeSource(sourcePath)) {
+    return;
+  }
   const entrypointPath = (0, import_path3.join)(sourcePath, getT3CodeConfig().entrypoint);
   if (!shouldRebuild(sourcePath, entrypointPath)) {
     return;
@@ -361,12 +476,28 @@ async function waitForWebSocketReady(baseUrl, timeoutMs = 1e4) {
   throw new Error("Timed out waiting for T3Code websocket readiness");
 }
 function getStateDir() {
-  return (0, import_path3.join)((0, import_os2.homedir)(), ".centipede-dev", "t3code-state", GLOBAL_RUNTIME_ID);
+  return (0, import_path3.join)((0, import_os2.homedir)(), ".spectrum-dev", "t3code-state", GLOBAL_RUNTIME_ID);
 }
 function getLogPath() {
-  const logsDir = (0, import_path3.join)((0, import_os2.homedir)(), ".centipede-dev", "t3code-logs");
+  const logsDir = (0, import_path3.join)((0, import_os2.homedir)(), ".spectrum-dev", "t3code-logs");
   (0, import_fs2.mkdirSync)(logsDir, { recursive: true });
   return (0, import_path3.join)(logsDir, `${GLOBAL_RUNTIME_ID}.log`);
+}
+function closeFileDescriptor(fd) {
+  try {
+    (0, import_fs2.closeSync)(fd);
+  } catch {
+  }
+}
+function getPackagedNodeBinaryPath() {
+  return (0, import_path3.join)(process.resourcesPath, "node-bin", process.platform === "win32" ? "node.exe" : "node");
+}
+function resolveT3CodeRuntimeCommand() {
+  const packagedNodePath = getPackagedNodeBinaryPath();
+  if ((0, import_fs2.existsSync)(packagedNodePath)) {
+    return packagedNodePath;
+  }
+  return "node";
 }
 function getStateDbPath(stateDir = getStateDir()) {
   return (0, import_path3.join)(stateDir, "userdata", "state.sqlite");
@@ -378,8 +509,15 @@ function openStateDb(options) {
   }
   return new import_better_sqlite3.default(stateDbPath, options);
 }
-function getProjectBindingId(centipedeProjectId) {
-  return `centipede-project:${centipedeProjectId}`;
+function getProjectBindingId(spectrumProjectId) {
+  return `spectrum-project:${spectrumProjectId}`;
+}
+function resolveT3ProjectBindingId(spectrumProjectId, existingT3ProjectId) {
+  const expectedBindingId = getProjectBindingId(spectrumProjectId);
+  if (existingT3ProjectId === expectedBindingId) {
+    return existingT3ProjectId;
+  }
+  return expectedBindingId;
 }
 function parseModelSelection(raw) {
   if (!raw) {
@@ -434,13 +572,30 @@ function getThreadById(threadId) {
     db2.close();
   }
 }
+function computeNotificationKind(input) {
+  const { sessionStatus, pendingApprovalCount, hasPendingUserInput, latestTurnCompletedAt } = input;
+  if (sessionStatus === "running" || sessionStatus === "connecting" || sessionStatus === "starting") {
+    return null;
+  }
+  if (pendingApprovalCount > 0) {
+    return "requires-input";
+  }
+  if (hasPendingUserInput) {
+    return "requires-input";
+  }
+  if (latestTurnCompletedAt) {
+    return "completed";
+  }
+  return null;
+}
 function getThreadMetadata(threadId) {
   const db2 = openStateDb({ readonly: true });
   if (!db2) {
     return {
       threadTitle: null,
       lastUserMessageAt: null,
-      providerId: null
+      providerId: null,
+      notificationKind: null
     };
   }
   try {
@@ -460,10 +615,73 @@ function getThreadMetadata(threadId) {
          ORDER BY created_at DESC
          LIMIT 1`
     ).get(threadId);
+    let sessionStatus = null;
+    try {
+      const sessionRow = db2.prepare(
+        `SELECT status FROM projection_thread_sessions WHERE thread_id = ? LIMIT 1`
+      ).get(threadId);
+      sessionStatus = sessionRow?.status ?? null;
+    } catch {
+    }
+    let pendingApprovalCount = 0;
+    try {
+      const approvalRow = db2.prepare(
+        `SELECT COUNT(*) as count FROM projection_pending_approvals WHERE thread_id = ? AND status = 'pending'`
+      ).get(threadId);
+      pendingApprovalCount = approvalRow?.count ?? 0;
+    } catch {
+    }
+    let hasPendingUserInput = false;
+    try {
+      const activities = db2.prepare(
+        `SELECT kind, payload_json AS payloadJson
+           FROM projection_thread_activities
+           WHERE thread_id = ?
+             AND kind IN ('user-input.requested', 'user-input.responded')
+           ORDER BY sequence ASC, created_at ASC`
+      ).all(threadId);
+      const requestedIds = /* @__PURE__ */ new Set();
+      const respondedIds = /* @__PURE__ */ new Set();
+      for (const activity of activities) {
+        try {
+          const payload = activity.payloadJson ? JSON.parse(activity.payloadJson) : null;
+          const requestId = typeof payload?.requestId === "string" ? payload.requestId : null;
+          if (!requestId) continue;
+          if (activity.kind === "user-input.requested") {
+            requestedIds.add(requestId);
+          } else if (activity.kind === "user-input.responded") {
+            respondedIds.add(requestId);
+          }
+        } catch {
+        }
+      }
+      hasPendingUserInput = [...requestedIds].some((id) => !respondedIds.has(id));
+    } catch {
+    }
+    let latestTurnCompletedAt = null;
+    try {
+      const turnRow = db2.prepare(
+        `SELECT completed_at AS completedAt
+           FROM projection_turns
+           WHERE thread_id = ?
+             AND completed_at IS NOT NULL
+           ORDER BY completed_at DESC
+           LIMIT 1`
+      ).get(threadId);
+      latestTurnCompletedAt = turnRow?.completedAt ?? null;
+    } catch {
+    }
+    const notificationKind = computeNotificationKind({
+      sessionStatus,
+      pendingApprovalCount,
+      hasPendingUserInput,
+      latestTurnCompletedAt
+    });
     return {
       threadTitle: threadRow?.title ?? null,
       lastUserMessageAt: messageRow?.lastUserMessageAt ?? null,
-      providerId: getProviderIdFromModelSelection(threadRow?.modelSelectionJson)
+      providerId: getProviderIdFromModelSelection(threadRow?.modelSelectionJson),
+      notificationKind
     };
   } finally {
     db2.close();
@@ -506,7 +724,7 @@ async function pollWatchedThreads() {
     }
     watch.lastPolledAt = now;
     const snapshot = getThreadMetadata(watch.t3ThreadId);
-    if (watch.lastSnapshot?.threadTitle === snapshot.threadTitle && watch.lastSnapshot?.lastUserMessageAt === snapshot.lastUserMessageAt && watch.lastSnapshot?.providerId === snapshot.providerId) {
+    if (watch.lastSnapshot?.threadTitle === snapshot.threadTitle && watch.lastSnapshot?.lastUserMessageAt === snapshot.lastUserMessageAt && watch.lastSnapshot?.providerId === snapshot.providerId && watch.lastSnapshot?.notificationKind === snapshot.notificationKind) {
       continue;
     }
     watch.lastSnapshot = snapshot;
@@ -515,7 +733,8 @@ async function pollWatchedThreads() {
       t3ThreadId: watch.t3ThreadId,
       threadTitle: snapshot.threadTitle,
       lastUserMessageAt: snapshot.lastUserMessageAt,
-      providerId: snapshot.providerId
+      providerId: snapshot.providerId,
+      notificationKind: snapshot.notificationKind
     });
   }
 }
@@ -563,7 +782,7 @@ async function sendWsRequest(baseUrl, body) {
       return await new Promise((resolve2, reject) => {
         const wsUrl = baseUrl.replace(/^http/, "ws");
         const socket = new import_ws.default(wsUrl);
-        const requestId = `centipede-${crypto.randomUUID()}`;
+        const requestId = `spectrum-${crypto.randomUUID()}`;
         let settled = false;
         const finish = (callback) => {
           if (settled) {
@@ -630,21 +849,36 @@ function buildEmbeddedThreadUrl(baseUrl, threadId) {
   return new URL(`/embed/thread/${threadId}`, `${baseUrl}/`).toString();
 }
 async function ensureRuntime() {
-  if (runtime && runtime.process.exitCode === null) {
-    return { baseUrl: runtime.baseUrl, logPath: runtime.logPath };
+  const config = getT3CodeConfig();
+  const sourcePath = import_electron2.app.isPackaged ? ensurePackagedT3CodeRuntimeReady() : isPackagedT3CodeSource(config.sourcePath) ? ensurePackagedT3CodeRuntimeReady() : config.sourcePath;
+  if (!(0, import_fs2.existsSync)(sourcePath)) {
+    throw new Error(`T3Code source not found at ${config.sourcePath}`);
+  }
+  const entrypointPath = (0, import_path3.join)(sourcePath, config.entrypoint);
+  const activeRuntime = runtime && runtime.process.exitCode === null ? runtime : null;
+  const needsRebuild = import_electron2.app.isPackaged ? false : shouldRebuild(sourcePath, entrypointPath);
+  const latestBuildOutputTime = getLatestBuildOutputTime(sourcePath, entrypointPath);
+  if (activeRuntime && !needsRebuild && latestBuildOutputTime <= activeRuntime.startedAt) {
+    return { baseUrl: activeRuntime.baseUrl, logPath: activeRuntime.logPath };
   }
   if (pendingRuntimeStart) {
     return pendingRuntimeStart;
   }
-  const config = getT3CodeConfig();
-  if (!(0, import_fs2.existsSync)(config.sourcePath)) {
-    throw new Error(`T3Code source not found at ${config.sourcePath}`);
-  }
-  pendingRuntimeStart = (async () => {
-    ensureBuilt(config.sourcePath, config.installCommand, config.buildCommand);
+  const startPromise = (async () => {
+    if (needsRebuild) {
+      ensureBuilt(sourcePath, config.installCommand, config.buildCommand);
+    }
+    const rebuiltOutputTime = getLatestBuildOutputTime(sourcePath, entrypointPath);
+    const previousRuntime = runtime && runtime.process.exitCode === null ? runtime : null;
+    if (previousRuntime && rebuiltOutputTime <= previousRuntime.startedAt) {
+      return { baseUrl: previousRuntime.baseUrl, logPath: previousRuntime.logPath };
+    }
+    if (previousRuntime) {
+      await stopRuntimeInstance(previousRuntime);
+    }
     const port = await getFreePort();
     const baseUrl = `http://127.0.0.1:${port}`;
-    const entrypoint = (0, import_path3.join)(config.sourcePath, config.entrypoint);
+    const entrypoint = entrypointPath;
     const stateDir = getStateDir();
     const logPath = getLogPath();
     (0, import_fs2.mkdirSync)(stateDir, { recursive: true });
@@ -654,9 +888,9 @@ async function ensureRuntime() {
     delete env.ELECTRON_RUN_AS_NODE;
     delete env.T3CODE_AUTH_TOKEN;
     env.PATH = prependBrowserCliToPath(env.PATH);
-    env.CENTIPEDE_BROWSER = getBrowserCommandPath();
-    env.CENTIPEDE_BROWSER_CLI = getBrowserCliCommandPath();
-    env.CENTIPEDE_BROWSER_SESSION_FILE = getBrowserCliSessionFilePath();
+    env.SPECTRUM_BROWSER = getBrowserCommandPath();
+    env.SPECTRUM_BROWSER_CLI = getBrowserCliCommandPath();
+    env.SPECTRUM_BROWSER_SESSION_FILE = getBrowserCliSessionFilePath();
     env.T3CODE_MODE = "web";
     env.T3CODE_HOST = "127.0.0.1";
     env.T3CODE_PORT = String(port);
@@ -664,8 +898,14 @@ async function ensureRuntime() {
     env.T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD = "0";
     env.T3CODE_HOME = stateDir;
     env.T3CODE_STATE_DIR = stateDir;
+    const runtimeCommand = resolveT3CodeRuntimeCommand();
+    if (runtimeCommand === process.execPath) {
+      env.ELECTRON_RUN_AS_NODE = "1";
+    } else {
+      delete env.ELECTRON_RUN_AS_NODE;
+    }
     const child = (0, import_child_process.spawn)(
-      "node",
+      runtimeCommand,
       [
         entrypoint,
         "--mode",
@@ -681,46 +921,70 @@ async function ensureRuntime() {
         "--no-browser"
       ],
       {
-        cwd: config.sourcePath,
+        cwd: sourcePath,
         env,
         stdio: ["ignore", logFd, logFd]
       }
     );
+    let didChildError = false;
+    const childStart = Promise.race([
+      waitForReady(baseUrl).then(() => waitForAppShell(baseUrl)).then(() => waitForWebSocketReady(baseUrl)),
+      new Promise((_, reject) => {
+        child.once("error", (error) => {
+          didChildError = true;
+          reject(error);
+        });
+      })
+    ]);
     child.on("exit", () => {
-      runtime = null;
-      pendingRuntimeStart = null;
-      (0, import_fs2.closeSync)(logFd);
+      if (runtime?.process === child) {
+        runtime = null;
+      }
+      if (pendingRuntimeStart === startPromise) {
+        pendingRuntimeStart = null;
+      }
+      closeFileDescriptor(logFd);
     });
     runtime = {
       process: child,
       baseUrl,
       logPath,
-      stateDir
+      stateDir,
+      startedAt: Date.now()
     };
     try {
-      await waitForReady(baseUrl);
-      await waitForAppShell(baseUrl);
-      await waitForWebSocketReady(baseUrl);
+      await childStart;
       return { baseUrl, logPath };
     } catch (error) {
-      child.kill();
-      runtime = null;
+      if (!didChildError && child.exitCode === null) {
+        child.kill();
+      }
+      closeFileDescriptor(logFd);
+      if (runtime?.process === child) {
+        runtime = null;
+      }
       throw error;
     } finally {
-      pendingRuntimeStart = null;
+      if (pendingRuntimeStart === startPromise) {
+        pendingRuntimeStart = null;
+      }
     }
   })();
+  pendingRuntimeStart = startPromise;
   return pendingRuntimeStart;
 }
 async function ensureT3Project(input) {
-  const pendingKey = input.existingT3ProjectId || getProjectBindingId(input.centipedeProjectId);
+  const t3ProjectId = resolveT3ProjectBindingId(
+    input.spectrumProjectId,
+    input.existingT3ProjectId
+  );
+  const pendingKey = t3ProjectId;
   const pending = pendingProjectEnsures.get(pendingKey);
   if (pending) {
     return pending;
   }
   const ensurePromise = (async () => {
     const { baseUrl } = await ensureRuntime();
-    const t3ProjectId = input.existingT3ProjectId || getProjectBindingId(input.centipedeProjectId);
     const existing = getProjectById(t3ProjectId);
     if (existing) {
       if (existing.workspaceRoot !== input.projectPath || existing.title !== input.projectName) {
@@ -798,7 +1062,7 @@ async function ensurePanelThread(input) {
   const ensurePromise = (async () => {
     const { baseUrl } = await ensureRuntime();
     const { t3ProjectId } = await ensureT3Project({
-      centipedeProjectId: input.centipedeProjectId,
+      spectrumProjectId: input.spectrumProjectId,
       projectPath: input.projectPath,
       projectName: input.projectName,
       existingT3ProjectId: input.existingT3ProjectId
@@ -939,9 +1203,9 @@ function getRandomProjectColor() {
 }
 
 // src/dev-server/index.ts
-var dataDir = (0, import_path4.join)((0, import_os3.homedir)(), ".centipede-dev");
+var dataDir = (0, import_path4.join)((0, import_os3.homedir)(), ".spectrum-dev");
 if (!(0, import_fs3.existsSync)(dataDir)) (0, import_fs3.mkdirSync)(dataDir, { recursive: true });
-var dbPath = (0, import_path4.join)(dataDir, "centipede-dev.db");
+var dbPath = (0, import_path4.join)(dataDir, "spectrum-dev.db");
 var db = new import_better_sqlite32.default(dbPath);
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
@@ -1012,6 +1276,22 @@ function rowToWorkspace(row) {
     lastPanelEditedAt: row.last_panel_edited_at ?? null
   };
 }
+function sanitizeLayoutStateForNewWorkspace(layoutState) {
+  if (!layoutState || typeof layoutState !== "object") {
+    return { panels: [], sizes: [] };
+  }
+  const panels = Array.isArray(layoutState.panels) ? layoutState.panels.map((panel) => ({
+    ...panel,
+    t3ProjectId: void 0,
+    t3ThreadId: void 0
+  })) : [];
+  const sizes = Array.isArray(layoutState.sizes) ? layoutState.sizes : [];
+  return {
+    ...layoutState,
+    panels,
+    sizes
+  };
+}
 function getNewerTimestamp(left, right) {
   const leftValue = left ? new Date(left).getTime() : Number.NaN;
   const rightValue = right ? new Date(right).getTime() : Number.NaN;
@@ -1071,8 +1351,10 @@ var ptys = /* @__PURE__ */ new Map();
 var wsClients = /* @__PURE__ */ new Set();
 var browserPanels = /* @__PURE__ */ new Map();
 var browserTokens = /* @__PURE__ */ new Map();
+var focusedBrowserPanelIdByWorkspace = /* @__PURE__ */ new Map();
 var browserApiServer = null;
 var browserApiPort = null;
+var TEMPORARY_BROWSER_PANEL_WIDTH = 350;
 function getShell() {
   if (process.platform === "win32") return "powershell.exe";
   return process.env.SHELL || "/bin/zsh";
@@ -1171,11 +1453,44 @@ function startBrowserApiServer() {
         projectId: scope.projectId,
         url: typeof body.url === "string" ? body.url : "about:blank",
         panelTitle: "Browser",
+        openedBy: body.openedBy === "agent" || body.openedBy === "popup" ? body.openedBy : "user",
         width: typeof body.width === "number" ? body.width : void 0,
         height: typeof body.height === "number" ? body.height : void 0
       };
       browserPanels.set(panel.panelId, panel);
+      focusedBrowserPanelIdByWorkspace.set(scope.workspaceId, panel.panelId);
       pushBrowserEvent(BROWSER_CHANNELS.OPEN, panel);
+      sendJson(res, 200, { panelId: panel.panelId });
+      return;
+    }
+    if (req.url === "/browser/open-temporary") {
+      const parentPanelId = typeof body.parentPanelId === "string" ? body.parentPanelId : "";
+      const parentPanel = browserPanels.get(parentPanelId);
+      if (!parentPanel || parentPanel.workspaceId !== scope.workspaceId) {
+        sendJson(res, 404, { error: "Parent panel not found" });
+        return;
+      }
+      const panel = {
+        panelId: nanoid(),
+        workspaceId: scope.workspaceId,
+        projectId: scope.projectId,
+        url: typeof body.url === "string" ? body.url : "about:blank",
+        panelTitle: "Browser",
+        isTemporary: true,
+        parentPanelId,
+        returnToPanelId: typeof body.returnToPanelId === "string" ? body.returnToPanelId : parentPanelId,
+        openedBy: body.openedBy === "popup" ? "popup" : "agent",
+        afterPanelId: parentPanelId,
+        width: typeof body.width === "number" ? body.width : TEMPORARY_BROWSER_PANEL_WIDTH,
+        height: typeof body.height === "number" ? body.height : void 0
+      };
+      browserPanels.set(panel.panelId, panel);
+      focusedBrowserPanelIdByWorkspace.set(scope.workspaceId, panel.panelId);
+      pushBrowserEvent(BROWSER_CHANNELS.OPEN, panel);
+      pushBrowserEvent(BROWSER_CHANNELS.FOCUS_CHANGED, {
+        workspaceId: scope.workspaceId,
+        panelId: panel.panelId
+      });
       sendJson(res, 200, { panelId: panel.panelId });
       return;
     }
@@ -1204,6 +1519,18 @@ function startBrowserApiServer() {
         return;
       }
       browserPanels.delete(panelId);
+      if (focusedBrowserPanelIdByWorkspace.get(scope.workspaceId) === panelId) {
+        const returnPanelId = panel.returnToPanelId && browserPanels.has(panel.returnToPanelId) ? panel.returnToPanelId : panel.parentPanelId && browserPanels.has(panel.parentPanelId) ? panel.parentPanelId : null;
+        if (returnPanelId) {
+          focusedBrowserPanelIdByWorkspace.set(scope.workspaceId, returnPanelId);
+        } else {
+          focusedBrowserPanelIdByWorkspace.delete(scope.workspaceId);
+        }
+        pushBrowserEvent(BROWSER_CHANNELS.FOCUS_CHANGED, {
+          workspaceId: scope.workspaceId,
+          panelId: returnPanelId
+        });
+      }
       pushBrowserEvent(BROWSER_CHANNELS.CLOSE, {
         panelId,
         workspaceId: scope.workspaceId
@@ -1233,10 +1560,30 @@ function startBrowserApiServer() {
     }
     if (req.url === "/browser/list") {
       sendJson(res, 200, {
+        focusedBrowserPanelId: focusedBrowserPanelIdByWorkspace.get(scope.workspaceId) ?? null,
         panels: Array.from(browserPanels.values()).filter(
           (panel) => panel.workspaceId === scope.workspaceId
         )
       });
+      return;
+    }
+    if (req.url === "/browser/activate" || req.url === "/browser/set-agent-focus") {
+      const panelId = typeof body.panelId === "string" ? body.panelId : "";
+      const panel = browserPanels.get(panelId);
+      if (!panel || panel.workspaceId !== scope.workspaceId) {
+        sendJson(res, 404, { error: "Panel not found" });
+        return;
+      }
+      focusedBrowserPanelIdByWorkspace.set(scope.workspaceId, panelId);
+      pushBrowserEvent(BROWSER_CHANNELS.ACTIVATE, {
+        workspaceId: scope.workspaceId,
+        panelId
+      });
+      pushBrowserEvent(BROWSER_CHANNELS.FOCUS_CHANGED, {
+        workspaceId: scope.workspaceId,
+        panelId
+      });
+      sendJson(res, 200, { ok: true });
       return;
     }
     if (req.url === "/browser/cdp-endpoint") {
@@ -1435,7 +1782,9 @@ var handlers = {
   "workspace:create": (input) => {
     const id = nanoid();
     const now = (/* @__PURE__ */ new Date()).toISOString();
-    const defaultLayout = JSON.stringify(input.layoutState ?? { panels: [], sizes: [] });
+    const defaultLayout = JSON.stringify(
+      input.layoutState ? sanitizeLayoutStateForNewWorkspace(input.layoutState) : { panels: [], sizes: [] }
+    );
     const parsedLayout = JSON.parse(defaultLayout);
     const lastPanelEditedAt = parsedLayout.panels.length > 0 ? now : null;
     db.prepare(
@@ -1546,16 +1895,16 @@ var handlers = {
     env.TERM = "xterm-256color";
     env.COLORTERM = "truecolor";
     env.PATH = prependBrowserCliToPath2(env.PATH);
-    env.CENTIPEDE_BROWSER = getBrowserCommandPath2();
-    env.CENTIPEDE_BROWSER_CLI = getBrowserCliCommandPath2();
-    env.CENTIPEDE_BROWSER_SESSION_FILE = getBrowserCliSessionFilePath2();
+    env.SPECTRUM_BROWSER = getBrowserCommandPath2();
+    env.SPECTRUM_BROWSER_CLI = getBrowserCliCommandPath2();
+    env.SPECTRUM_BROWSER_SESSION_FILE = getBrowserCliSessionFilePath2();
     const browserApiToken = nanoid(32);
     registerBrowserToken(browserApiToken, args.workspaceId, args.projectId);
     if (browserApiPort !== null) {
-      env.CENTIPEDE_API_PORT = String(browserApiPort);
-      env.CENTIPEDE_API_TOKEN = browserApiToken;
-      env.CENTIPEDE_WORKSPACE_ID = args.workspaceId;
-      env.CENTIPEDE_PROJECT_ID = args.projectId;
+      env.SPECTRUM_API_PORT = String(browserApiPort);
+      env.SPECTRUM_API_TOKEN = browserApiToken;
+      env.SPECTRUM_WORKSPACE_ID = args.workspaceId;
+      env.SPECTRUM_PROJECT_ID = args.projectId;
     }
     const ptyProcess = pty.spawn(shell, [], {
       name: "xterm-256color",
@@ -1620,7 +1969,7 @@ var handlers = {
     }
     return ensurePanelThread({
       panelId: resolvedInstanceId,
-      centipedeProjectId: args.projectId ?? resolvedInstanceId,
+      spectrumProjectId: args.projectId ?? resolvedInstanceId,
       projectPath: args.projectPath,
       projectName: args.projectPath.split("/").filter(Boolean).at(-1) ?? "Project"
     });
@@ -1641,14 +1990,14 @@ var handlers = {
   },
   [T3CODE_CHANNELS.ENSURE_RUNTIME]: () => ensureRuntime(),
   [T3CODE_CHANNELS.ENSURE_PROJECT]: (args) => ensureT3Project({
-    centipedeProjectId: args.centipedeProjectId,
+    spectrumProjectId: args.spectrumProjectId,
     projectPath: args.projectPath,
     projectName: args.projectName,
     existingT3ProjectId: args.existingT3ProjectId
   }),
   [T3CODE_CHANNELS.ENSURE_PANEL_THREAD]: (args) => ensurePanelThread({
     panelId: args.panelId,
-    centipedeProjectId: args.centipedeProjectId,
+    spectrumProjectId: args.spectrumProjectId,
     projectPath: args.projectPath,
     projectName: args.projectName,
     existingT3ProjectId: args.existingT3ProjectId,
@@ -1675,6 +2024,43 @@ var handlers = {
       panel.panelTitle = payload.panelTitle.trim();
     }
     return true;
+  },
+  [BROWSER_CHANNELS.SESSION_SYNC]: (payload) => {
+    if (payload.activeWorkspaceId) {
+      if (payload.focusedBrowserPanelId) {
+        focusedBrowserPanelIdByWorkspace.set(
+          payload.activeWorkspaceId,
+          payload.focusedBrowserPanelId
+        );
+      } else {
+        focusedBrowserPanelIdByWorkspace.delete(payload.activeWorkspaceId);
+      }
+    }
+    return true;
+  },
+  [BROWSER_CHANNELS.OPEN_TEMPORARY]: (payload) => {
+    const panel = {
+      panelId: nanoid(),
+      workspaceId: payload.workspaceId,
+      projectId: payload.projectId,
+      url: payload.url,
+      panelTitle: "Browser",
+      isTemporary: true,
+      parentPanelId: payload.parentPanelId,
+      returnToPanelId: payload.returnToPanelId ?? payload.parentPanelId,
+      openedBy: payload.openedBy ?? "popup",
+      afterPanelId: payload.parentPanelId,
+      width: payload.width ?? TEMPORARY_BROWSER_PANEL_WIDTH,
+      height: payload.height
+    };
+    browserPanels.set(panel.panelId, panel);
+    focusedBrowserPanelIdByWorkspace.set(payload.workspaceId, panel.panelId);
+    pushBrowserEvent(BROWSER_CHANNELS.OPEN, panel);
+    pushBrowserEvent(BROWSER_CHANNELS.FOCUS_CHANGED, {
+      workspaceId: payload.workspaceId,
+      panelId: panel.panelId
+    });
+    return panel;
   }
 };
 var PORT = 3001;
@@ -1724,7 +2110,7 @@ wss.on("connection", (ws) => {
   });
 });
 console.log(`
-  \u{1F41B} Centipede dev server running on ws://localhost:${PORT}`);
+  \u{1F41B} Spectrum dev server running on ws://localhost:${PORT}`);
 console.log(`     Database: ${dbPath}`);
 console.log(`     Open http://localhost:5173 in your browser
 `);

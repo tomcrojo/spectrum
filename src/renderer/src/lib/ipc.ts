@@ -146,6 +146,16 @@ export const t3codeApi = {
 export const browserApi = {
   activate: (input: { workspaceId: string; panelId: string }) =>
     invoke<boolean>(BROWSER_CHANNELS.ACTIVATE, input),
+  openTemporary: (input: {
+    workspaceId: string
+    projectId: string
+    parentPanelId: string
+    returnToPanelId?: string
+    url: string
+    width?: number
+    height?: number
+    openedBy?: 'agent' | 'popup'
+  }) => invoke<any>(BROWSER_CHANNELS.OPEN_TEMPORARY, input),
   get: (input: { panelId: string }) =>
     invoke<any>(BROWSER_CHANNELS.GET, input),
   getSession: () => invoke<any>(BROWSER_CHANNELS.SESSION),
@@ -153,6 +163,7 @@ export const browserApi = {
     activeProjectId: string | null
     activeWorkspaceId: string | null
     focusedBrowserPanelId: string | null
+    userFocusedPanelId?: string | null
   }) => invoke<boolean>(BROWSER_CHANNELS.SESSION_SYNC, input),
   webviewReady: (input: {
     panelId: string

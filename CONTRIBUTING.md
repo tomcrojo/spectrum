@@ -21,7 +21,7 @@ Requirements:
 Clone the repo:
 
 ```bash
-git clone --recurse-submodules <repo-url>
+git clone --recurse-submodules https://github.com/tomcrojo/spectrum.git
 cd spectrum
 ```
 

@@ -5,6 +5,7 @@ import {
   bindBrowserPanelWebContents,
   ensureBrowserPanelState,
   getBrowserPanel,
+  openTemporaryBrowserPanel,
   setFocusedBrowserPanel,
   unbindBrowserPanelByWebContentsId,
   updateBrowserPanelFromRenderer
@@ -43,6 +44,7 @@ interface SessionSyncPayload {
   activeProjectId: string | null
   activeWorkspaceId: string | null
   focusedBrowserPanelId: string | null
+  userFocusedPanelId?: string | null
 }
 
 export function registerBrowserHandlers(): void {
@@ -141,6 +143,35 @@ export function registerBrowserHandlers(): void {
 
     return true
   })
+
+  ipcMain.handle(
+    BROWSER_CHANNELS.OPEN_TEMPORARY,
+    (
+      _event,
+      payload: {
+        workspaceId: string
+        projectId: string
+        parentPanelId: string
+        returnToPanelId?: string
+        url: string
+        width?: number
+        height?: number
+        openedBy?: 'agent' | 'popup'
+      }
+    ) => {
+      const panel = openTemporaryBrowserPanel({
+        workspaceId: payload.workspaceId,
+        projectId: payload.projectId,
+        parentPanelId: payload.parentPanelId,
+        returnToPanelId: payload.returnToPanelId,
+        url: payload.url,
+        width: payload.width,
+        height: payload.height,
+        openedBy: payload.openedBy
+      })
+      return panel
+    }
+  )
 
   ipcMain.handle(
     BROWSER_CHANNELS.ACTIVATE,

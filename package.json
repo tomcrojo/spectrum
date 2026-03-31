@@ -1,7 +1,7 @@
 {
   "name": "spectrum",
   "version": "0.1.0",
-  "description": "Project Cockpit — a lightweight desktop coding app",
+  "description": "Desktop project cockpit for coding work with dashboards, workspaces, terminals, browser panels, and agent flows",
   "license": "MIT",
   "author": "Tomas Campoy",
   "engines": {

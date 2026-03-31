@@ -13,6 +13,8 @@ interface BrowserPanelProps {
   hydrationState: 'live' | 'preview' | 'cold'
 }
 
+const TEMPORARY_POPUP_WIDTH = 350
+
 function normalizeUrl(input: string): string {
   const trimmed = input.trim()
   if (!trimmed) {
@@ -83,7 +85,25 @@ export function BrowserPanel({
   }, [autoFocus, isElectron])
 
   useEffect(() => {
+    const nextUrl = normalizeUrl(initialUrl ?? 'https://localhost:3000')
+    if (nextUrl === currentUrl) {
+      return
+    }
+
+    setCurrentUrl(nextUrl)
+    setInputValue(nextUrl)
+
+    if (isElectron && hydrationState === 'live') {
+      webviewRef.current?.loadURL(nextUrl)
+    }
+  }, [currentUrl, hydrationState, initialUrl, isElectron])
+
+  useEffect(() => {
     if (!isElectron) {
+      return
+    }
+
+    if (hydrationState !== 'live') {
       return
     }
 
@@ -152,9 +172,17 @@ export function BrowserPanel({
     const handleNewWindow = (event: { url: string; preventDefault: () => void }) => {
       event.preventDefault()
       const nextUrl = normalizeUrl(event.url)
-      setCurrentUrl(nextUrl)
-      setInputValue(nextUrl)
-      webview.loadURL(nextUrl)
+      browserApi
+        .openTemporary({
+          workspaceId,
+          projectId,
+          parentPanelId: panelId,
+          returnToPanelId: panelId,
+          url: nextUrl,
+          width: TEMPORARY_POPUP_WIDTH,
+          openedBy: 'popup'
+        })
+        .catch(() => {})
     }
 
     webview.addEventListener('did-start-loading', handleDidStartLoading as any)
@@ -184,7 +212,7 @@ export function BrowserPanel({
         })
         .catch(() => {})
     }
-  }, [isElectron, panelId, projectId, updatePanelLayout, workspaceId])
+  }, [hydrationState, isElectron, panelId, projectId, updatePanelLayout, workspaceId])
 
   const warningBadge = useMemo(() => {
     if (isElectron) {
@@ -323,7 +351,7 @@ export function BrowserPanel({
             src={currentUrl}
             partition={`persist:project-${projectId}`}
             className="h-full w-full bg-bg"
-            allowpopups="false"
+            allowpopups="true"
             style={{ opacity: isResizing ? 0.85 : 1 }}
           />
         ) : (
