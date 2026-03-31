@@ -160,7 +160,7 @@ export class CdpProxy {
 
     if (req.url === '/json/version') {
       this.writeJson(res, {
-        Browser: 'Centipede/Electron',
+        Browser: 'Spectrum/Electron',
         'Protocol-Version': '1.3',
         webSocketDebuggerUrl: `ws://${host}/devtools/browser/${this.browserId}`
       })
@@ -269,9 +269,9 @@ export class CdpProxy {
     if (method === 'Browser.getVersion') {
       return {
         protocolVersion: '1.3',
-        product: 'Centipede/Electron',
+        product: 'Spectrum/Electron',
         revision: '0',
-        userAgent: 'Centipede',
+        userAgent: 'Spectrum',
         jsVersion: '1.0'
       }
     }

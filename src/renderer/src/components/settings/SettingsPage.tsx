@@ -23,12 +23,12 @@ const themeOptions: Array<{
   {
     value: 'light',
     label: 'Light',
-    description: 'Use the light theme across Centipede and T3Code.'
+    description: 'Use the light theme across Spectrum and T3Code.'
   },
   {
     value: 'dark',
     label: 'Dark',
-    description: 'Use the dark theme across Centipede and T3Code.'
+    description: 'Use the dark theme across Spectrum and T3Code.'
   }
 ]
 
@@ -107,6 +107,19 @@ const followUpBehaviorOptions: Array<{
   }
 ]
 
+const assistantStreamingOptions = [
+  {
+    value: true,
+    label: 'Live',
+    description: 'Stream assistant text into T3Code as it is generated.'
+  },
+  {
+    value: false,
+    label: 'Buffered',
+    description: 'Only show assistant text after each response completes.'
+  }
+] as const
+
 export function SettingsPage() {
   const {
     showSettingsPage,
@@ -122,7 +135,9 @@ export function SettingsPage() {
     runtimePowerMode,
     setRuntimePowerMode,
     followUpBehavior,
-    setFollowUpBehavior
+    setFollowUpBehavior,
+    assistantStreaming,
+    setAssistantStreaming
   } = useUiStore()
   const resolvedTheme = useResolvedTheme()
 
@@ -175,7 +190,7 @@ export function SettingsPage() {
             <div>
               <h3 className="text-sm font-semibold text-text-primary">Theme</h3>
               <p className="mt-1 text-xs text-text-muted">
-                Controls Centipede and the embedded T3Code panel from one setting.
+                Controls Spectrum and the embedded T3Code panel from one setting.
               </p>
             </div>
             <div className="rounded-full border border-border-subtle bg-bg px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-text-muted">
@@ -260,6 +275,58 @@ export function SettingsPage() {
                 <button
                   key={option.value}
                   onClick={() => setFollowUpBehavior(option.value)}
+                  className={cn(
+                    'rounded-lg border px-3 py-3 text-left transition-colors',
+                    selected
+                      ? 'border-accent bg-accent/10'
+                      : 'border-border bg-bg hover:bg-bg-hover'
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium text-text-primary">
+                      {option.label}
+                    </span>
+                    <span
+                      className={cn(
+                        'h-2.5 w-2.5 rounded-full border',
+                        selected
+                          ? 'border-accent bg-accent'
+                          : 'border-border bg-transparent'
+                      )}
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-text-muted">
+                    {option.description}
+                  </p>
+                </button>
+              )
+            })}
+          </div>
+        </section>
+
+        <section className="mt-4 rounded-xl border border-border bg-bg-raised p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-semibold text-text-primary">
+                Assistant Output
+              </h3>
+              <p className="mt-1 text-xs text-text-muted">
+                Controls whether the embedded T3Code panel renders assistant text live or waits for the full reply.
+              </p>
+            </div>
+            <div className="rounded-full border border-border-subtle bg-bg px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-text-muted">
+              {assistantStreaming ? 'Live' : 'Buffered'}
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-2">
+            {assistantStreamingOptions.map((option) => {
+              const selected = assistantStreaming === option.value
+
+              return (
+                <button
+                  key={option.label}
+                  onClick={() => setAssistantStreaming(option.value)}
                   className={cn(
                     'rounded-lg border px-3 py-3 text-left transition-colors',
                     selected
@@ -527,7 +594,7 @@ export function SettingsPage() {
             Acknowledgements
           </h3>
           <p className="text-xs text-text-muted leading-relaxed">
-            Centipede stands on the shoulders of projects that shaped its
+            Spectrum stands on the shoulders of projects that shaped its
             direction. Huge thanks to{' '}
             <a
               href="https://github.com/nicepkg/aide"
@@ -536,15 +603,6 @@ export function SettingsPage() {
               className="text-text-secondary hover:text-text-primary transition-colors underline underline-offset-2"
             >
               T3Code
-            </a>
-            ,{' '}
-            <a
-              href="https://github.com/pAIrprogio/cmux"
-              target="_blank"
-              rel="noreferrer"
-              className="text-text-secondary hover:text-text-primary transition-colors underline underline-offset-2"
-            >
-              cmux
             </a>
             ,{' '}
             <a

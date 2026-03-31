@@ -9,11 +9,11 @@ function readCssVariable(name: string, fallback: string): string {
   return value || fallback
 }
 
-export function ensureCentipedeMonacoTheme(
+export function ensureSpectrumMonacoTheme(
   monaco: typeof Monaco,
   theme: 'light' | 'dark'
 ): string {
-  const themeName = theme === 'dark' ? 'centipede-dark' : 'centipede-light'
+  const themeName = theme === 'dark' ? 'spectrum-dark' : 'spectrum-light'
 
   monaco.editor.defineTheme(themeName, {
     base: theme === 'dark' ? 'vs-dark' : 'vs',

@@ -1,0 +1,18 @@
+[submodule "resources/dev-browser"]
+	path = resources/dev-browser
+	url = https://github.com/SawyerHood/dev-browser.git
+[submodule "resources/glass"]
+	path = resources/glass
+	url = https://github.com/Glass-HQ/Glass.git
+[submodule "resources/idx0"]
+	path = resources/idx0
+	url = https://github.com/galz10/IDX0.git
+[submodule "resources/t3code"]
+	path = resources/t3code
+	url = https://github.com/pingdotgg/t3code.git
+[submodule "_reference/glass"]
+	path = _reference/glass
+	url = https://github.com/Glass-HQ/Glass.git
+[submodule "_reference/idx0"]
+	path = _reference/idx0
+	url = https://github.com/galz10/IDX0.git

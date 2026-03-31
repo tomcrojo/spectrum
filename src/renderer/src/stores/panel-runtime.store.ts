@@ -3,6 +3,8 @@ import type { PanelHydrationState } from '@shared/workspace.types'
 
 const MAX_BROWSER_PREVIEWS = 12
 
+export type ThreadNotificationKind = 'requires-input' | 'completed'
+
 export interface PanelRuntimeState {
   hydrationState: PanelHydrationState
   lastVisibleAt: number | null
@@ -12,6 +14,9 @@ export interface PanelRuntimeState {
   browserWebContentsId?: number
   t3ThreadTitle?: string | null
   t3LastUserMessageAt?: string | null
+  t3NotificationKind?: ThreadNotificationKind | null
+  t3NotificationUpdatedAt?: string | null
+  t3NotificationAcknowledgedAt?: string | null
 }
 
 interface PanelRuntimeStoreState {

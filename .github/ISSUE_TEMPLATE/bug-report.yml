@@ -1,0 +1,45 @@
+name: Bug report
+description: Report a regression, crash, or incorrect behavior.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting an issue. Spectrum is still in early alpha, so concrete repro steps matter a lot.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the bug and the behavior you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Include the shortest sequence that reproduces the issue.
+      placeholder: |
+        1. Open a project
+        2. Create a workspace
+        3. Add a T3Code panel
+        4. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS version, app version or commit, and any notable setup details.
+      placeholder: |
+        macOS 15.x
+        Spectrum 0.1.0
+        commit abc123
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Paste console output, stack traces, or screenshots if available.

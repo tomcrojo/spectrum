@@ -32,10 +32,10 @@ import { getRandomProjectColor, normalizeProjectColor } from '@shared/project.ty
 
 // ─── Database Setup ────────────────────────────────────────────────────
 
-const dataDir = join(homedir(), '.centipede-dev')
+const dataDir = join(homedir(), '.spectrum-dev')
 if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true })
 
-const dbPath = join(dataDir, 'centipede-dev.db')
+const dbPath = join(dataDir, 'spectrum-dev.db')
 const db = new Database(dbPath)
 db.pragma('journal_mode = WAL')
 db.pragma('foreign_keys = ON')
@@ -118,6 +118,28 @@ function rowToWorkspace(row: any) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastPanelEditedAt: row.last_panel_edited_at ?? null
+  }
+}
+
+function sanitizeLayoutStateForNewWorkspace(layoutState: any) {
+  if (!layoutState || typeof layoutState !== 'object') {
+    return { panels: [], sizes: [] }
+  }
+
+  const panels = Array.isArray(layoutState.panels)
+    ? layoutState.panels.map((panel: any) => ({
+        ...panel,
+        t3ProjectId: undefined,
+        t3ThreadId: undefined
+      }))
+    : []
+
+  const sizes = Array.isArray(layoutState.sizes) ? layoutState.sizes : []
+
+  return {
+    ...layoutState,
+    panels,
+    sizes
   }
 }
 
@@ -647,7 +669,11 @@ const handlers: Record<string, Handler> = {
   'workspace:create': (input: any) => {
     const id = nanoid()
     const now = new Date().toISOString()
-    const defaultLayout = JSON.stringify(input.layoutState ?? { panels: [], sizes: [] })
+    const defaultLayout = JSON.stringify(
+      input.layoutState
+        ? sanitizeLayoutStateForNewWorkspace(input.layoutState)
+        : { panels: [], sizes: [] }
+    )
     const parsedLayout = JSON.parse(defaultLayout)
     const lastPanelEditedAt = parsedLayout.panels.length > 0 ? now : null
     db.prepare(
@@ -801,16 +827,16 @@ const handlers: Record<string, Handler> = {
     env.TERM = 'xterm-256color'
     env.COLORTERM = 'truecolor'
     env.PATH = prependBrowserCliToPath(env.PATH)
-    env.CENTIPEDE_BROWSER = getBrowserCommandPath()
-    env.CENTIPEDE_BROWSER_CLI = getBrowserCliCommandPath()
-    env.CENTIPEDE_BROWSER_SESSION_FILE = getBrowserCliSessionFilePath()
+    env.SPECTRUM_BROWSER = getBrowserCommandPath()
+    env.SPECTRUM_BROWSER_CLI = getBrowserCliCommandPath()
+    env.SPECTRUM_BROWSER_SESSION_FILE = getBrowserCliSessionFilePath()
     const browserApiToken = nanoid(32)
     registerBrowserToken(browserApiToken, args.workspaceId, args.projectId)
     if (browserApiPort !== null) {
-      env.CENTIPEDE_API_PORT = String(browserApiPort)
-      env.CENTIPEDE_API_TOKEN = browserApiToken
-      env.CENTIPEDE_WORKSPACE_ID = args.workspaceId
-      env.CENTIPEDE_PROJECT_ID = args.projectId
+      env.SPECTRUM_API_PORT = String(browserApiPort)
+      env.SPECTRUM_API_TOKEN = browserApiToken
+      env.SPECTRUM_WORKSPACE_ID = args.workspaceId
+      env.SPECTRUM_PROJECT_ID = args.projectId
     }
 
     const ptyProcess = pty.spawn(shell, [], {
@@ -890,7 +916,7 @@ const handlers: Record<string, Handler> = {
 
     return ensurePanelThread({
       panelId: resolvedInstanceId,
-      centipedeProjectId: args.projectId ?? resolvedInstanceId,
+      spectrumProjectId: args.projectId ?? resolvedInstanceId,
       projectPath: args.projectPath,
       projectName: args.projectPath.split('/').filter(Boolean).at(-1) ?? 'Project'
     })
@@ -925,13 +951,13 @@ const handlers: Record<string, Handler> = {
   [T3CODE_CHANNELS.ENSURE_RUNTIME]: () => ensureRuntime(),
 
   [T3CODE_CHANNELS.ENSURE_PROJECT]: (args: {
-    centipedeProjectId: string
+    spectrumProjectId: string
     projectPath: string
     projectName: string
     existingT3ProjectId?: string
   }) =>
     ensureT3Project({
-      centipedeProjectId: args.centipedeProjectId,
+      spectrumProjectId: args.spectrumProjectId,
       projectPath: args.projectPath,
       projectName: args.projectName,
       existingT3ProjectId: args.existingT3ProjectId
@@ -939,7 +965,7 @@ const handlers: Record<string, Handler> = {
 
   [T3CODE_CHANNELS.ENSURE_PANEL_THREAD]: (args: {
     panelId: string
-    centipedeProjectId: string
+    spectrumProjectId: string
     projectPath: string
     projectName: string
     existingT3ProjectId?: string
@@ -947,7 +973,7 @@ const handlers: Record<string, Handler> = {
   }) =>
     ensurePanelThread({
       panelId: args.panelId,
-      centipedeProjectId: args.centipedeProjectId,
+      spectrumProjectId: args.spectrumProjectId,
       projectPath: args.projectPath,
       projectName: args.projectName,
       existingT3ProjectId: args.existingT3ProjectId,
@@ -1049,7 +1075,7 @@ wss.on('connection', (ws) => {
   })
 })
 
-console.log(`\n  🐛 Centipede dev server running on ws://localhost:${PORT}`)
+console.log(`\n  🐛 Spectrum dev server running on ws://localhost:${PORT}`)
 console.log(`     Database: ${dbPath}`)
 console.log(`     Open http://localhost:5173 in your browser\n`)
 

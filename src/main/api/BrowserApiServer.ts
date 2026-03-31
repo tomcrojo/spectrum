@@ -160,7 +160,7 @@ export async function startApiServer(): Promise<number> {
             height: panel.height,
             isFocused: focusedPanelId === panel.panelId,
             isVisible: true,
-            kind: 'centipede-browser-panel',
+            kind: 'spectrum-browser-panel',
             webContentsId: panel.webContentsId ?? null,
             targetId: typeof panel.webContentsId === 'number' ? String(panel.webContentsId) : null
           }))
@@ -192,7 +192,7 @@ export async function startApiServer(): Promise<number> {
           height: panel.height,
           isFocused: getFocusedBrowserPanelId(workspaceId) === panel.panelId,
           isVisible: true,
-          kind: 'centipede-browser-panel',
+          kind: 'spectrum-browser-panel',
           webContentsId: panel.webContentsId ?? null,
           targetId: typeof panel.webContentsId === 'number' ? String(panel.webContentsId) : null
         })

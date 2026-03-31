@@ -8,7 +8,7 @@ export interface T3CodeConfig {
   entrypoint: string
 }
 
-interface CentipedeConfigFile {
+interface SpectrumConfigFile {
   t3code?: Partial<T3CodeConfig>
 }
 
@@ -23,7 +23,7 @@ function findProjectRoot(): string {
     let current = resolve(candidate)
 
     while (true) {
-      const configPath = join(current, 'centipede.config.json')
+      const configPath = join(current, 'spectrum.config.json')
       const t3CodePackagePath = join(current, 'resources', 't3code', 'package.json')
 
       if (existsSync(configPath) || existsSync(t3CodePackagePath)) {
@@ -88,7 +88,7 @@ let cachedConfig: T3CodeConfig | null = null
 export function getT3CodeConfig(): T3CodeConfig {
   if (cachedConfig) return cachedConfig
 
-  const configPath = join(projectRoot, 'centipede.config.json')
+  const configPath = join(projectRoot, 'spectrum.config.json')
   if (!existsSync(configPath)) {
     cachedConfig = defaultConfig
     return cachedConfig
@@ -97,7 +97,7 @@ export function getT3CodeConfig(): T3CodeConfig {
   try {
     const parsed = JSON.parse(
       readFileSync(configPath, 'utf8')
-    ) as CentipedeConfigFile
+    ) as SpectrumConfigFile
 
     cachedConfig = {
       sourcePath: findExistingT3CodeSourcePath(

@@ -5,3 +5,11 @@ dist/
 *.db-wal
 *.db-shm
 .DS_Store
+*.tsbuildinfo
+*.log
+/build/icon.iconset/
+/Icon-iOS-Default-1024x1024@1x.png
+/icon.icon/
+/icon2.png
+/spectrum.png
+/*.af

@@ -1,26 +1,26 @@
 # Browser CLI
 
-`browser` / `browser-cli` is Centipede's browser automation CLI.
+`browser` / `browser-cli` is Spectrum's browser automation CLI.
 
-It controls browser panels inside a running Centipede workspace. It does not open or manage external Chrome windows.
+It controls browser panels inside a running Spectrum workspace. It does not open or manage external Chrome windows.
 
 ## Mental model
 
-- a Centipede workspace session is the browser session
+- a Spectrum workspace session is the browser session
 - a browser panel is a page
 - `browser search <query>` opens search results in a new browser panel
 - `browser open <url>` or `browser.openPanel(...)` creates a new browser panel inside that workspace
 - `browser.listPages()` only lists mounted browser panels in the connected workspace
-- `--connect` attaches to the active Centipede workspace session, not to arbitrary Chrome or a random DevTools endpoint
+- `--connect` attaches to the active Spectrum workspace session, not to arbitrary Chrome or a random DevTools endpoint
 
 ## Preconditions
 
 Before using `browser-cli`:
 
-- Centipede must already be running
+- Spectrum must already be running
 - a project/workspace must be active
 - if you want CDP-backed page control, the workspace must have a mounted browser panel
-- inside Centipede-managed shells, prefer `$CENTIPEDE_BROWSER` if `browser` is not on `PATH`
+- inside Spectrum-managed shells, prefer `$SPECTRUM_BROWSER` if `browser` is not on `PATH`
 
 If you are trying to open a standalone Chrome window, this is the wrong tool.
 
@@ -28,7 +28,7 @@ If you are trying to open a standalone Chrome window, this is the wrong tool.
 
 ```bash
 browser --help
-"$CENTIPEDE_BROWSER" --help
+"$SPECTRUM_BROWSER" --help
 browser search "folagor" --engine youtube --focus
 browser open "https://www.youtube.com/results?search_query=folagor" --name "YouTube: folagor" --focus
 
@@ -98,7 +98,7 @@ EOF
 - `browser-cli connect`
   `connect` is a flag, not a subcommand. Use `browser --connect <<'EOF' ... EOF`.
 - expecting external Chrome control
-  `browser-cli` only controls Centipede browser panels.
+  `browser-cli` only controls Spectrum browser panels.
 
 ## Available globals
 

@@ -31,7 +31,7 @@ type FileIpcErrorCode =
 
 function createFileIpcError(code: FileIpcErrorCode, message: string): Error {
   const error = new Error(message) as Error & { code?: FileIpcErrorCode }
-  error.name = 'CentipedeFileError'
+  error.name = 'SpectrumFileError'
   error.code = code
   return error
 }

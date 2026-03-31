@@ -4,6 +4,7 @@ import { useProjectsStore } from '@renderer/stores/projects.store'
 import { ProjectHeader } from './ProjectHeader'
 import { TaskList } from './TaskList'
 import { WorkspaceList } from './WorkspaceList'
+import { ProjectDangerZone } from './ProjectDangerZone'
 import { PROJECT_COLOR_HEX } from '@renderer/lib/project-colors'
 import { DEFAULT_PROJECT_COLOR, type Project, type ProjectColor } from '@shared/project.types'
 import { projectsApi } from '@renderer/lib/ipc'
@@ -124,6 +125,10 @@ export function ProjectPage() {
               <p className="text-xs text-text-muted">
                 Coming in Phase 4
               </p>
+            </section>
+
+            <section className="pb-2">
+              <ProjectDangerZone project={project} />
             </section>
           </div>
         </div>

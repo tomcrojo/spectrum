@@ -20,6 +20,7 @@ interface RuntimeInstance {
   baseUrl: string
   logPath: string
   stateDir: string
+  startedAt: number
 }
 
 interface ProjectRow {
@@ -37,10 +38,13 @@ interface ThreadRow {
   deletedAt: string | null
 }
 
+type ThreadNotificationKind = 'requires-input' | 'completed'
+
 interface ThreadMetadata {
   threadTitle: string | null
   lastUserMessageAt: string | null
   providerId: string | null
+  notificationKind: ThreadNotificationKind | null
 }
 
 interface WatchedThreadState {
@@ -152,6 +156,46 @@ function shouldRebuild(sourcePath: string, entrypointPath: string): boolean {
   return latestSourceChange > latestBuildOutput
 }
 
+function getLatestBuildOutputTime(sourcePath: string, entrypointPath: string): number {
+  const webDistPath = join(sourcePath, 'apps', 'web', 'dist', 'index.html')
+
+  return Math.max(
+    existsSync(entrypointPath) ? statSync(entrypointPath).mtimeMs : 0,
+    existsSync(webDistPath) ? statSync(webDistPath).mtimeMs : 0
+  )
+}
+
+async function stopRuntimeInstance(instance: RuntimeInstance): Promise<void> {
+  if (instance.process.exitCode !== null) {
+    return
+  }
+
+  await new Promise<void>((resolve) => {
+    let settled = false
+
+    const finish = () => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      instance.process.removeListener('exit', finish)
+      resolve()
+    }
+
+    instance.process.once('exit', finish)
+
+    try {
+      instance.process.kill()
+    } catch {
+      finish()
+      return
+    }
+
+    setTimeout(finish, 5000)
+  })
+}
+
 function ensureBuilt(sourcePath: string, installCommand: string, buildCommand: string): void {
   const entrypointPath = join(sourcePath, getT3CodeConfig().entrypoint)
   if (!shouldRebuild(sourcePath, entrypointPath)) {
@@ -231,11 +275,11 @@ async function waitForWebSocketReady(baseUrl: string, timeoutMs = 10000): Promis
 }
 
 function getStateDir(): string {
-  return join(homedir(), '.centipede-dev', 't3code-state', GLOBAL_RUNTIME_ID)
+  return join(homedir(), '.spectrum-dev', 't3code-state', GLOBAL_RUNTIME_ID)
 }
 
 function getLogPath(): string {
-  const logsDir = join(homedir(), '.centipede-dev', 't3code-logs')
+  const logsDir = join(homedir(), '.spectrum-dev', 't3code-logs')
   mkdirSync(logsDir, { recursive: true })
   return join(logsDir, `${GLOBAL_RUNTIME_ID}.log`)
 }
@@ -253,8 +297,23 @@ function openStateDb(options?: Database.Options): Database.Database | null {
   return new Database(stateDbPath, options)
 }
 
-function getProjectBindingId(centipedeProjectId: string): string {
-  return `centipede-project:${centipedeProjectId}`
+function getProjectBindingId(spectrumProjectId: string): string {
+  return `spectrum-project:${spectrumProjectId}`
+}
+
+function resolveT3ProjectBindingId(
+  spectrumProjectId: string,
+  existingT3ProjectId?: string
+): string {
+  const expectedBindingId = getProjectBindingId(spectrumProjectId)
+
+  // Persisted panel state can be copied across workspaces or projects.
+  // Never let that rebind a project to another project's embedded T3 state.
+  if (existingT3ProjectId === expectedBindingId) {
+    return existingT3ProjectId
+  }
+
+  return expectedBindingId
 }
 
 function parseModelSelection(raw: string | null | undefined): Record<string, unknown> {
@@ -326,13 +385,45 @@ function getThreadById(threadId: string): ThreadRow | null {
   }
 }
 
+function computeNotificationKind(input: {
+  sessionStatus: string | null
+  pendingApprovalCount: number
+  hasPendingUserInput: boolean
+  latestTurnCompletedAt: string | null
+}): ThreadNotificationKind | null {
+  const { sessionStatus, pendingApprovalCount, hasPendingUserInput, latestTurnCompletedAt } = input
+
+  // If the session is actively running, suppress notifications (not done yet)
+  if (sessionStatus === 'running' || sessionStatus === 'connecting' || sessionStatus === 'starting') {
+    return null
+  }
+
+  // Pending tool/command approvals → requires input
+  if (pendingApprovalCount > 0) {
+    return 'requires-input'
+  }
+
+  // Pending user input questions → requires input
+  if (hasPendingUserInput) {
+    return 'requires-input'
+  }
+
+  // Latest turn has completed → completed
+  if (latestTurnCompletedAt) {
+    return 'completed'
+  }
+
+  return null
+}
+
 function getThreadMetadata(threadId: string): ThreadMetadata {
   const db = openStateDb({ readonly: true })
   if (!db) {
     return {
       threadTitle: null,
       lastUserMessageAt: null,
-      providerId: null
+      providerId: null,
+      notificationKind: null
     }
   }
 
@@ -359,10 +450,100 @@ function getThreadMetadata(threadId: string): ThreadMetadata {
       )
       .get(threadId) as { lastUserMessageAt?: string } | undefined
 
+    // Query session status
+    let sessionStatus: string | null = null
+    try {
+      const sessionRow = db
+        .prepare(
+          `SELECT status FROM projection_thread_sessions WHERE thread_id = ? LIMIT 1`
+        )
+        .get(threadId) as { status?: string } | undefined
+      sessionStatus = sessionRow?.status ?? null
+    } catch {
+      // Table may not exist in older DB versions
+    }
+
+    // Query pending approvals
+    let pendingApprovalCount = 0
+    try {
+      const approvalRow = db
+        .prepare(
+          `SELECT COUNT(*) as count FROM projection_pending_approvals WHERE thread_id = ? AND status = 'pending'`
+        )
+        .get(threadId) as { count?: number } | undefined
+      pendingApprovalCount = approvalRow?.count ?? 0
+    } catch {
+      // Table may not exist
+    }
+
+    // Query pending user inputs (user-input.requested with no matching user-input.responded)
+    let hasPendingUserInput = false
+    try {
+      // Collect all user-input.requested and user-input.responded activity payloads
+      const activities = db
+        .prepare(
+          `SELECT kind, payload_json AS payloadJson
+           FROM projection_thread_activities
+           WHERE thread_id = ?
+             AND kind IN ('user-input.requested', 'user-input.responded')
+           ORDER BY sequence ASC, created_at ASC`
+        )
+        .all(threadId) as Array<{ kind: string; payloadJson: string | null }>
+
+      const requestedIds = new Set<string>()
+      const respondedIds = new Set<string>()
+
+      for (const activity of activities) {
+        try {
+          const payload = activity.payloadJson ? JSON.parse(activity.payloadJson) : null
+          const requestId = typeof payload?.requestId === 'string' ? payload.requestId : null
+          if (!requestId) continue
+
+          if (activity.kind === 'user-input.requested') {
+            requestedIds.add(requestId)
+          } else if (activity.kind === 'user-input.responded') {
+            respondedIds.add(requestId)
+          }
+        } catch {
+          // skip malformed payload
+        }
+      }
+
+      hasPendingUserInput = [...requestedIds].some((id) => !respondedIds.has(id))
+    } catch {
+      // Table may not exist
+    }
+
+    // Query latest turn completion
+    let latestTurnCompletedAt: string | null = null
+    try {
+      const turnRow = db
+        .prepare(
+          `SELECT completed_at AS completedAt
+           FROM projection_turns
+           WHERE thread_id = ?
+             AND completed_at IS NOT NULL
+           ORDER BY completed_at DESC
+           LIMIT 1`
+        )
+        .get(threadId) as { completedAt?: string } | undefined
+      latestTurnCompletedAt = turnRow?.completedAt ?? null
+    } catch {
+      // Table may not exist
+    }
+
+    const notificationKind = computeNotificationKind({
+      sessionStatus,
+      pendingApprovalCount,
+      hasPendingUserInput,
+      latestTurnCompletedAt
+    })
+
     return {
       threadTitle: threadRow?.title ?? null,
       lastUserMessageAt: messageRow?.lastUserMessageAt ?? null,
-      providerId: getProviderIdFromModelSelection(threadRow?.modelSelectionJson)
+      providerId: getProviderIdFromModelSelection(threadRow?.modelSelectionJson),
+      notificationKind
     }
   } finally {
     db.close()
@@ -381,6 +562,7 @@ function emitThreadInfoChanged(payload: {
   threadTitle: string | null
   lastUserMessageAt: string | null
   providerId: string | null
+  notificationKind: ThreadNotificationKind | null
 }): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {
@@ -424,7 +606,8 @@ async function pollWatchedThreads(): Promise<void> {
     if (
       watch.lastSnapshot?.threadTitle === snapshot.threadTitle &&
       watch.lastSnapshot?.lastUserMessageAt === snapshot.lastUserMessageAt &&
-      watch.lastSnapshot?.providerId === snapshot.providerId
+      watch.lastSnapshot?.providerId === snapshot.providerId &&
+      watch.lastSnapshot?.notificationKind === snapshot.notificationKind
     ) {
       continue
     }
@@ -435,7 +618,8 @@ async function pollWatchedThreads(): Promise<void> {
       t3ThreadId: watch.t3ThreadId,
       threadTitle: snapshot.threadTitle,
       lastUserMessageAt: snapshot.lastUserMessageAt,
-      providerId: snapshot.providerId
+      providerId: snapshot.providerId,
+      notificationKind: snapshot.notificationKind
     })
   }
 }
@@ -496,7 +680,7 @@ async function sendWsRequest<T>(baseUrl: string, body: Record<string, unknown>):
       return await new Promise<T>((resolve, reject) => {
         const wsUrl = baseUrl.replace(/^http/, 'ws')
         const socket = new WebSocket(wsUrl)
-        const requestId = `centipede-${crypto.randomUUID()}`
+        const requestId = `spectrum-${crypto.randomUUID()}`
         let settled = false
 
         const finish = (callback: () => void) => {
@@ -583,25 +767,50 @@ function buildEmbeddedThreadUrl(baseUrl: string, threadId: string): string {
 }
 
 export async function ensureRuntime(): Promise<{ baseUrl: string; logPath: string }> {
-  if (runtime && runtime.process.exitCode === null) {
-    return { baseUrl: runtime.baseUrl, logPath: runtime.logPath }
+  const config = getT3CodeConfig()
+  if (!existsSync(config.sourcePath)) {
+    throw new Error(`T3Code source not found at ${config.sourcePath}`)
+  }
+
+  const entrypointPath = join(config.sourcePath, config.entrypoint)
+  const activeRuntime = runtime && runtime.process.exitCode === null ? runtime : null
+  const needsRebuild = shouldRebuild(config.sourcePath, entrypointPath)
+  const latestBuildOutputTime = getLatestBuildOutputTime(config.sourcePath, entrypointPath)
+
+  if (
+    activeRuntime &&
+    !needsRebuild &&
+    latestBuildOutputTime <= activeRuntime.startedAt
+  ) {
+    return { baseUrl: activeRuntime.baseUrl, logPath: activeRuntime.logPath }
   }
 
   if (pendingRuntimeStart) {
     return pendingRuntimeStart
   }
 
-  const config = getT3CodeConfig()
-  if (!existsSync(config.sourcePath)) {
-    throw new Error(`T3Code source not found at ${config.sourcePath}`)
-  }
+  const startPromise = (async () => {
+    if (needsRebuild) {
+      ensureBuilt(config.sourcePath, config.installCommand, config.buildCommand)
+    }
 
-  pendingRuntimeStart = (async () => {
-    ensureBuilt(config.sourcePath, config.installCommand, config.buildCommand)
+    const rebuiltOutputTime = getLatestBuildOutputTime(config.sourcePath, entrypointPath)
+    const previousRuntime = runtime && runtime.process.exitCode === null ? runtime : null
+
+    if (
+      previousRuntime &&
+      rebuiltOutputTime <= previousRuntime.startedAt
+    ) {
+      return { baseUrl: previousRuntime.baseUrl, logPath: previousRuntime.logPath }
+    }
+
+    if (previousRuntime) {
+      await stopRuntimeInstance(previousRuntime)
+    }
 
     const port = await getFreePort()
     const baseUrl = `http://127.0.0.1:${port}`
-    const entrypoint = join(config.sourcePath, config.entrypoint)
+    const entrypoint = entrypointPath
     const stateDir = getStateDir()
     const logPath = getLogPath()
     mkdirSync(stateDir, { recursive: true })
@@ -612,9 +821,9 @@ export async function ensureRuntime(): Promise<{ baseUrl: string; logPath: strin
     delete env.ELECTRON_RUN_AS_NODE
     delete env.T3CODE_AUTH_TOKEN
     env.PATH = prependBrowserCliToPath(env.PATH)
-    env.CENTIPEDE_BROWSER = getBrowserCommandPath()
-    env.CENTIPEDE_BROWSER_CLI = getBrowserCliCommandPath()
-    env.CENTIPEDE_BROWSER_SESSION_FILE = getBrowserCliSessionFilePath()
+    env.SPECTRUM_BROWSER = getBrowserCommandPath()
+    env.SPECTRUM_BROWSER_CLI = getBrowserCliCommandPath()
+    env.SPECTRUM_BROWSER_SESSION_FILE = getBrowserCliSessionFilePath()
     env.T3CODE_MODE = 'web'
     env.T3CODE_HOST = '127.0.0.1'
     env.T3CODE_PORT = String(port)
@@ -647,8 +856,12 @@ export async function ensureRuntime(): Promise<{ baseUrl: string; logPath: strin
     )
 
     child.on('exit', () => {
-      runtime = null
-      pendingRuntimeStart = null
+      if (runtime?.process === child) {
+        runtime = null
+      }
+      if (pendingRuntimeStart === startPromise) {
+        pendingRuntimeStart = null
+      }
       closeSync(logFd)
     })
 
@@ -656,7 +869,8 @@ export async function ensureRuntime(): Promise<{ baseUrl: string; logPath: strin
       process: child,
       baseUrl,
       logPath,
-      stateDir
+      stateDir,
+      startedAt: Date.now()
     }
 
     try {
@@ -666,50 +880,59 @@ export async function ensureRuntime(): Promise<{ baseUrl: string; logPath: strin
       return { baseUrl, logPath }
     } catch (error) {
       child.kill()
-      runtime = null
+      if (runtime?.process === child) {
+        runtime = null
+      }
       throw error
     } finally {
-      pendingRuntimeStart = null
+      if (pendingRuntimeStart === startPromise) {
+        pendingRuntimeStart = null
+      }
     }
   })()
+
+  pendingRuntimeStart = startPromise
 
   return pendingRuntimeStart
 }
 
 export async function ensureT3Project(input: {
-  centipedeProjectId: string
+  spectrumProjectId: string
   projectPath: string
   projectName: string
   existingT3ProjectId?: string
 }): Promise<{ t3ProjectId: string }> {
-  const pendingKey = input.existingT3ProjectId || getProjectBindingId(input.centipedeProjectId)
+  const t3ProjectId = resolveT3ProjectBindingId(
+    input.spectrumProjectId,
+    input.existingT3ProjectId
+  )
+  const pendingKey = t3ProjectId
   const pending = pendingProjectEnsures.get(pendingKey)
   if (pending) {
     return pending
   }
 
   const ensurePromise = (async () => {
-  const { baseUrl } = await ensureRuntime()
-  const t3ProjectId = input.existingT3ProjectId || getProjectBindingId(input.centipedeProjectId)
-  const existing = getProjectById(t3ProjectId)
+    const { baseUrl } = await ensureRuntime()
+    const existing = getProjectById(t3ProjectId)
 
-  if (existing) {
-    if (existing.workspaceRoot !== input.projectPath || existing.title !== input.projectName) {
-      await sendWsRequest(baseUrl, {
-        _tag: 'orchestration.dispatchCommand',
-        command: {
-          type: 'project.meta.update',
-          commandId: crypto.randomUUID(),
-          projectId: t3ProjectId,
-          title: input.projectName,
-          workspaceRoot: input.projectPath
-        }
-      })
-      await waitForProject(t3ProjectId)
+    if (existing) {
+      if (existing.workspaceRoot !== input.projectPath || existing.title !== input.projectName) {
+        await sendWsRequest(baseUrl, {
+          _tag: 'orchestration.dispatchCommand',
+          command: {
+            type: 'project.meta.update',
+            commandId: crypto.randomUUID(),
+            projectId: t3ProjectId,
+            title: input.projectName,
+            workspaceRoot: input.projectPath
+          }
+        })
+        await waitForProject(t3ProjectId)
+      }
+
+      return { t3ProjectId }
     }
-
-    return { t3ProjectId }
-  }
 
     try {
       await sendWsRequest(baseUrl, {
@@ -772,7 +995,7 @@ async function createThread(projectId: string): Promise<ThreadRow> {
 
 export async function ensurePanelThread(input: {
   panelId: string
-  centipedeProjectId: string
+  spectrumProjectId: string
   projectPath: string
   projectName: string
   existingT3ProjectId?: string
@@ -793,7 +1016,7 @@ export async function ensurePanelThread(input: {
   const ensurePromise = (async () => {
     const { baseUrl } = await ensureRuntime()
     const { t3ProjectId } = await ensureT3Project({
-      centipedeProjectId: input.centipedeProjectId,
+      spectrumProjectId: input.spectrumProjectId,
       projectPath: input.projectPath,
       projectName: input.projectName,
       existingT3ProjectId: input.existingT3ProjectId

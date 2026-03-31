@@ -7,7 +7,7 @@ import { Modal } from '@renderer/components/shared/Modal'
 import { cn } from '@renderer/lib/cn'
 import { filesApi } from '@renderer/lib/ipc'
 import { configureMonacoEnvironment } from '@renderer/lib/monaco-environment'
-import { ensureCentipedeMonacoTheme } from '@renderer/lib/monaco-theme'
+import { ensureSpectrumMonacoTheme } from '@renderer/lib/monaco-theme'
 import { useResolvedTheme } from '@renderer/lib/theme'
 import { useWorkspacesStore } from '@renderer/stores/workspaces.store'
 
@@ -155,7 +155,7 @@ function getLanguageFromPath(filePath: string): string {
 
 function getModelUri(monaco: typeof Monaco, panelId: string, filePath: string): Monaco.Uri {
   return monaco.Uri.parse(
-    `inmemory://centipede-file-panel/${encodeURIComponent(panelId)}/${encodeURIComponent(filePath)}`
+    `inmemory://spectrum-file-panel/${encodeURIComponent(panelId)}/${encodeURIComponent(filePath)}`
   )
 }
 
@@ -379,7 +379,7 @@ function FilePanelContent({
       return
     }
 
-    const themeName = ensureCentipedeMonacoTheme(monaco, resolvedTheme)
+    const themeName = ensureSpectrumMonacoTheme(monaco, resolvedTheme)
     monaco.editor.setTheme(themeName)
 
     const editor = monaco.editor.create(container, {
@@ -666,7 +666,7 @@ function FilePanelContent({
       return
     }
 
-    const themeName = ensureCentipedeMonacoTheme(monaco, resolvedTheme)
+    const themeName = ensureSpectrumMonacoTheme(monaco, resolvedTheme)
     monaco.editor.setTheme(themeName)
   }, [resolvedTheme])
 

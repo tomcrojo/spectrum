@@ -105,7 +105,7 @@ export const t3codeApi = {
       logPath: string
     }>(T3CODE_CHANNELS.ENSURE_RUNTIME),
   ensureProject: (input: {
-    centipedeProjectId: string
+    spectrumProjectId: string
     projectPath: string
     projectName: string
   }) =>
@@ -114,7 +114,7 @@ export const t3codeApi = {
     }>(T3CODE_CHANNELS.ENSURE_PROJECT, input),
   ensurePanelThread: (input: {
     panelId: string
-    centipedeProjectId: string
+    spectrumProjectId: string
     projectPath: string
     projectName: string
     existingT3ProjectId?: string

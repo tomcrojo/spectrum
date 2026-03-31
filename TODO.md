@@ -1,4 +1,4 @@
-# Centipede — TODO Tracker
+# Spectrum — TODO Tracker
 
 ## Phase 1 — Scaffold + Core Shell
 

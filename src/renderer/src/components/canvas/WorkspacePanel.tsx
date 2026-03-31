@@ -144,6 +144,34 @@ function PanelIconButton({
   )
 }
 
+function BrowserAutomationBadge() {
+  return (
+    <div
+      className="inline-flex items-center gap-1 rounded-full border border-text-muted/25 bg-bg px-2 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-text-muted"
+      title="This browser is currently being operated by an agent"
+    >
+      <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.3" />
+        <path
+          d="M2.8 6H13.2M2.8 10H13.2M8 2.5C9.5 4 10.4 5.9 10.4 8C10.4 10.1 9.5 12 8 13.5C6.5 12 5.6 10.1 5.6 8C5.6 5.9 6.5 4 8 2.5Z"
+          stroke="currentColor"
+          strokeWidth="1.1"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+      <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <rect x="4" y="5.5" width="8" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+        <path d="M6 3.5H10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        <path d="M8 3.5V5.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        <circle cx="6.5" cy="8.5" r="0.75" fill="currentColor" />
+        <circle cx="9.5" cy="8.5" r="0.75" fill="currentColor" />
+      </svg>
+      <span>Agent</span>
+    </div>
+  )
+}
+
 function WorkspacePanelImpl({
   workspaceId,
   projectId,
@@ -173,6 +201,9 @@ function WorkspacePanelImpl({
   const setFocusedPanel = useWorkspacesStore((state) => state.setFocusedPanel)
   const isDirty = useWorkspacesStore((state) => Boolean(state.dirtyPanelIds[panelId]))
   const markPanelVisible = usePanelRuntimeStore((state) => state.markPanelVisible)
+  const browserAutomationAttached = usePanelRuntimeStore(
+    (state) => Boolean(state.panelRuntimeById[panelId]?.browserAutomationAttached)
+  )
   const [isResizing, setIsResizing] = useState(false)
   const defaultWidth = panelType === 't3code' || panelType === 'chat' ? 400 : 700
   const [size, setSize] = useState(() => ({
@@ -327,6 +358,7 @@ function WorkspacePanelImpl({
 
   const watchPriority =
     isFocused && isActiveWorkspace ? 'focused' : isActiveWorkspace ? 'active' : 'inactive'
+  const showBrowserAutomationChrome = panelType === 'browser' && browserAutomationAttached
 
   return (
     <div
@@ -344,6 +376,7 @@ function WorkspacePanelImpl({
       className={cn(
         'relative flex flex-col rounded-lg border',
         isFocused ? 'border-accent/50' : 'border-border',
+        showBrowserAutomationChrome && 'shadow-[0_0_0_1px_rgba(115,115,115,0.45)]',
         'bg-bg shadow-lg shadow-black/30',
         isResizing && 'select-none'
       )}
@@ -353,6 +386,13 @@ function WorkspacePanelImpl({
         ...style
       }}
     >
+      {showBrowserAutomationChrome ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-[3px] rounded-md border border-text-muted/20"
+        />
+      ) : null}
+
       <div className="flex h-8 items-center justify-between gap-2 rounded-t-lg border-b border-border-subtle bg-bg-raised px-2.5 flex-shrink-0">
         <div className="flex min-w-0 items-center gap-2">
           <PanelGlyph panelType={panelType} providerId={providerId} className="text-text-secondary" />
@@ -366,6 +406,7 @@ function WorkspacePanelImpl({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {showBrowserAutomationChrome ? <BrowserAutomationBadge /> : null}
           {panelType === 'file' ? (
             <>
               <PanelIconButton

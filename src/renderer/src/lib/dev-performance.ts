@@ -7,7 +7,7 @@ interface DevPerformanceSnapshot {
 
 declare global {
   interface Window {
-    __centipedePerf__?: DevPerformanceSnapshot
+    __spectrumPerf__?: DevPerformanceSnapshot
   }
 }
 
@@ -16,14 +16,14 @@ function getSnapshot(): DevPerformanceSnapshot | null {
     return null
   }
 
-  if (!window.__centipedePerf__) {
-    window.__centipedePerf__ = {
+  if (!window.__spectrumPerf__) {
+    window.__spectrumPerf__ = {
       counters: {},
       timings: {}
     }
   }
 
-  return window.__centipedePerf__
+  return window.__spectrumPerf__
 }
 
 export function setDevPerformanceCounter(name: string, value: number): void {

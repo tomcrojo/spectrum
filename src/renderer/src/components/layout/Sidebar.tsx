@@ -23,6 +23,8 @@ export function Sidebar() {
     activeProjectId,
     sidebarCollapsed,
     setActiveProject,
+    showProjectPage,
+    setShowProjectPage,
     toggleSidebar,
     setShowNewProjectModal,
     showSettingsPage,
@@ -97,7 +99,14 @@ export function Sidebar() {
                 return (
                   <button
                     key={project.id}
-                    onClick={() => setActiveProject(project.id)}
+                    onClick={() => {
+                      if (activeProjectId === project.id) {
+                        setShowProjectPage(!showProjectPage)
+                        return
+                      }
+
+                      setActiveProject(project.id)
+                    }}
                     title={project.name}
                     aria-label={project.name}
                     className={cn(

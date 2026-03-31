@@ -1,4 +1,4 @@
-# Centipede — Project Cockpit
+# Spectrum — Project Cockpit
 
 ## What This Is
 
@@ -21,7 +21,7 @@ A lightweight Electron desktop app for managing coding projects. Combines a dens
 ## Project Structure
 
 ```
-centipede/
+spectrum/
 ├── package.json
 ├── electron.vite.config.ts          # Vite config for main/preload/renderer
 ├── electron-builder.yml             # Packaging config
@@ -113,7 +113,7 @@ Three independent stores to avoid coupling:
 
 ### SQLite Setup
 
-- Database location: `app.getPath('userData')/centipede.db` (e.g., `~/Library/Application Support/centipede/centipede.db`)
+- Database location: `app.getPath('userData')/spectrum.db` (e.g., `~/Library/Application Support/spectrum/spectrum.db`)
 - WAL mode enabled for concurrent read performance
 - Foreign keys enabled with cascade deletes
 - Migrations run from numbered `.sql` files in `src/main/db/migrations/`

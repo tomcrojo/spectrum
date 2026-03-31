@@ -11,6 +11,19 @@ import type {
   UpdateWorkspaceLastPanelEditedAtInput
 } from '@shared/workspace.types'
 
+function sanitizeLayoutStateForNewWorkspace(
+  layoutState: WorkspaceLayoutState
+): WorkspaceLayoutState {
+  return {
+    ...layoutState,
+    panels: layoutState.panels.map((panel) => ({
+      ...panel,
+      t3ProjectId: undefined,
+      t3ThreadId: undefined
+    }))
+  }
+}
+
 function getNewerTimestamp(
   left: string | null | undefined,
   right: string | null | undefined
@@ -128,7 +141,9 @@ export function createWorkspace(input: CreateWorkspaceInput): Workspace {
   const db = getDb()
   const id = nanoid()
   const now = new Date().toISOString()
-  const defaultLayout: WorkspaceLayoutState = input.layoutState ?? { panels: [], sizes: [] }
+  const defaultLayout: WorkspaceLayoutState = input.layoutState
+    ? sanitizeLayoutStateForNewWorkspace(input.layoutState)
+    : { panels: [], sizes: [] }
   const lastPanelEditedAt = defaultLayout.panels.length > 0 ? now : null
 
   db.prepare(

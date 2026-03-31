@@ -245,7 +245,7 @@ export class BrowserCli {
           {
             code: "TARGET_NOT_READY",
             hints: [
-              "The panel was created successfully inside Centipede.",
+              "The panel was created successfully inside Spectrum.",
               "For fire-and-forget panel creation, prefer `browser open <url>` or `browser.openPanel(...)`.",
               `Retry attachment with \`await browser.getPage("${panel.panelId}")\` once the panel is mounted.`,
             ],

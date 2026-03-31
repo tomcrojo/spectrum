@@ -6,13 +6,13 @@ import { BrowserCli, readNamedFile, saveNamedFile } from "./browser.js";
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 
-const HELP_TEXT = `browser-cli controls browser panels inside a running Centipede workspace.
+const HELP_TEXT = `browser-cli controls browser panels inside a running Spectrum workspace.
 
 Important:
   - It does not launch or control external Chrome windows.
-  - It only works when Centipede is already running and a workspace session is active.
-  - \`--connect\` means "attach to the current Centipede workspace session".
-  - In Centipede-managed shells, prefer \`$CENTIPEDE_BROWSER\` first if \`browser\` is not on PATH.
+  - It only works when Spectrum is already running and a workspace session is active.
+  - \`--connect\` means "attach to the current Spectrum workspace session".
+  - In Spectrum-managed shells, prefer \`$SPECTRUM_BROWSER\` first if \`browser\` is not on PATH.
 
 For simple tasks, prefer the built-in panel commands:
   browser open <url> [--name <label>] [--focus]
@@ -28,7 +28,7 @@ Use \`browser run\` or \`browser --connect <<'EOF'\` only for advanced DOM autom
 Usage:
   browser help
   browser --help
-  "$CENTIPEDE_BROWSER" --help
+  "$SPECTRUM_BROWSER" --help
   browser status --json
   browser search "folagor" --engine youtube --focus
   browser open "https://www.youtube.com/results?search_query=folagor" --name "YouTube: folagor" --focus
@@ -44,9 +44,9 @@ Usage:
 Options:
   --help, -h           Show this help text
   --json               Print structured JSON output
-  --connect [target]   Attach to the active Centipede workspace session
-  --workspace <id>     Choose a specific Centipede workspace
-  --project <id>       Choose a specific Centipede project
+  --connect [target]   Attach to the active Spectrum workspace session
+  --workspace <id>     Choose a specific Spectrum workspace
+  --project <id>       Choose a specific Spectrum project
 
 Commands:
   help                 Show this help text
@@ -129,13 +129,13 @@ function buildCommandHints(value) {
   ];
 
   if (["new", "new-tab", "tab", "page", "newpage"].includes(normalized)) {
-    hints.unshift("If you want a new Centipede browser panel, run `browser open <url>`.");
+    hints.unshift("If you want a new Spectrum browser panel, run `browser open <url>`.");
   } else if (normalized === "connect") {
     hints.unshift("Use the `--connect` flag, not a `connect` subcommand: `browser --connect <<'EOF' ... EOF`.");
   } else if (normalized === "open") {
-    hints.unshift("Use `browser open <url>` to create a new Centipede browser panel.");
+    hints.unshift("Use `browser open <url>` to create a new Spectrum browser panel.");
   } else if (normalized === "search") {
-    hints.unshift("Use `browser search <query>` to open search results in a new Centipede browser panel.");
+    hints.unshift("Use `browser search <query>` to open search results in a new Spectrum browser panel.");
   }
 
   return hints;

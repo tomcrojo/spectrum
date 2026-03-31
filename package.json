@@ -1,13 +1,29 @@
 {
-  "name": "centipede",
+  "name": "spectrum",
   "version": "0.1.0",
   "description": "Project Cockpit — a lightweight desktop coding app",
+  "license": "MIT",
+  "author": "Tomas Campoy",
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "electron",
+    "desktop",
+    "developer-tools",
+    "project-management",
+    "terminal",
+    "workspace"
+  ],
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "unset ELECTRON_RUN_AS_NODE && electron-vite dev",
     "dev:server": "node scripts/dev-server.cjs",
     "dev:browser": "node scripts/dev-browser.cjs",
     "build": "electron-vite build",
+    "dist": "npm run build && electron-builder --publish never",
+    "dist:mac": "npm run build && electron-builder --mac dmg --publish never",
+    "dist:mac:dir": "npm run build && electron-builder --mac dir --publish never",
     "preview": "unset ELECTRON_RUN_AS_NODE && electron-vite preview",
     "postinstall": "electron-builder install-app-deps && chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper 2>/dev/null || true"
   },

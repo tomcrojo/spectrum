@@ -64,15 +64,20 @@ export function BrowserPanel({
   }, [currentUrl, panelId, updatePanelLayout])
 
   useEffect(() => {
-    if (!autoFocus) {
-      return
-    }
-
     requestAnimationFrame(() => {
+      if (autoFocus) {
+        if (isElectron) {
+          webviewRef.current?.focus()
+        } else {
+          iframeRef.current?.focus()
+        }
+        return
+      }
+
       if (isElectron) {
-        webviewRef.current?.focus()
+        webviewRef.current?.blur()
       } else {
-        iframeRef.current?.focus()
+        iframeRef.current?.blur()
       }
     })
   }, [autoFocus, isElectron])

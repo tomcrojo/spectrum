@@ -15,10 +15,14 @@ function getUserDataPath(): string {
     return app.getPath('userData')
   }
 
-  return join(homedir(), '.centipede-dev')
+  return join(homedir(), '.spectrum-dev')
 }
 
 export function getBrowserCliRoot(): string {
+  if (typeof app?.isPackaged === 'boolean' && app.isPackaged) {
+    return join(process.resourcesPath, 'browser-cli')
+  }
+
   return join(getProjectRoot(), 'resources', 'browser-cli')
 }
 

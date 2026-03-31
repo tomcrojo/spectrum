@@ -98,18 +98,15 @@ export function useBrowserApiListener(): void {
 
     const removeActivate = transport.on(
       BROWSER_CHANNELS.ACTIVATE,
-      (payload: { panelId: string }) => {
-        useWorkspacesStore.getState().setFocusedPanel(payload.panelId)
+      (_payload: { panelId: string }) => {
+        // Remote browser automation must not steal the user's canvas focus.
       }
     )
 
     const removeFocusChanged = transport.on(
       BROWSER_CHANNELS.FOCUS_CHANGED,
-      (payload: { panelId: string | null }) => {
-        if (!payload.panelId) {
-          return
-        }
-        useWorkspacesStore.getState().setFocusedPanel(payload.panelId)
+      (_payload: { panelId: string | null }) => {
+        // Keep browser-manager state internal; do not translate it into UI focus changes.
       }
     )
 

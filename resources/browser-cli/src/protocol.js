@@ -2,24 +2,24 @@ import os from "node:os";
 import path from "node:path";
 
 function getDefaultUserDataDir() {
-  if (process.env.CENTIPEDE_USER_DATA_DIR) {
-    return process.env.CENTIPEDE_USER_DATA_DIR;
+  if (process.env.SPECTRUM_USER_DATA_DIR) {
+    return process.env.SPECTRUM_USER_DATA_DIR;
   }
 
   const home = os.homedir();
   switch (process.platform) {
     case "darwin":
-      return path.join(home, "Library", "Application Support", "centipede");
+      return path.join(home, "Library", "Application Support", "spectrum");
     case "win32":
-      return path.join(process.env.APPDATA ?? path.join(home, "AppData", "Roaming"), "centipede");
+      return path.join(process.env.APPDATA ?? path.join(home, "AppData", "Roaming"), "spectrum");
     default:
-      return path.join(process.env.XDG_CONFIG_HOME ?? path.join(home, ".config"), "centipede");
+      return path.join(process.env.XDG_CONFIG_HOME ?? path.join(home, ".config"), "spectrum");
   }
 }
 
 export function getSessionFilePath() {
   return (
-    process.env.CENTIPEDE_BROWSER_SESSION_FILE ??
+    process.env.SPECTRUM_BROWSER_SESSION_FILE ??
     path.join(getDefaultUserDataDir(), "browser-cli", "sessions.json")
   );
 }

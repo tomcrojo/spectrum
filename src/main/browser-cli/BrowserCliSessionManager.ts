@@ -30,6 +30,13 @@ interface RendererSessionState {
   focusedBrowserPanelId: string | null
 }
 
+interface BrowserCliCapabilities {
+  activatePanel: boolean
+  createPanel: boolean
+  closePanel: boolean
+  listPanels: boolean
+}
+
 const appInstanceId = randomUUID()
 const SESSION_STALE_MS = 15_000
 let currentScope: RendererSessionState = {
@@ -214,12 +221,7 @@ export function touchBrowserCliSession(): void {
 
 export function getBrowserCliSessionSnapshot():
   | (BrowserCliSessionRecord & {
-      capabilities: {
-        activatePanel: true
-        createPanel: true
-        closePanel: true
-        listPanels: true
-      }
+      capabilities: BrowserCliCapabilities
     })
   | null {
   const record = buildSessionRecord()
@@ -230,7 +232,7 @@ export function getBrowserCliSessionSnapshot():
   return {
     ...record,
     capabilities: {
-      activatePanel: true,
+      activatePanel: false,
       createPanel: true,
       closePanel: true,
       listPanels: true

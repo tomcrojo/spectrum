@@ -13,7 +13,7 @@ export function getDb(): Database.Database {
 }
 
 export function initDatabase(): Database.Database {
-  const dbPath = join(app.getPath('userData'), 'centipede.db')
+  const dbPath = join(app.getPath('userData'), 'spectrum.db')
   db = new Database(dbPath)
 
   // Enable WAL mode for better read performance
@@ -44,6 +44,19 @@ function runMigrations(database: Database.Database): void {
       .filter((f) => f.endsWith('.sql'))
       .sort()
   } catch {
+    if (app.isPackaged) {
+      const packagedMigrationsDir = join(process.resourcesPath, 'migrations')
+      try {
+        files = readdirSync(packagedMigrationsDir)
+          .filter((f) => f.endsWith('.sql'))
+          .sort()
+        runMigrationFiles(database, packagedMigrationsDir, files)
+        return
+      } catch {
+        // Fall through to development-only paths below.
+      }
+    }
+
     // In dev mode, migrations might be in a different location
     const devMigrationsDir = join(__dirname, 'migrations')
     try {

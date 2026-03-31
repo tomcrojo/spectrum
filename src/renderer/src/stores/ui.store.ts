@@ -6,13 +6,14 @@ export type CanvasInteractionMode = 'structured' | 'free'
 export type RuntimePowerMode = 'low' | 'mid' | 'high'
 export type FollowUpBehavior = 'queue' | 'steer'
 
-const THEME_STORAGE_KEY = 'centipede:theme'
-const ARCHIVED_TIMESTAMP_FORMAT_STORAGE_KEY = 'centipede:archived-timestamp-format'
-const AUTO_CENTER_FOCUSED_PANEL_STORAGE_KEY = 'centipede:auto-center-focused-panel'
-const CANVAS_INTERACTION_MODE_STORAGE_KEY = 'centipede:canvas-interaction-mode'
-const RUNTIME_POWER_MODE_STORAGE_KEY = 'centipede:runtime-power-mode'
-const FOLLOW_UP_BEHAVIOR_STORAGE_KEY = 'centipede:follow-up-behavior'
-export const CANVAS_ZOOM_STORAGE_KEY = 'centipede:canvas-zoom'
+const THEME_STORAGE_KEY = 'spectrum:theme'
+const ARCHIVED_TIMESTAMP_FORMAT_STORAGE_KEY = 'spectrum:archived-timestamp-format'
+const AUTO_CENTER_FOCUSED_PANEL_STORAGE_KEY = 'spectrum:auto-center-focused-panel'
+const CANVAS_INTERACTION_MODE_STORAGE_KEY = 'spectrum:canvas-interaction-mode'
+const RUNTIME_POWER_MODE_STORAGE_KEY = 'spectrum:runtime-power-mode'
+const FOLLOW_UP_BEHAVIOR_STORAGE_KEY = 'spectrum:follow-up-behavior'
+const ASSISTANT_STREAMING_STORAGE_KEY = 'spectrum:assistant-streaming'
+export const CANVAS_ZOOM_STORAGE_KEY = 'spectrum:canvas-zoom'
 export const CANVAS_ZOOM_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3] as const
 
 const MIN_CANVAS_ZOOM = CANVAS_ZOOM_STEPS[0]
@@ -123,6 +124,23 @@ function getInitialFollowUpBehavior(): FollowUpBehavior {
   return 'steer'
 }
 
+function getInitialAssistantStreaming(): boolean {
+  if (typeof window === 'undefined') {
+    return true
+  }
+
+  const stored = window.localStorage.getItem(ASSISTANT_STREAMING_STORAGE_KEY)
+  if (stored === 'true') {
+    return true
+  }
+
+  if (stored === 'false') {
+    return false
+  }
+
+  return true
+}
+
 interface UiState {
   activeProjectId: string | null
   sidebarCollapsed: boolean
@@ -136,6 +154,7 @@ interface UiState {
   canvasInteractionMode: CanvasInteractionMode
   runtimePowerMode: RuntimePowerMode
   followUpBehavior: FollowUpBehavior
+  assistantStreaming: boolean
   canvasZoom: number
 
   setActiveProject: (id: string | null) => void
@@ -150,6 +169,7 @@ interface UiState {
   setCanvasInteractionMode: (mode: CanvasInteractionMode) => void
   setRuntimePowerMode: (mode: RuntimePowerMode) => void
   setFollowUpBehavior: (behavior: FollowUpBehavior) => void
+  setAssistantStreaming: (enabled: boolean) => void
   setCanvasZoom: (zoom: number) => void
   zoomIn: () => void
   zoomOut: () => void
@@ -169,6 +189,7 @@ export const useUiStore = create<UiState>((set) => ({
   canvasInteractionMode: getInitialCanvasInteractionMode(),
   runtimePowerMode: getInitialRuntimePowerMode(),
   followUpBehavior: getInitialFollowUpBehavior(),
+  assistantStreaming: getInitialAssistantStreaming(),
   canvasZoom: getInitialCanvasZoom(),
 
   setActiveProject: (id) =>
@@ -266,6 +287,16 @@ export const useUiStore = create<UiState>((set) => ({
     }
 
     set({ followUpBehavior })
+  },
+  setAssistantStreaming: (assistantStreaming) => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(
+        ASSISTANT_STREAMING_STORAGE_KEY,
+        String(assistantStreaming)
+      )
+    }
+
+    set({ assistantStreaming })
   },
   setCanvasZoom: (canvasZoom) => {
     const nextZoom = clampCanvasZoom(canvasZoom)

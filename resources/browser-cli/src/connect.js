@@ -57,11 +57,11 @@ function chooseSession(sessions, options) {
   });
 
   if (filtered.length === 0) {
-    throw new BrowserCliError("No active Centipede workspace session found for browser-cli.", {
+    throw new BrowserCliError("No active Spectrum workspace session found for browser-cli.", {
       code: "NO_SESSION",
       hints: [
-        "browser-cli only controls browser panels inside a running Centipede workspace.",
-        "Open Centipede, select a project/workspace, and keep that workspace active before running browser-cli.",
+        "browser-cli only controls browser panels inside a running Spectrum workspace.",
+        "Open Spectrum, select a project/workspace, and keep that workspace active before running browser-cli.",
         "If you meant to open an external Chrome window, browser-cli cannot do that."
       ]
     });
@@ -76,7 +76,7 @@ function chooseSession(sessions, options) {
     return focused[0];
   }
 
-  throw new BrowserCliError("Multiple active Centipede workspaces matched this request.", {
+  throw new BrowserCliError("Multiple active Spectrum workspaces matched this request.", {
     code: "AMBIGUOUS_SESSION",
     hints: [
       "Retry with --workspace <id> to target one specific workspace.",
@@ -86,11 +86,11 @@ function chooseSession(sessions, options) {
 }
 
 export async function resolveSession(options = {}) {
-  if (process.env.CENTIPEDE_API_PORT && process.env.CENTIPEDE_API_TOKEN) {
-    const browserApiBaseUrl = `http://127.0.0.1:${process.env.CENTIPEDE_API_PORT}`;
-    const browserApiToken = process.env.CENTIPEDE_API_TOKEN;
-    const projectId = process.env.CENTIPEDE_PROJECT_ID ?? options.projectId ?? null;
-    const workspaceId = process.env.CENTIPEDE_WORKSPACE_ID ?? options.workspaceId ?? null;
+  if (process.env.SPECTRUM_API_PORT && process.env.SPECTRUM_API_TOKEN) {
+    const browserApiBaseUrl = `http://127.0.0.1:${process.env.SPECTRUM_API_PORT}`;
+    const browserApiToken = process.env.SPECTRUM_API_TOKEN;
+    const projectId = process.env.SPECTRUM_PROJECT_ID ?? options.projectId ?? null;
+    const workspaceId = process.env.SPECTRUM_WORKSPACE_ID ?? options.workspaceId ?? null;
     const session = await postJson(browserApiBaseUrl, "/browser/session", browserApiToken).catch(
       async () => ({
         ...(await postJson(browserApiBaseUrl, "/browser/cdp-endpoint", browserApiToken)),
@@ -134,11 +134,11 @@ export async function createSessionClient(options = {}) {
         : await api.getCdpEndpoint();
 
       if (!endpoint) {
-        throw new BrowserCliError("No mounted Centipede browser panel is available for CDP attachment.", {
+        throw new BrowserCliError("No mounted Spectrum browser panel is available for CDP attachment.", {
           code: "NO_CDP_ENDPOINT",
           hints: [
-            "browser-cli can create and control browser panels inside Centipede, but it does not attach to external Chrome windows.",
-            "Make sure the target workspace is open in Centipede and at least one browser panel is mounted.",
+            "browser-cli can create and control browser panels inside Spectrum, but it does not attach to external Chrome windows.",
+            "Make sure the target workspace is open in Spectrum and at least one browser panel is mounted.",
             "If you only need to open a panel, prefer `browser open <url>`.",
             "Use `browser.newPage(...)` only when you need a Playwright page handle after the panel is mounted."
           ]

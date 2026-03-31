@@ -14,7 +14,7 @@ export function registerT3CodeHandlers(): void {
 
   ipcMain.handle(
     T3CODE_CHANNELS.ENSURE_PROJECT,
-    (_event, input: { centipedeProjectId: string; projectPath: string; projectName: string }) =>
+    (_event, input: { spectrumProjectId: string; projectPath: string; projectName: string }) =>
       ensureT3Project(input)
   )
 
@@ -24,7 +24,7 @@ export function registerT3CodeHandlers(): void {
       _event,
       input: {
         panelId: string
-        centipedeProjectId: string
+        spectrumProjectId: string
         projectPath: string
         projectName: string
         existingT3ProjectId?: string

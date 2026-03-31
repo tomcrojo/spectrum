@@ -50,6 +50,14 @@ function getGridOpacity(zoom: number): number {
   return Math.max(MIN_GRID_OPACITY, Math.min(1, MIN_GRID_OPACITY + normalized * (1 - MIN_GRID_OPACITY)))
 }
 
+function getPanelDisplayWidth(panel: Pick<ActiveWorkspacePanel, 'panelType' | 'width'>): number {
+  if (typeof panel.width === 'number' && Number.isFinite(panel.width)) {
+    return panel.width
+  }
+
+  return panel.panelType === 't3code' || panel.panelType === 'chat' ? 400 : 700
+}
+
 function buildActivePanel(workspace: Workspace, cwd: string): ActiveWorkspacePanel {
   const panel = workspace.layoutState.panels[0] ?? {
     id: nanoid(),
@@ -1000,6 +1008,7 @@ export function Canvas() {
                     const showTopButton = isFocused && wsIndex === 0
                     const showBottomButton =
                       isFocused && wsIndex === panelsByWorkspace.length - 1
+                    const panelDisplayWidth = getPanelDisplayWidth(panel)
 
                     return (
                       <div key={panel.panelId} className="flex items-stretch gap-3">
@@ -1010,7 +1019,7 @@ export function Canvas() {
                                 direction="top"
                                 label="New Workspace"
                                 onClick={handleNewWorkspace}
-                                width={panel.width ?? 700}
+                                width={panelDisplayWidth}
                               />
                             </div>
                           )}
@@ -1045,7 +1054,7 @@ export function Canvas() {
                                 direction="bottom"
                                 label="New Workspace"
                                 onClick={handleNewWorkspace}
-                                width={panel.width ?? 700}
+                                width={panelDisplayWidth}
                               />
                             </div>
                           )}

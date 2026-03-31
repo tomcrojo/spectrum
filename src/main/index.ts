@@ -13,47 +13,57 @@ import { startApiServer, stopApiServer } from './api/BrowserApiServer'
 import { shutdownCdpProxies } from './cdp/CdpProxyManager'
 import { clearBrowserCliSession, touchBrowserCliSession } from './browser-cli/BrowserCliSessionManager'
 
-app.whenReady().then(() => {
-  // Initialize database
-  initDatabase()
-
-  // Register IPC handlers
-  registerAllHandlers()
-
-  const mainWindow = createMainWindow()
-  setBrowserPanelMainWindow(mainWindow)
-  initWebviewSecurity(mainWindow)
-  mainWindow.on('focus', () => {
+function wireMainWindow(window: BrowserWindow): void {
+  setBrowserPanelMainWindow(window)
+  initWebviewSecurity(window)
+  window.on('focus', () => {
     touchBrowserCliSession()
   })
-  mainWindow.on('blur', () => {
+  window.on('blur', () => {
     touchBrowserCliSession()
   })
-  void startApiServer()
+}
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      const window = createMainWindow()
-      setBrowserPanelMainWindow(window)
-      initWebviewSecurity(window)
-      window.on('focus', () => {
-        touchBrowserCliSession()
-      })
-      window.on('blur', () => {
-        touchBrowserCliSession()
-      })
-    }
-  })
-})
+function openMainWindow(): BrowserWindow {
+  const window = createMainWindow()
+  wireMainWindow(window)
+  return window
+}
 
-app.on('window-all-closed', () => {
+function cleanupWindowScopedServices(): void {
   clearBrowserPanelMainWindow()
   closeAllPtys()
   stopAllT3Code()
   clearBrowserCliSession()
   void stopApiServer()
   void shutdownCdpProxies()
+}
+
+function cleanupAppServices(): void {
+  cleanupWindowScopedServices()
   closeDatabase()
+}
+
+app.whenReady().then(() => {
+  initDatabase()
+  registerAllHandlers()
+  openMainWindow()
+  void startApiServer()
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      openMainWindow()
+      void startApiServer()
+    }
+  })
+})
+
+app.on('before-quit', () => {
+  cleanupAppServices()
+})
+
+app.on('window-all-closed', () => {
+  cleanupWindowScopedServices()
   if (process.platform !== 'darwin') {
     app.quit()
   }

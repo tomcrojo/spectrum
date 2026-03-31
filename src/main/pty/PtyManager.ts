@@ -46,16 +46,16 @@ export function createPty(
   // Unset ELECTRON_RUN_AS_NODE so child shells behave normally
   delete env.ELECTRON_RUN_AS_NODE
   env.PATH = prependBrowserCliToPath(env.PATH)
-  env.CENTIPEDE_BROWSER = getBrowserCommandPath()
-  env.CENTIPEDE_BROWSER_CLI = getBrowserCliCommandPath()
-  env.CENTIPEDE_BROWSER_SESSION_FILE = getBrowserCliSessionFilePath()
+  env.SPECTRUM_BROWSER = getBrowserCommandPath()
+  env.SPECTRUM_BROWSER_CLI = getBrowserCliCommandPath()
+  env.SPECTRUM_BROWSER_SESSION_FILE = getBrowserCliSessionFilePath()
 
   const browserApiToken = nanoid(32)
   registerToken(browserApiToken, workspaceId, projectId)
-  env.CENTIPEDE_API_PORT = String(getApiPort())
-  env.CENTIPEDE_API_TOKEN = browserApiToken
-  env.CENTIPEDE_WORKSPACE_ID = workspaceId
-  env.CENTIPEDE_PROJECT_ID = projectId
+  env.SPECTRUM_API_PORT = String(getApiPort())
+  env.SPECTRUM_API_TOKEN = browserApiToken
+  env.SPECTRUM_WORKSPACE_ID = workspaceId
+  env.SPECTRUM_PROJECT_ID = projectId
 
   const ptyProcess = pty.spawn(shell, [], {
     name: 'xterm-256color',

@@ -4,6 +4,7 @@ import { Canvas } from '@renderer/components/canvas/Canvas'
 import { ProjectPage } from '@renderer/components/project/ProjectPage'
 import { SettingsPage } from '@renderer/components/settings/SettingsPage'
 import { NewProjectModal } from '@renderer/components/sidebar/NewProjectModal'
+import { ThreadNotificationToasts } from '@renderer/components/shared/ThreadNotificationToast'
 import { useResolvedTheme } from '@renderer/lib/theme'
 import { useUiStore } from '@renderer/stores/ui.store'
 
@@ -41,6 +42,9 @@ export function AppShell() {
 
       {/* Modals */}
       <NewProjectModal />
+
+      {/* In-app toast notifications */}
+      <ThreadNotificationToasts />
     </div>
   )
 }
