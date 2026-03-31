@@ -1,5 +1,9 @@
 # Spectrum
 
+<p align="center">
+  <img src="build/icon.png" alt="Spectrum icon" width="160" />
+</p>
+
 Spectrum is a desktop project cockpit for coding work. It combines a dense Electron UI, project dashboards, canvas-style workspaces, terminals, browser panels, file editing, and chat-oriented workflows into one app.
 
 It is being built in public. The app is already useful for real exploration and project tracking, but it is still early, opinionated, and incomplete by design.
