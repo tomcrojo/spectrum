@@ -2,6 +2,7 @@ appId: com.spectrum.app
 productName: Spectrum
 directories:
   buildResources: build
+disableDefaultIgnoredFiles: true
 files:
   - out/**/*
   - package.json
@@ -9,8 +10,12 @@ files:
 extraResources:
   - from: resources/browser-cli
     to: browser-cli
+  - from: build/t3code-runtime
+    to: t3code
   - from: src/main/db/migrations
     to: migrations
+  - from: build/node-bin
+    to: node-bin
 mac:
   category: public.app-category.developer-tools
   icon: icon.icns

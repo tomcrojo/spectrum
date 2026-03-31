@@ -43,9 +43,20 @@ function findProjectRoot(): string {
 
 const projectRoot = findProjectRoot()
 
+function getPackagedT3CodePath(): string | null {
+  const resourcesPath = process.resourcesPath
+  if (!resourcesPath) {
+    return null
+  }
+
+  const candidate = join(resourcesPath, 't3code')
+  return existsSync(join(candidate, 'package.json')) ? candidate : null
+}
+
 function findExistingT3CodeSourcePath(preferredPath?: string): string {
   const candidates = [
     preferredPath,
+    getPackagedT3CodePath(),
     join(projectRoot, 'resources', 't3code')
   ].filter((value): value is string => Boolean(value))
 

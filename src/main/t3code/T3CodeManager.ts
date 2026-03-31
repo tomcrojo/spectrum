@@ -1,11 +1,24 @@
 import { spawn, spawnSync, type ChildProcess } from 'child_process'
-import { existsSync, mkdirSync, openSync, closeSync, readdirSync, statSync } from 'fs'
+import {
+  closeSync,
+  copyFileSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync
+} from 'fs'
 import { homedir } from 'os'
 import { join, dirname } from 'path'
 import net from 'net'
 import Database from 'better-sqlite3'
 import WebSocket from 'ws'
-import { BrowserWindow } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { T3CODE_CHANNELS } from '@shared/ipc-channels'
 import { getT3CodeConfig } from './config'
 import {
@@ -108,6 +121,93 @@ function getFreePort(): Promise<number> {
   return reserveLoopbackPort()
 }
 
+function getPackagedT3CodeRoot(): string {
+  return join(process.resourcesPath, 't3code')
+}
+
+function isPackagedT3CodeSource(sourcePath: string): boolean {
+  return (
+    (existsSync(getPackagedT3CodeRoot()) && join(sourcePath) === getPackagedT3CodeRoot()) ||
+    existsSync(join(sourcePath, '.spectrum-packaged-t3code-runtime'))
+  )
+}
+
+function getPackagedT3CodeShadowRoot(): string {
+  return join(homedir(), '.spectrum-dev', 'embedded', 't3code-runtime')
+}
+
+function writeRuntimePackageManifest(targetPath: string, name: string): void {
+  writeFileSync(
+    targetPath,
+    JSON.stringify(
+      {
+        name,
+        private: true,
+        type: 'module'
+      },
+      null,
+      2
+    )
+  )
+}
+
+function ensurePackagedT3CodeRuntimeReady(): string {
+  const packagedRoot = getPackagedT3CodeRoot()
+  const shadowRoot = getPackagedT3CodeShadowRoot()
+  const versionFile = join(shadowRoot, '.version')
+  const markerFile = join(shadowRoot, '.spectrum-packaged-t3code-runtime')
+  const currentVersion = app.getVersion()
+
+  if (
+    existsSync(join(shadowRoot, 'apps', 'server', 'dist', 'index.mjs')) &&
+    existsSync(join(shadowRoot, 'node_modules')) &&
+    existsSync(markerFile) &&
+    existsSync(versionFile) &&
+    statSync(versionFile).isFile()
+  ) {
+    try {
+      const version = readFileSync(versionFile, 'utf8').trim()
+      if (version === currentVersion) {
+        return shadowRoot
+      }
+    } catch {
+      // Recreate the shadow runtime below.
+    }
+  }
+
+  rmSync(shadowRoot, { recursive: true, force: true })
+  mkdirSync(join(shadowRoot, 'apps', 'server'), { recursive: true })
+
+  const packagedRootPackagePath = join(packagedRoot, 'package.json')
+  const packagedServerPackagePath = join(packagedRoot, 'apps', 'server', 'package.json')
+
+  if (existsSync(packagedRootPackagePath)) {
+    copyFileSync(packagedRootPackagePath, join(shadowRoot, 'package.json'))
+  } else {
+    writeRuntimePackageManifest(join(shadowRoot, 'package.json'), '@spectrum/t3code-runtime')
+  }
+
+  if (existsSync(packagedServerPackagePath)) {
+    copyFileSync(packagedServerPackagePath, join(shadowRoot, 'apps', 'server', 'package.json'))
+  } else {
+    writeRuntimePackageManifest(
+      join(shadowRoot, 'apps', 'server', 'package.json'),
+      '@spectrum/t3code-server-runtime'
+    )
+  }
+
+  cpSync(
+    join(packagedRoot, 'apps', 'server', 'dist'),
+    join(shadowRoot, 'apps', 'server', 'dist'),
+    { recursive: true }
+  )
+  symlinkSync(join(packagedRoot, 'runtime-node-modules'), join(shadowRoot, 'node_modules'), 'dir')
+  writeFileSync(markerFile, '')
+  writeFileSync(versionFile, currentVersion)
+
+  return shadowRoot
+}
+
 function getLatestModifiedTime(targetPath: string): number {
   if (!existsSync(targetPath)) {
     return 0
@@ -132,6 +232,10 @@ function getLatestModifiedTime(targetPath: string): number {
 }
 
 function shouldRebuild(sourcePath: string, entrypointPath: string): boolean {
+  if (isPackagedT3CodeSource(sourcePath)) {
+    return false
+  }
+
   if (!existsSync(entrypointPath)) {
     return true
   }
@@ -197,6 +301,10 @@ async function stopRuntimeInstance(instance: RuntimeInstance): Promise<void> {
 }
 
 function ensureBuilt(sourcePath: string, installCommand: string, buildCommand: string): void {
+  if (app.isPackaged || isPackagedT3CodeSource(sourcePath)) {
+    return
+  }
+
   const entrypointPath = join(sourcePath, getT3CodeConfig().entrypoint)
   if (!shouldRebuild(sourcePath, entrypointPath)) {
     return
@@ -282,6 +390,27 @@ function getLogPath(): string {
   const logsDir = join(homedir(), '.spectrum-dev', 't3code-logs')
   mkdirSync(logsDir, { recursive: true })
   return join(logsDir, `${GLOBAL_RUNTIME_ID}.log`)
+}
+
+function closeFileDescriptor(fd: number): void {
+  try {
+    closeSync(fd)
+  } catch {
+    // Ignore duplicate closes during shutdown/error races.
+  }
+}
+
+function getPackagedNodeBinaryPath(): string {
+  return join(process.resourcesPath, 'node-bin', process.platform === 'win32' ? 'node.exe' : 'node')
+}
+
+function resolveT3CodeRuntimeCommand(): string {
+  const packagedNodePath = getPackagedNodeBinaryPath()
+  if (existsSync(packagedNodePath)) {
+    return packagedNodePath
+  }
+
+  return 'node'
 }
 
 function getStateDbPath(stateDir = getStateDir()): string {
@@ -768,14 +897,20 @@ function buildEmbeddedThreadUrl(baseUrl: string, threadId: string): string {
 
 export async function ensureRuntime(): Promise<{ baseUrl: string; logPath: string }> {
   const config = getT3CodeConfig()
-  if (!existsSync(config.sourcePath)) {
+  const sourcePath = app.isPackaged
+    ? ensurePackagedT3CodeRuntimeReady()
+    : isPackagedT3CodeSource(config.sourcePath)
+      ? ensurePackagedT3CodeRuntimeReady()
+      : config.sourcePath
+
+  if (!existsSync(sourcePath)) {
     throw new Error(`T3Code source not found at ${config.sourcePath}`)
   }
 
-  const entrypointPath = join(config.sourcePath, config.entrypoint)
+  const entrypointPath = join(sourcePath, config.entrypoint)
   const activeRuntime = runtime && runtime.process.exitCode === null ? runtime : null
-  const needsRebuild = shouldRebuild(config.sourcePath, entrypointPath)
-  const latestBuildOutputTime = getLatestBuildOutputTime(config.sourcePath, entrypointPath)
+  const needsRebuild = app.isPackaged ? false : shouldRebuild(sourcePath, entrypointPath)
+  const latestBuildOutputTime = getLatestBuildOutputTime(sourcePath, entrypointPath)
 
   if (
     activeRuntime &&
@@ -791,10 +926,10 @@ export async function ensureRuntime(): Promise<{ baseUrl: string; logPath: strin
 
   const startPromise = (async () => {
     if (needsRebuild) {
-      ensureBuilt(config.sourcePath, config.installCommand, config.buildCommand)
+      ensureBuilt(sourcePath, config.installCommand, config.buildCommand)
     }
 
-    const rebuiltOutputTime = getLatestBuildOutputTime(config.sourcePath, entrypointPath)
+    const rebuiltOutputTime = getLatestBuildOutputTime(sourcePath, entrypointPath)
     const previousRuntime = runtime && runtime.process.exitCode === null ? runtime : null
 
     if (
@@ -832,8 +967,15 @@ export async function ensureRuntime(): Promise<{ baseUrl: string; logPath: strin
     env.T3CODE_HOME = stateDir
     env.T3CODE_STATE_DIR = stateDir
 
+    const runtimeCommand = resolveT3CodeRuntimeCommand()
+    if (runtimeCommand === process.execPath) {
+      env.ELECTRON_RUN_AS_NODE = '1'
+    } else {
+      delete env.ELECTRON_RUN_AS_NODE
+    }
+
     const child = spawn(
-      'node',
+      runtimeCommand,
       [
         entrypoint,
         '--mode',
@@ -849,11 +991,24 @@ export async function ensureRuntime(): Promise<{ baseUrl: string; logPath: strin
         '--no-browser'
       ],
       {
-        cwd: config.sourcePath,
+        cwd: sourcePath,
         env,
         stdio: ['ignore', logFd, logFd]
       }
     )
+
+    let didChildError = false
+    const childStart = Promise.race([
+      waitForReady(baseUrl)
+        .then(() => waitForAppShell(baseUrl))
+        .then(() => waitForWebSocketReady(baseUrl)),
+      new Promise<never>((_, reject) => {
+        child.once('error', (error) => {
+          didChildError = true
+          reject(error)
+        })
+      })
+    ])
 
     child.on('exit', () => {
       if (runtime?.process === child) {
@@ -862,7 +1017,7 @@ export async function ensureRuntime(): Promise<{ baseUrl: string; logPath: strin
       if (pendingRuntimeStart === startPromise) {
         pendingRuntimeStart = null
       }
-      closeSync(logFd)
+      closeFileDescriptor(logFd)
     })
 
     runtime = {
@@ -874,12 +1029,13 @@ export async function ensureRuntime(): Promise<{ baseUrl: string; logPath: strin
     }
 
     try {
-      await waitForReady(baseUrl)
-      await waitForAppShell(baseUrl)
-      await waitForWebSocketReady(baseUrl)
+      await childStart
       return { baseUrl, logPath }
     } catch (error) {
-      child.kill()
+      if (!didChildError && child.exitCode === null) {
+        child.kill()
+      }
+      closeFileDescriptor(logFd)
       if (runtime?.process === child) {
         runtime = null
       }

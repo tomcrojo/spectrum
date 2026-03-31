@@ -21,9 +21,10 @@
     "dev:server": "node scripts/dev-server.cjs",
     "dev:browser": "node scripts/dev-browser.cjs",
     "build": "electron-vite build",
-    "dist": "npm run build && electron-builder --publish never",
-    "dist:mac": "npm run build && electron-builder --mac dmg --publish never",
-    "dist:mac:dir": "npm run build && electron-builder --mac dir --publish never",
+    "prepare:packaged-runtime": "node scripts/prepare-packaged-runtime.cjs",
+    "dist": "npm run build && npm run prepare:packaged-runtime && electron-builder --publish never",
+    "dist:mac": "npm run build && npm run prepare:packaged-runtime && electron-builder --mac dmg --publish never",
+    "dist:mac:dir": "npm run build && npm run prepare:packaged-runtime && electron-builder --mac dir --publish never",
     "preview": "unset ELECTRON_RUN_AS_NODE && electron-vite preview",
     "postinstall": "electron-builder install-app-deps && chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper 2>/dev/null || true"
   },

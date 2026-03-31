@@ -597,7 +597,7 @@ export function SettingsPage() {
             Spectrum stands on the shoulders of projects that shaped its
             direction. Huge thanks to{' '}
             <a
-              href="https://github.com/nicepkg/aide"
+              href="https://github.com/pingdotgg/t3code"
               target="_blank"
               rel="noreferrer"
               className="text-text-secondary hover:text-text-primary transition-colors underline underline-offset-2"
@@ -606,7 +606,7 @@ export function SettingsPage() {
             </a>
             ,{' '}
             <a
-              href="https://github.com/nicepkg/dev-browser"
+              href="https://github.com/SawyerHood/dev-browser"
               target="_blank"
               rel="noreferrer"
               className="text-text-secondary hover:text-text-primary transition-colors underline underline-offset-2"
@@ -615,12 +615,21 @@ export function SettingsPage() {
             </a>
             , and{' '}
             <a
-              href="https://github.com/nicepkg/idx0"
+              href="https://github.com/galz10/IDX0"
               target="_blank"
               rel="noreferrer"
               className="text-text-secondary hover:text-text-primary transition-colors underline underline-offset-2"
             >
               idx0
+            </a>
+            , and{' '}
+            <a
+              href="https://github.com/manaflow-ai/cmux"
+              target="_blank"
+              rel="noreferrer"
+              className="text-text-secondary hover:text-text-primary transition-colors underline underline-offset-2"
+            >
+              cmux
             </a>{' '}
             for their ideas and inspiration.
           </p>

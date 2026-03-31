@@ -8,6 +8,7 @@ dist/
 *.tsbuildinfo
 *.log
 /build/icon.iconset/
+/build/node-bin/
 /Icon-iOS-Default-1024x1024@1x.png
 /icon.icon/
 /icon2.png
