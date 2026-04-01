@@ -33,6 +33,14 @@ async function getTargetIdForPlaywrightPage(page) {
   }
 }
 
+async function buildTargetIdToPageMap(browser) {
+  const pages = browser.contexts().flatMap((context) => context.pages());
+  const targetPairs = await Promise.all(
+    pages.map(async (page) => [await getTargetIdForPlaywrightPage(page), page])
+  );
+  return new Map(targetPairs.filter(([targetId]) => Boolean(targetId)));
+}
+
 export class BrowserCli {
   constructor(api) {
     this.api = api;
@@ -91,11 +99,7 @@ export class BrowserCli {
     let pagesByTargetId = new Map();
 
     if (browser) {
-      const pages = browser.contexts().flatMap((context) => context.pages());
-      const targetPairs = await Promise.all(
-        pages.map(async (page) => [await getTargetIdForPlaywrightPage(page), page])
-      );
-      pagesByTargetId = new Map(targetPairs.filter(([targetId]) => Boolean(targetId)));
+      pagesByTargetId = await buildTargetIdToPageMap(browser);
     }
 
     return Promise.all(
@@ -124,7 +128,7 @@ export class BrowserCli {
     );
   }
 
-  async waitForPanel(panelId, timeoutMs = 8000) {
+  async waitForPanel(panelId, timeoutMs = 15_000) {
     const started = Date.now();
 
     while (Date.now() - started < timeoutMs) {
@@ -132,12 +136,11 @@ export class BrowserCli {
       const summary = panels.find((entry) => entry.panelId === panelId);
       if (summary?.targetId) {
         const browser = await this.api.getBrowser();
-        for (const page of browser.contexts().flatMap((context) => context.pages())) {
-          const targetId = await getTargetIdForPlaywrightPage(page);
-          if (targetId === summary.targetId) {
-            await bindPanelToPage(page, summary);
-            return createPageHandle(page, summary, this.api);
-          }
+        const pagesByTargetId = await buildTargetIdToPageMap(browser);
+        const page = pagesByTargetId.get(summary.targetId);
+        if (page) {
+          await bindPanelToPage(page, summary);
+          return createPageHandle(page, summary, this.api);
         }
       }
 

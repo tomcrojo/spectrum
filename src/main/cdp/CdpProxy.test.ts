@@ -344,3 +344,35 @@ test('auto-attaches new targets and ignores non-flatten auto-attach', async () =
   client.close()
   await proxy.shutdown()
 })
+
+test('logs and preserves empty results for unhandled browser commands', async () => {
+  const store = createMockWebContentsStore()
+  const proxy = new CdpProxy('workspace-unhandled', undefined, {
+    getWebContentsById: (id) => store.getRecord(id),
+    randomId: () => 'session-1'
+  })
+
+  const warnCalls: unknown[][] = []
+  const originalWarn = console.warn
+  console.warn = (...args: unknown[]) => {
+    warnCalls.push(args)
+  }
+
+  try {
+    const port = await proxy.start()
+    const client = await connectBrowserSocket(port)
+
+    const result = await client.sendCommand('Fake.unknownMethod', { foo: 'bar', baz: true })
+    assert.deepEqual(result, {})
+    assert.equal(warnCalls.length, 1)
+    assert.equal(warnCalls[0]?.[0], '[CdpProxy] Unhandled CDP command: Fake.unknownMethod')
+    assert.deepEqual(warnCalls[0]?.[1], {
+      params: ['foo', 'baz']
+    })
+
+    client.close()
+    await proxy.shutdown()
+  } finally {
+    console.warn = originalWarn
+  }
+})

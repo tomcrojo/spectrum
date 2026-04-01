@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { afterEach, test } from "node:test";
 
 import { BrowserCliError } from "./errors.js";
-import { resolveSession } from "./connect.js";
+import { createSessionClient, resolveSession } from "./connect.js";
 
 const ENV_KEYS = [
   "SPECTRUM_API_PORT",
@@ -279,6 +279,312 @@ test("resolveSession still uses the session file for non-threaded manual invocat
   assert.equal(session.projectId, "project-manual");
   assert.equal(session.workspaceId, "workspace-manual");
   assert.equal(session.browserApiToken, "manual-token");
+});
+
+test("resolveSession accepts sessions within the 60-second heartbeat window", async () => {
+  const { sessionFile } = makeTempFiles();
+  writeJson(sessionFile, [
+    {
+      projectId: "project-manual",
+      workspaceId: "workspace-manual",
+      browserApiBaseUrl: "http://127.0.0.1:4570",
+      browserApiToken: "manual-token",
+      focused: true,
+      processId: process.pid,
+      lastHeartbeatAt: new Date(Date.now() - 30_000).toISOString(),
+    },
+  ]);
+
+  const session = await resolveSession({});
+  assert.equal(session.projectId, "project-manual");
+  assert.equal(session.workspaceId, "workspace-manual");
+});
+
+test("resolveSession recovers stale but reachable sessions via liveness verification", async () => {
+  const { sessionFile } = makeTempFiles();
+  writeJson(sessionFile, [
+    {
+      projectId: "project-stale",
+      workspaceId: "workspace-stale",
+      browserApiBaseUrl: "http://127.0.0.1:4575",
+      browserApiToken: "stale-token",
+      focused: true,
+      processId: process.pid,
+      lastHeartbeatAt: new Date(Date.now() - 90_000).toISOString(),
+    },
+  ]);
+
+  mockFetch((url) => {
+    assert.equal(url, "http://127.0.0.1:4575/browser/session");
+    return Promise.resolve(
+      mockJsonResponse(200, {
+        projectId: "project-stale",
+        workspaceId: "workspace-stale",
+      }),
+    );
+  });
+
+  const session = await resolveSession({});
+  assert.equal(session.projectId, "project-stale");
+  assert.equal(session.workspaceId, "workspace-stale");
+});
+
+test("resolveSession rejects stale sessions when liveness verification fails", async () => {
+  const { sessionFile } = makeTempFiles();
+  writeJson(sessionFile, [
+    {
+      projectId: "project-stale",
+      workspaceId: "workspace-stale",
+      browserApiBaseUrl: "http://127.0.0.1:4575",
+      browserApiToken: "stale-token",
+      focused: true,
+      processId: process.pid,
+      lastHeartbeatAt: new Date(Date.now() - 90_000).toISOString(),
+    },
+  ]);
+
+  mockFetch(() => Promise.reject(new Error("connect ECONNREFUSED")));
+
+  await assert.rejects(
+    () => resolveSession({}),
+    (error) => error instanceof BrowserCliError && error.code === "NO_SESSION",
+  );
+});
+
+test("resolveSession surfaces recovery hints when no active session is available", async () => {
+  const { sessionFile } = makeTempFiles();
+  writeJson(sessionFile, []);
+
+  await assert.rejects(
+    () => resolveSession({}),
+    (error) =>
+      error instanceof BrowserCliError &&
+      error.code === "NO_SESSION" &&
+      Array.isArray(error.hints) &&
+      error.hints.some((hint) => hint.includes("open Spectrum")) &&
+      error.hints.some((hint) => hint.includes("agent session")),
+  );
+});
+
+test("resolveSession surfaces workspace targeting guidance for ambiguous sessions", async () => {
+  const { sessionFile } = makeTempFiles();
+  writeJson(sessionFile, [
+    {
+      projectId: "project-a",
+      workspaceId: "workspace-a",
+      browserApiBaseUrl: "http://127.0.0.1:4570",
+      browserApiToken: "token-a",
+      focused: false,
+      lastHeartbeatAt: new Date().toISOString(),
+    },
+    {
+      projectId: "project-b",
+      workspaceId: "workspace-b",
+      browserApiBaseUrl: "http://127.0.0.1:4571",
+      browserApiToken: "token-b",
+      focused: false,
+      lastHeartbeatAt: new Date().toISOString(),
+    },
+  ]);
+
+  await assert.rejects(
+    () => resolveSession({}),
+    (error) =>
+      error instanceof BrowserCliError &&
+      error.code === "AMBIGUOUS_SESSION" &&
+      error.hints.some((hint) => hint.includes("--workspace <id>")),
+  );
+});
+
+test("createSessionClient retries connectOverCDP and succeeds on a later attempt", async () => {
+  process.env.SPECTRUM_API_PORT = "9001";
+  process.env.SPECTRUM_API_TOKEN = "direct-token";
+
+  mockFetch((url) => {
+    if (url === "http://127.0.0.1:9001/browser/session") {
+      return Promise.resolve(
+        mockJsonResponse(200, {
+          projectId: "project-direct",
+          workspaceId: "workspace-direct",
+        }),
+      );
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  });
+
+  let attempts = 0;
+  const browser = {
+    isConnected: () => true,
+    on: () => {},
+  };
+
+  const api = await createSessionClient(
+    { connect: "http://127.0.0.1:9222" },
+    {
+      chromiumImpl: {
+        async connectOverCDP(endpoint) {
+          attempts += 1;
+          assert.equal(endpoint, "http://127.0.0.1:9222");
+          if (attempts === 1) {
+            throw new Error("first failure");
+          }
+          return browser;
+        },
+      },
+      sleep: async () => {},
+    },
+  );
+
+  const connected = await api.getBrowser();
+  assert.equal(connected, browser);
+  assert.equal(attempts, 2);
+});
+
+test("createSessionClient reconnects when the cached browser is no longer connected", async () => {
+  process.env.SPECTRUM_API_PORT = "9002";
+  process.env.SPECTRUM_API_TOKEN = "direct-token";
+
+  mockFetch((url) => {
+    if (url === "http://127.0.0.1:9002/browser/session") {
+      return Promise.resolve(
+        mockJsonResponse(200, {
+          projectId: "project-direct",
+          workspaceId: "workspace-direct",
+        }),
+      );
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  });
+
+  const browsers = [
+    {
+      isConnected: () => false,
+      on: () => {},
+    },
+    {
+      isConnected: () => true,
+      on: () => {},
+    },
+  ];
+  let attempts = 0;
+
+  const api = await createSessionClient(
+    { connect: "http://127.0.0.1:9223" },
+    {
+      chromiumImpl: {
+        async connectOverCDP() {
+          const browser = browsers[attempts];
+          attempts += 1;
+          return browser;
+        },
+      },
+      sleep: async () => {},
+    },
+  );
+
+  const first = await api.getBrowser();
+  const second = await api.getBrowser();
+
+  assert.equal(first, browsers[0]);
+  assert.equal(second, browsers[1]);
+  assert.equal(attempts, 2);
+});
+
+test("createSessionClient resets the cache when the browser disconnects", async () => {
+  process.env.SPECTRUM_API_PORT = "9003";
+  process.env.SPECTRUM_API_TOKEN = "direct-token";
+
+  mockFetch((url) => {
+    if (url === "http://127.0.0.1:9003/browser/session") {
+      return Promise.resolve(
+        mockJsonResponse(200, {
+          projectId: "project-direct",
+          workspaceId: "workspace-direct",
+        }),
+      );
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  });
+
+  let disconnectedHandler = null;
+  let attempts = 0;
+  const browsers = [
+    {
+      isConnected: () => true,
+      on(event, handler) {
+        if (event === "disconnected") {
+          disconnectedHandler = handler;
+        }
+      },
+    },
+    {
+      isConnected: () => true,
+      on: () => {},
+    },
+  ];
+
+  const api = await createSessionClient(
+    { connect: "http://127.0.0.1:9224" },
+    {
+      chromiumImpl: {
+        async connectOverCDP() {
+          const browser = browsers[attempts];
+          attempts += 1;
+          return browser;
+        },
+      },
+      sleep: async () => {},
+    },
+  );
+
+  const first = await api.getBrowser();
+  assert.equal(first, browsers[0]);
+  disconnectedHandler();
+
+  const second = await api.getBrowser();
+  assert.equal(second, browsers[1]);
+  assert.equal(attempts, 2);
+});
+
+test("createSessionClient surfaces CDP_CONNECT_FAILED after exhausting retries", async () => {
+  process.env.SPECTRUM_API_PORT = "9004";
+  process.env.SPECTRUM_API_TOKEN = "direct-token";
+
+  mockFetch((url) => {
+    if (url === "http://127.0.0.1:9004/browser/session") {
+      return Promise.resolve(
+        mockJsonResponse(200, {
+          projectId: "project-direct",
+          workspaceId: "workspace-direct",
+        }),
+      );
+    }
+
+    throw new Error(`Unexpected fetch: ${url}`);
+  });
+
+  const api = await createSessionClient(
+    { connect: "http://127.0.0.1:9225" },
+    {
+      chromiumImpl: {
+        async connectOverCDP() {
+          throw new Error("always fails");
+        },
+      },
+      sleep: async () => {},
+    },
+  );
+
+  await assert.rejects(
+    () => api.getBrowser(),
+    (error) =>
+      error instanceof BrowserCliError &&
+      error.code === "CDP_CONNECT_FAILED" &&
+      error.message.includes("3 attempts"),
+  );
 });
 
 test("cli emits structured JSON errors when --json is requested", async () => {

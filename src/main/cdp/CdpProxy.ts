@@ -429,6 +429,9 @@ export class CdpProxy {
       return wc.debugger.sendCommand(method, params)
     }
 
+    console.warn(`[CdpProxy] Unhandled CDP command: ${method}`, {
+      params: Object.keys(params)
+    })
     return {}
   }
 

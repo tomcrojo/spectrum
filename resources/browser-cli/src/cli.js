@@ -1,94 +1,80 @@
 import fs from "node:fs/promises";
+import path from "node:path";
 import util from "node:util";
+import { pathToFileURL } from "node:url";
 import { createSessionClient } from "./connect.js";
 import { wrapError, BrowserCliError } from "./errors.js";
 import { BrowserCli, readNamedFile, saveNamedFile } from "./browser.js";
+import { GUIDE_TEXT, HELP_TEXT } from "./guide.js";
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-
-const HELP_TEXT = `browser-cli controls browser panels inside a running Spectrum workspace.
-
-Important:
-  - It does not launch or control external Chrome windows.
-  - It only works when Spectrum is already running and a workspace session is active.
-  - \`--connect\` means "attach to the current Spectrum workspace session".
-  - In Spectrum-managed shells, prefer \`$SPECTRUM_BROWSER\` first if \`browser\` is not on PATH.
-  - Inside \`browser --connect\` scripts, use \`browser.getPage(...)\` / \`browser.newPage(...)\`; do not open raw \`/devtools/page/...\` WebSocket connections yourself.
-  - Close temporary panels you create when they are no longer needed.
-
-For simple tasks, prefer the built-in panel commands:
-  browser open <url> [--name <label>] [--focus]
-  browser search <query> [--engine google|youtube|duckduckgo] [--name <label>] [--focus]
-  browser list [--json]
-  browser status [--json]
-  browser goto <panel-id-or-alias> <url>
-  browser focus <panel-id-or-alias>
-  browser close <panel-id-or-alias>
-
-Use \`browser run\` or \`browser --connect <<'EOF'\` only for advanced DOM automation.
-
-Usage:
-  browser help
-  browser --help
-  "$SPECTRUM_BROWSER" --help
-  browser status --json
-  browser search "folagor" --engine youtube --focus
-  browser open "https://www.youtube.com/results?search_query=folagor" --name "YouTube: folagor" --focus
-  browser goto "YouTube: folagor" "https://youtube.com"
-  browser focus "YouTube: folagor"
-  browser close "YouTube: folagor"
-  browser run script.js
-  browser --connect <<'EOF'
-  const page = await browser.getPage("YouTube: folagor");
-  console.log(await page.title());
-  EOF
-
-Options:
-  --help, -h           Show this help text
-  --json               Print structured JSON output
-  --connect [target]   Attach to the active Spectrum workspace session
-  --thread <id>        Target one T3Code thread's workspace (used by agent shims)
-  --workspace <id>     Choose a specific Spectrum workspace
-  --project <id>       Choose a specific Spectrum project
-
-Commands:
-  help                 Show this help text
-  status               Show session status and mounted browser panels
-  list                 List mounted browser panels
-  open <url>           Open a new browser panel without requiring CDP attachment
-  search <query>       Open a search results page in a new browser panel
-  goto <panel> <url>   Navigate an existing browser panel
-  focus <panel>        Focus an existing browser panel
-  close <panel>        Close an existing browser panel
-  run <file>           Execute a script file instead of reading stdin
-
-Script API:
-  browser.listPanels()
-  browser.openPanel({ url, name?, focus?, width?, height? })
-  browser.navigatePanel(idOrAlias, url)
-  browser.focusPanel(idOrAlias)
-  browser.closePanel(idOrAlias)
-  browser.getStatus()
-  browser.listPages()
-  browser.getPage(idOrAliasOrPredicate)
-  browser.newPage({ name?, url?, width?, height? })  // waits for Playwright attachment
-  browser.activePage()
-  await saveScreenshot(buffer, name)
-  await writeFile(name, data)
-  await readFile(name)
-`;
 
 const FLAG_SPECS = new Map([
   ["--help", { takesValue: false }],
   ["-h", { takesValue: false }],
   ["--json", { takesValue: false }],
   ["--connect", { takesValue: false }],
+  ["--no-preflight", { takesValue: false }],
   ["--thread", { takesValue: true }],
   ["--workspace", { takesValue: true }],
   ["--project", { takesValue: true }],
 ]);
 
-const COMMAND_SPECS = new Set(["help", "status", "list", "open", "search", "goto", "focus", "close", "run"]);
+const COMMAND_SPECS = new Set([
+  "help",
+  "guide",
+  "status",
+  "list",
+  "open",
+  "search",
+  "goto",
+  "focus",
+  "close",
+  "run",
+]);
+
+const PREFLIGHT_RULES = [
+  {
+    pattern: /\/devtools\/(?:page|browser)\//,
+    code: "FORBIDDEN_RAW_CDP_SOCKET",
+    message: "Script appears to open a raw DevTools endpoint directly.",
+    hints: [
+      "Use `browser.getPage(...)` or `browser.newPage(...)` instead of raw /devtools/... sockets.",
+      "Use `browser open <url>` or `browser search <query>` to create durable panels.",
+      "Use `--no-preflight` only if you intentionally accept unsupported behavior.",
+    ],
+  },
+  {
+    pattern: /\bconnectOverCDP\b/,
+    code: "FORBIDDEN_DIRECT_CDP_ATTACH",
+    message: "Script appears to attach to CDP directly.",
+    hints: [
+      "Use Spectrum-native helpers such as `browser.getPage(...)` and `browser.newPage(...)`.",
+      "Do not call Playwright CDP attach helpers inside browser-cli scripts.",
+      "Use `--no-preflight` only if you intentionally accept unsupported behavior.",
+    ],
+  },
+  {
+    pattern: /\b(?:chromium|playwright\.chromium|pw\.chromium)\.connect(?:OverCDP)?\s*\(/,
+    code: "FORBIDDEN_DIRECT_CDP_ATTACH",
+    message: "Script appears to bypass Spectrum's panel lifecycle with a direct browser connect call.",
+    hints: [
+      "Use `browser.getPage(...)` or `browser.newPage(...)` to work with Spectrum browser panels.",
+      "Use `browser.openPanel(...)` or CLI `browser open/search` for durable workspace state.",
+      "Use `--no-preflight` only if you intentionally accept unsupported behavior.",
+    ],
+  },
+  {
+    pattern: /\bnew\s+WebSocket\s*\([^)]*\/devtools\/(?:page|browser)\//s,
+    code: "FORBIDDEN_RAW_CDP_SOCKET",
+    message: "Script appears to create a raw WebSocket to a DevTools endpoint.",
+    hints: [
+      "Use `browser.getPage(...)` or `browser.newPage(...)` for Playwright page access.",
+      "Do not manually open /devtools/page/... or /devtools/browser/... sockets in browser-cli scripts.",
+      "Use `--no-preflight` only if you intentionally accept unsupported behavior.",
+    ],
+  },
+];
 
 function levenshtein(a, b) {
   const rows = a.length + 1;
@@ -129,7 +115,7 @@ function suggestFlag(value) {
 function buildCommandHints(value) {
   const normalized = String(value).toLowerCase();
   const hints = [
-    "Valid browser-cli entrypoints include `browser help`, `browser status`, `browser search <query>`, `browser open <url>`, `browser list`, `browser focus <panel>`, `browser close <panel>`, `browser run <file>`, and `browser --connect <<'EOF' ... EOF`.",
+    "Valid browser-cli entrypoints include `browser help`, `browser guide`, `browser status`, `browser search <query>`, `browser open <url>`, `browser list`, `browser focus <panel>`, `browser close <panel>`, `browser run <file>`, and `browser --connect <<'EOF' ... EOF`.",
   ];
 
   if (["new", "new-tab", "tab", "page", "newpage"].includes(normalized)) {
@@ -370,10 +356,11 @@ function parseSearchArgs(commandArgs) {
   };
 }
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const args = {
     connect: "auto",
     json: false,
+    noPreflight: false,
     workspaceId: null,
     projectId: null,
     threadId: null,
@@ -392,6 +379,11 @@ function parseArgs(argv) {
 
     if (value === "--json") {
       args.json = true;
+      continue;
+    }
+
+    if (value === "--no-preflight") {
+      args.noPreflight = true;
       continue;
     }
 
@@ -500,7 +492,7 @@ function serializeError(error) {
   };
 }
 
-async function readScript(runFile) {
+export async function readScript(runFile) {
   if (runFile) {
     return fs.readFile(runFile, "utf8");
   }
@@ -518,7 +510,29 @@ async function readScript(runFile) {
   return script.trim().length > 0 ? script : null;
 }
 
-async function executeScript(source, globals) {
+export function stripCommentsForPreflight(source) {
+  return String(source)
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+}
+
+export function preflightScript(source, options = {}) {
+  if (options.enabled === false) {
+    return;
+  }
+
+  const sanitized = stripCommentsForPreflight(source);
+  for (const rule of PREFLIGHT_RULES) {
+    if (rule.pattern.test(sanitized)) {
+      throw new BrowserCliError(rule.message, {
+        code: rule.code,
+        hints: rule.hints,
+      });
+    }
+  }
+}
+
+export async function executeScript(source, globals) {
   const script = `"use strict";\n${source}`;
   const runner = new AsyncFunction(...Object.keys(globals), script);
   return runner(...Object.values(globals));
@@ -546,10 +560,43 @@ async function printSessionSummary(browser, json) {
 
   if (payload.panels.length === 0) {
     console.log("No mounted browser panels found. Use `browser open <url>` to create one.");
+    console.log("If you need a search page first, use `browser search <query>`.");
     return;
   }
 
   console.log(JSON.stringify(payload.panels, null, 2));
+}
+
+export function createScriptGlobals(browser) {
+  const consoleLike = {
+    log: (...values) => console.log(...values),
+    info: (...values) => console.info(...values),
+    warn: (...values) => console.warn(...values),
+    error: (...values) => console.error(...values),
+    dir: (value) => console.log(util.inspect(value, { colors: false, depth: 4 })),
+  };
+
+  return {
+    browser,
+    console: consoleLike,
+    saveScreenshot: (buffer, name) => saveNamedFile(name, buffer),
+    writeFile: saveNamedFile,
+    readFile: readNamedFile,
+    Buffer,
+    setTimeout,
+    clearTimeout,
+  };
+}
+
+export async function runScriptWithLifecycle(browser, script, options = {}) {
+  preflightScript(script, { enabled: options.preflight !== false });
+  browser.beginScriptExecution();
+
+  try {
+    await executeScript(script, createScriptGlobals(browser));
+  } finally {
+    await browser.finishScriptExecution({ cleanupTimeoutMs: options.cleanupTimeoutMs });
+  }
 }
 
 async function runCommand(browser, args) {
@@ -561,6 +608,10 @@ async function runCommand(browser, args) {
 
     case "help":
       console.log(HELP_TEXT);
+      return;
+
+    case "guide":
+      console.log(GUIDE_TEXT);
       return;
 
     case "list": {
@@ -641,23 +692,8 @@ async function runCommand(browser, args) {
         });
       }
 
-      const consoleLike = {
-        log: (...values) => console.log(...values),
-        info: (...values) => console.info(...values),
-        warn: (...values) => console.warn(...values),
-        error: (...values) => console.error(...values),
-        dir: (value) => console.log(util.inspect(value, { colors: false, depth: 4 })),
-      };
-
-      await executeScript(script, {
-        browser,
-        console: consoleLike,
-        saveScreenshot: (buffer, name) => saveNamedFile(name, buffer),
-        writeFile: saveNamedFile,
-        readFile: readNamedFile,
-        Buffer,
-        setTimeout,
-        clearTimeout,
+      await runScriptWithLifecycle(browser, script, {
+        preflight: !args.noPreflight,
       });
       return;
     }
@@ -669,10 +705,15 @@ async function runCommand(browser, args) {
   }
 }
 
-async function main(argv = process.argv.slice(2)) {
+export async function main(argv = process.argv.slice(2)) {
   const args = parseArgs(argv);
   if (args.help) {
     console.log(HELP_TEXT);
+    return;
+  }
+
+  if (args.command === "help" || args.command === "guide") {
+    console.log(args.command === "guide" ? GUIDE_TEXT : HELP_TEXT);
     return;
   }
 
@@ -687,23 +728,8 @@ async function main(argv = process.argv.slice(2)) {
   if (args.command === null && !process.stdin.isTTY) {
     const script = await readScript(null);
     if (script) {
-      const consoleLike = {
-        log: (...values) => console.log(...values),
-        info: (...values) => console.info(...values),
-        warn: (...values) => console.warn(...values),
-        error: (...values) => console.error(...values),
-        dir: (value) => console.log(util.inspect(value, { colors: false, depth: 4 })),
-      };
-
-      await executeScript(script, {
-        browser,
-        console: consoleLike,
-        saveScreenshot: (buffer, name) => saveNamedFile(name, buffer),
-        writeFile: saveNamedFile,
-        readFile: readNamedFile,
-        Buffer,
-        setTimeout,
-        clearTimeout,
+      await runScriptWithLifecycle(browser, script, {
+        preflight: !args.noPreflight,
       });
       return;
     }
@@ -712,34 +738,39 @@ async function main(argv = process.argv.slice(2)) {
   await runCommand(browser, args);
 }
 
-const rawArgv = process.argv.slice(2);
-const jsonRequested = rawArgv.includes("--json");
+const isEntryPoint =
+  process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
 
-main(rawArgv).catch((error) => {
-  const wrapped = wrapError(error, "Browser CLI execution failed");
-  if (wrapped instanceof BrowserCliError) {
+if (isEntryPoint) {
+  const rawArgv = process.argv.slice(2);
+  const jsonRequested = rawArgv.includes("--json");
+
+  main(rawArgv).catch((error) => {
+    const wrapped = wrapError(error, "Browser CLI execution failed");
+    if (wrapped instanceof BrowserCliError) {
+      if (jsonRequested) {
+        console.error(JSON.stringify(serializeError(wrapped), null, 2));
+      } else {
+        console.error(formatError(wrapped));
+      }
+      process.exit(1);
+    }
+
     if (jsonRequested) {
-      console.error(JSON.stringify(serializeError(wrapped), null, 2));
+      console.error(
+        JSON.stringify(
+          {
+            error: String(error),
+            code: "INTERNAL_ERROR",
+            hints: [],
+          },
+          null,
+          2
+        )
+      );
     } else {
-      console.error(formatError(wrapped));
+      console.error(`Error: ${String(error)}`);
     }
     process.exit(1);
-  }
-
-  if (jsonRequested) {
-    console.error(
-      JSON.stringify(
-        {
-          error: String(error),
-          code: "INTERNAL_ERROR",
-          hints: [],
-        },
-        null,
-        2
-      )
-    );
-  } else {
-    console.error(`Error: ${String(error)}`);
-  }
-  process.exit(1);
-});
+  });
+}

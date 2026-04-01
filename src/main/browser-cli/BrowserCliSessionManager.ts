@@ -40,7 +40,7 @@ interface BrowserCliCapabilities {
 }
 
 const appInstanceId = randomUUID()
-const SESSION_STALE_MS = 15_000
+const SESSION_STALE_MS = 60_000
 let currentScope: RendererSessionState = {
   activeProjectId: null,
   activeWorkspaceId: null
