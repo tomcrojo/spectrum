@@ -25,6 +25,7 @@ import {
   getBrowserCliCommandPath,
   getBrowserCommandPath,
   getBrowserCliSessionFilePath,
+  getBrowserCliThreadBindingsFilePath,
   prependBrowserCliToPath
 } from '../browser-cli/BrowserCliPathManager'
 
@@ -856,8 +857,9 @@ async function sendWsRequest<T>(baseUrl: string, body: Record<string, unknown>):
             return
           }
 
-          if (parsed.error?.message) {
-            finish(() => reject(new Error(parsed.error.message)))
+          const errorMessage = parsed.error?.message
+          if (errorMessage) {
+            finish(() => reject(new Error(errorMessage)))
             return
           }
 
@@ -924,7 +926,8 @@ export async function ensureRuntime(): Promise<{ baseUrl: string; logPath: strin
     return pendingRuntimeStart
   }
 
-  const startPromise = (async () => {
+  let startPromise: Promise<{ baseUrl: string; logPath: string }> | null = null
+  startPromise = (async () => {
     if (needsRebuild) {
       ensureBuilt(sourcePath, config.installCommand, config.buildCommand)
     }
@@ -959,6 +962,7 @@ export async function ensureRuntime(): Promise<{ baseUrl: string; logPath: strin
     env.SPECTRUM_BROWSER = getBrowserCommandPath()
     env.SPECTRUM_BROWSER_CLI = getBrowserCliCommandPath()
     env.SPECTRUM_BROWSER_SESSION_FILE = getBrowserCliSessionFilePath()
+    env.SPECTRUM_BROWSER_THREAD_BINDINGS_FILE = getBrowserCliThreadBindingsFilePath()
     env.T3CODE_MODE = 'web'
     env.T3CODE_HOST = '127.0.0.1'
     env.T3CODE_PORT = String(port)

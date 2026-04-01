@@ -45,6 +45,7 @@ Options:
   --help, -h           Show this help text
   --json               Print structured JSON output
   --connect [target]   Attach to the active Spectrum workspace session
+  --thread <id>        Target one T3Code thread's workspace (used by agent shims)
   --workspace <id>     Choose a specific Spectrum workspace
   --project <id>       Choose a specific Spectrum project
 
@@ -80,6 +81,7 @@ const FLAG_SPECS = new Map([
   ["-h", { takesValue: false }],
   ["--json", { takesValue: false }],
   ["--connect", { takesValue: false }],
+  ["--thread", { takesValue: true }],
   ["--workspace", { takesValue: true }],
   ["--project", { takesValue: true }],
 ]);
@@ -372,6 +374,7 @@ function parseArgs(argv) {
     json: false,
     workspaceId: null,
     projectId: null,
+    threadId: null,
     command: null,
     commandArgs: [],
     help: false,
@@ -405,6 +408,20 @@ function parseArgs(argv) {
       }
 
       args.workspaceId = nextValue;
+      index += 1;
+      continue;
+    }
+
+    if (value === "--thread") {
+      const nextValue = argv[index + 1];
+      if (!nextValue || nextValue.startsWith("-")) {
+        throw new BrowserCliError("The `--thread` flag requires a thread id.", {
+          code: "MISSING_THREAD",
+          hints: ["Example: `browser --thread <thread-id> list --json`"],
+        });
+      }
+
+      args.threadId = nextValue;
       index += 1;
       continue;
     }
@@ -470,6 +487,15 @@ function formatError(error) {
   }
 
   return lines.join("\n");
+}
+
+function serializeError(error) {
+  return {
+    error: error.message,
+    code: error.code,
+    hints: Array.isArray(error.hints) ? error.hints : [],
+    ...(Number.isInteger(error.status) ? { status: error.status } : {}),
+  };
 }
 
 async function readScript(runFile) {
@@ -641,8 +667,8 @@ async function runCommand(browser, args) {
   }
 }
 
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
+async function main(argv = process.argv.slice(2)) {
+  const args = parseArgs(argv);
   if (args.help) {
     console.log(HELP_TEXT);
     return;
@@ -650,6 +676,7 @@ async function main() {
 
   const api = await createSessionClient({
     connect: args.connect,
+    threadId: args.threadId,
     workspaceId: args.workspaceId,
     projectId: args.projectId,
   });
@@ -683,13 +710,34 @@ async function main() {
   await runCommand(browser, args);
 }
 
-main().catch((error) => {
+const rawArgv = process.argv.slice(2);
+const jsonRequested = rawArgv.includes("--json");
+
+main(rawArgv).catch((error) => {
   const wrapped = wrapError(error, "Browser CLI execution failed");
   if (wrapped instanceof BrowserCliError) {
-    console.error(formatError(wrapped));
+    if (jsonRequested) {
+      console.error(JSON.stringify(serializeError(wrapped), null, 2));
+    } else {
+      console.error(formatError(wrapped));
+    }
     process.exit(1);
   }
 
-  console.error(`Error: ${String(error)}`);
+  if (jsonRequested) {
+    console.error(
+      JSON.stringify(
+        {
+          error: String(error),
+          code: "INTERNAL_ERROR",
+          hints: [],
+        },
+        null,
+        2
+      )
+    );
+  } else {
+    console.error(`Error: ${String(error)}`);
+  }
   process.exit(1);
 });

@@ -6,12 +6,15 @@ import { closeAllPtys } from './pty/PtyManager'
 import { stopAllT3Code } from './t3code/T3CodeManager'
 import { initWebviewSecurity } from './webview/WebviewSessionManager'
 import {
+  clearAllBrowserPanels,
   clearBrowserPanelMainWindow,
   setBrowserPanelMainWindow
 } from './browser/BrowserPanelManager'
 import { startApiServer, stopApiServer } from './api/BrowserApiServer'
 import { shutdownCdpProxies } from './cdp/CdpProxyManager'
 import { clearBrowserCliSession, touchBrowserCliSession } from './browser-cli/BrowserCliSessionManager'
+import { clearBrowserCliThreadBindings } from './browser-cli/BrowserCliThreadBindingManager'
+import { clearKnownWebviews } from './webview/WebviewSessionManager'
 
 function wireMainWindow(window: BrowserWindow): void {
   setBrowserPanelMainWindow(window)
@@ -32,9 +35,12 @@ function openMainWindow(): BrowserWindow {
 
 function cleanupWindowScopedServices(): void {
   clearBrowserPanelMainWindow()
+  clearKnownWebviews()
+  clearAllBrowserPanels()
   closeAllPtys()
   stopAllT3Code()
   clearBrowserCliSession()
+  clearBrowserCliThreadBindings()
   void stopApiServer()
   void shutdownCdpProxies()
 }
@@ -46,6 +52,7 @@ function cleanupAppServices(): void {
 
 app.whenReady().then(() => {
   initDatabase()
+  clearBrowserCliThreadBindings()
   registerAllHandlers()
   openMainWindow()
   void startApiServer()

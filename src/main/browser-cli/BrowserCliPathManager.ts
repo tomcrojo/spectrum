@@ -50,6 +50,10 @@ export function getBrowserCliSessionFilePath(): string {
   return join(getUserDataPath(), 'browser-cli', 'sessions.json')
 }
 
+export function getBrowserCliThreadBindingsFilePath(): string {
+  return join(getUserDataPath(), 'browser-cli', 'thread-bindings.json')
+}
+
 export function prependBrowserCliToPath(existingPath: string | undefined): string {
   const binDir = getBrowserCliBinDir()
   if (!existingPath) {

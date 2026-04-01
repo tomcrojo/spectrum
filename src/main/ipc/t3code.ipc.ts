@@ -8,6 +8,7 @@ import {
   unwatchThread,
   watchThread
 } from '../t3code/T3CodeManager'
+import { upsertBrowserCliThreadBinding } from '../browser-cli/BrowserCliThreadBindingManager'
 
 export function registerT3CodeHandlers(): void {
   ipcMain.handle(T3CODE_CHANNELS.ENSURE_RUNTIME, () => ensureRuntime())
@@ -24,13 +25,23 @@ export function registerT3CodeHandlers(): void {
       _event,
       input: {
         panelId: string
+        workspaceId: string
         spectrumProjectId: string
         projectPath: string
         projectName: string
         existingT3ProjectId?: string
         existingT3ThreadId?: string
       }
-    ) => ensurePanelThread(input)
+    ) =>
+      ensurePanelThread(input).then((binding) => {
+        upsertBrowserCliThreadBinding({
+          threadId: binding.t3ThreadId,
+          workspaceId: input.workspaceId,
+          projectId: input.spectrumProjectId
+        })
+
+        return binding
+      })
   )
 
   ipcMain.handle(

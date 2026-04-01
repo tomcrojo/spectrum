@@ -15,7 +15,7 @@ import { getCdpProxyPort } from '../cdp/CdpProxyManager'
 import { validateToken } from './TokenRegistry'
 import { getProject } from '../db/projects.repo'
 import { listWorkspaces } from '../db/workspaces.repo'
-import { getBrowserCliSessionSnapshot } from '../browser-cli/BrowserCliSessionManager'
+import { BrowserWindow } from 'electron'
 
 interface BrowserApiRequestBody {
   token?: string
@@ -290,13 +290,31 @@ export async function startApiServer(): Promise<number> {
       }
 
       if (req.url === '/browser/session') {
-        const session = getBrowserCliSessionSnapshot()
-        if (!session || session.workspaceId !== workspaceId || session.projectId !== projectId) {
-          sendJson(res, 404, { error: 'Session not found for workspace' })
-          return
-        }
-
-        sendJson(res, 200, session)
+        sendJson(res, 200, {
+          appInstanceId: `workspace:${workspaceId}`,
+          processId: process.pid,
+          projectId,
+          workspaceId,
+          projectName: project?.name ?? null,
+          workspaceName: workspace?.name ?? null,
+          browserApiBaseUrl: `http://127.0.0.1:${getApiPort()}`,
+          browserApiToken: typeof body.token === 'string' ? body.token : '',
+          cdpEndpoint: getCdpProxyPort(workspaceId)
+            ? `http://127.0.0.1:${getCdpProxyPort(workspaceId)}`
+            : null,
+          focusedBrowserPanelId: getFocusedBrowserPanelId(workspaceId),
+          userFocusedPanelId: null,
+          focused: BrowserWindow.getAllWindows().some(
+            (window) => window.isVisible() && window.isFocused()
+          ),
+          lastHeartbeatAt: new Date().toISOString(),
+          capabilities: {
+            activatePanel: true,
+            createPanel: true,
+            closePanel: true,
+            listPanels: true
+          }
+        })
         return
       }
 
