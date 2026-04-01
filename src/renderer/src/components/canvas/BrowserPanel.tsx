@@ -1,4 +1,9 @@
 import { useEffect, useMemo, useRef } from 'react'
+import { Button } from '@renderer/components/shared/Button'
+import {
+  formatIssuePayload,
+  IssueCopyButton
+} from '@renderer/components/shared/IssueCopyButton'
 import { browserApi } from '@renderer/lib/ipc'
 import {
   enqueueBrowserRuntimeCommand,
@@ -451,16 +456,19 @@ export function BrowserPanel({
         )}
 
         {loadError ? (
-          <div className="absolute inset-4 rounded border border-red-500/30 bg-bg-raised/95 p-3">
-            <p className="text-xs font-semibold text-red-300">Navigation failed</p>
-            <p className="mt-2 text-xs leading-5 text-text-secondary">{loadError}</p>
-            <button
-              type="button"
-              className="mt-3 rounded border border-border px-2 py-1 text-xs text-text-primary hover:bg-bg-hover"
-              onClick={navigateToInput}
-            >
-              Retry
-            </button>
+          <div className="absolute inset-4 rounded border border-red-500/30 bg-bg-raised/95 p-3 text-left">
+            <p className="select-text text-xs font-semibold text-red-300">Navigation failed</p>
+            <p className="mt-2 select-text text-xs leading-5 text-text-secondary">
+              {loadError}
+            </p>
+            <div className="mt-3 flex items-center gap-2">
+              <Button size="sm" variant="secondary" onClick={navigateToInput}>
+                Retry
+              </Button>
+              <IssueCopyButton
+                payload={formatIssuePayload('Browser navigation failed', loadError, loadError)}
+              />
+            </div>
           </div>
         ) : null}
 

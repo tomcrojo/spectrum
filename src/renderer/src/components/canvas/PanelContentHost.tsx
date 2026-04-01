@@ -1,6 +1,10 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { Button } from '@renderer/components/shared/Button'
 import {
+  formatIssuePayload,
+  IssueCopyButton
+} from '@renderer/components/shared/IssueCopyButton'
+import {
   usePanelRuntimeStore,
   type PanelFailureState
 } from '@renderer/stores/panel-runtime.store'
@@ -64,7 +68,7 @@ function DebugDetails({
       <summary className="cursor-pointer text-xs font-medium text-text-primary">
         Debug details
       </summary>
-      <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-text-secondary">
+      <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap select-text text-[11px] leading-5 text-text-secondary">
         {debug}
       </pre>
     </details>
@@ -78,18 +82,21 @@ function PanelFailureView({
   failure: PanelFailureState
   onRetry: () => void
 }) {
+  const issuePayload = formatIssuePayload('Panel unavailable', failure.summary, failure.debug)
+
   return (
     <div className="flex h-full items-center justify-center px-6 text-center">
-      <div className="w-full max-w-xl rounded-xl border border-danger/25 bg-bg-raised px-5 py-4 shadow-lg shadow-black/20">
-        <p className="text-sm font-semibold text-danger">Panel unavailable</p>
-        <p className="mt-2 text-xs leading-5 text-text-secondary">{failure.summary}</p>
-        <p className="mt-2 text-[11px] uppercase tracking-wide text-text-muted">
+      <div className="w-full max-w-xl rounded-xl border border-danger/25 bg-bg-raised px-5 py-4 text-left shadow-lg shadow-black/20">
+        <p className="select-text text-sm font-semibold text-danger">Panel unavailable</p>
+        <p className="mt-2 select-text text-xs leading-5 text-text-secondary">{failure.summary}</p>
+        <p className="mt-2 select-text text-[11px] uppercase tracking-wide text-text-muted">
           You can retry this panel or close it from the header.
         </p>
-        <div className="mt-4 flex items-center justify-center">
+        <div className="mt-4 flex items-center gap-2">
           <Button size="sm" variant="secondary" onClick={onRetry}>
             Retry
           </Button>
+          <IssueCopyButton payload={issuePayload} />
         </div>
         <DebugDetails debug={failure.debug} defaultOpen={Boolean(import.meta.env.DEV)} />
       </div>
