@@ -9,7 +9,9 @@ import {
 import { browserApi } from '@renderer/lib/ipc'
 import {
   consumeBrowserRuntimeCommands,
+  formatBrowserLoadFailure,
   getBrowserSlots,
+  isFatalBrowserLoadFailure,
   subscribeBrowserRuntimeCommands,
   subscribeBrowserSlots,
   type BrowserRuntimeMode
@@ -456,13 +458,14 @@ export function BrowserRuntimeHost({ hostEnabled }: BrowserRuntimeHostProps) {
           errorCode: number
           errorDescription: string
           validatedURL: string
+          isMainFrame?: boolean
         }) => {
-          if (event.errorCode === -3) {
+          if (!isFatalBrowserLoadFailure(event)) {
             return
           }
 
           browserUiStore.updateBrowserUi(panel.panelId, {
-            loadError: `Failed to load ${event.validatedURL} (${event.errorCode}): ${event.errorDescription}`,
+            loadError: formatBrowserLoadFailure(event),
             isLocalLoading: false
           })
         }

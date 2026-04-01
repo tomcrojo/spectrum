@@ -33,6 +33,13 @@ export interface BrowserSlotRect {
   height: number
 }
 
+export interface BrowserLoadFailureEvent {
+  errorCode: number
+  errorDescription: string
+  validatedURL: string
+  isMainFrame?: boolean
+}
+
 interface BrowserSlotRegistration {
   panelId: string
   workspaceId: string
@@ -56,8 +63,15 @@ const BROWSER_RUNTIME_HOST_STORAGE_KEY = 'spectrum:browser-runtime-host'
 
 const slotRegistry = new Map<string, BrowserSlotRegistration>()
 const slotListeners = new Set<() => void>()
+const EMPTY_BROWSER_SLOTS: BrowserSlotRegistration[] = []
+let browserSlotsSnapshot: BrowserSlotRegistration[] = EMPTY_BROWSER_SLOTS
 let pendingCommands: BrowserRuntimeCommand[] = []
 const commandListeners = new Set<() => void>()
+
+function updateBrowserSlotsSnapshot(): void {
+  browserSlotsSnapshot =
+    slotRegistry.size === 0 ? EMPTY_BROWSER_SLOTS : Array.from(slotRegistry.values())
+}
 
 function emitSlotRegistryChange(): void {
   for (const listener of slotListeners) {
@@ -84,12 +98,14 @@ export function isBrowserRuntimeHostEnabled(): boolean {
 
 export function registerBrowserSlot(input: BrowserSlotRegistration): () => void {
   slotRegistry.set(input.panelId, input)
+  updateBrowserSlotsSnapshot()
   emitSlotRegistryChange()
 
   return () => {
     const existing = slotRegistry.get(input.panelId)
     if (existing?.element === input.element) {
       slotRegistry.delete(input.panelId)
+      updateBrowserSlotsSnapshot()
       emitSlotRegistryChange()
     }
   }
@@ -103,7 +119,7 @@ export function subscribeBrowserSlots(listener: () => void): () => void {
 }
 
 export function getBrowserSlots(): BrowserSlotRegistration[] {
-  return Array.from(slotRegistry.values())
+  return browserSlotsSnapshot
 }
 
 export function enqueueBrowserRuntimeCommand(
@@ -131,4 +147,20 @@ export function subscribeBrowserRuntimeCommands(listener: () => void): () => voi
   return () => {
     commandListeners.delete(listener)
   }
+}
+
+export function isFatalBrowserLoadFailure(event: BrowserLoadFailureEvent): boolean {
+  if (event.errorCode === -3) {
+    return false
+  }
+
+  if (event.isMainFrame === false) {
+    return false
+  }
+
+  return true
+}
+
+export function formatBrowserLoadFailure(event: BrowserLoadFailureEvent): string {
+  return `Failed to load ${event.validatedURL} (${event.errorCode}): ${event.errorDescription}`
 }

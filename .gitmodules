@@ -7,9 +7,6 @@
 [submodule "resources/idx0"]
 	path = resources/idx0
 	url = https://github.com/galz10/IDX0.git
-[submodule "resources/t3code"]
-	path = resources/t3code
-	url = https://github.com/pingdotgg/t3code.git
 [submodule "_reference/glass"]
 	path = _reference/glass
 	url = https://github.com/Glass-HQ/Glass.git

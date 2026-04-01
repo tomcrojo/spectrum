@@ -4,13 +4,13 @@ import {
   copyFileSync,
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   openSync,
   readFileSync,
   readdirSync,
   rmSync,
   statSync,
-  symlinkSync,
   writeFileSync
 } from 'fs'
 import { homedir } from 'os'
@@ -137,6 +137,10 @@ function getPackagedT3CodeShadowRoot(): string {
   return join(homedir(), '.spectrum-dev', 'embedded', 't3code-runtime')
 }
 
+function getT3CodeAppShellPath(sourcePath: string): string {
+  return join(sourcePath, 'apps', 'server', 'dist', 'client', 'index.html')
+}
+
 function writeRuntimePackageManifest(targetPath: string, name: string): void {
   writeFileSync(
     targetPath,
@@ -152,23 +156,52 @@ function writeRuntimePackageManifest(targetPath: string, name: string): void {
   )
 }
 
+function readLogExcerpt(logPath: string, lineCount = 40): string | null {
+  if (!existsSync(logPath)) {
+    return null
+  }
+
+  try {
+    const lines = readFileSync(logPath, 'utf8').trim().split('\n')
+    const excerpt = lines.slice(-lineCount).join('\n').trim()
+    return excerpt.length > 0 ? excerpt : null
+  } catch {
+    return null
+  }
+}
+
+function buildStartupErrorMessage(message: string, logPath: string): string {
+  const excerpt = readLogExcerpt(logPath)
+  if (!excerpt) {
+    return `${message}. See log: ${logPath}`
+  }
+
+  return `${message}. See log: ${logPath}\n\nRecent log output:\n${excerpt}`
+}
+
 function ensurePackagedT3CodeRuntimeReady(): string {
+  const config = getT3CodeConfig()
   const packagedRoot = getPackagedT3CodeRoot()
   const shadowRoot = getPackagedT3CodeShadowRoot()
   const versionFile = join(shadowRoot, '.version')
   const markerFile = join(shadowRoot, '.spectrum-packaged-t3code-runtime')
   const currentVersion = app.getVersion()
+  const shadowEntrypointPath = join(shadowRoot, config.entrypoint)
+  const shadowAppShellPath = getT3CodeAppShellPath(shadowRoot)
+  const shadowNodeModulesPath = join(shadowRoot, 'node_modules')
 
   if (
-    existsSync(join(shadowRoot, 'apps', 'server', 'dist', 'index.mjs')) &&
-    existsSync(join(shadowRoot, 'node_modules')) &&
+    existsSync(shadowEntrypointPath) &&
+    existsSync(shadowAppShellPath) &&
+    existsSync(shadowNodeModulesPath) &&
     existsSync(markerFile) &&
     existsSync(versionFile) &&
     statSync(versionFile).isFile()
   ) {
     try {
       const version = readFileSync(versionFile, 'utf8').trim()
-      if (version === currentVersion) {
+      const nodeModulesStats = lstatSync(shadowNodeModulesPath)
+      if (version === currentVersion && !nodeModulesStats.isSymbolicLink()) {
         return shadowRoot
       }
     } catch {
@@ -202,7 +235,10 @@ function ensurePackagedT3CodeRuntimeReady(): string {
     join(shadowRoot, 'apps', 'server', 'dist'),
     { recursive: true }
   )
-  symlinkSync(join(packagedRoot, 'runtime-node-modules'), join(shadowRoot, 'node_modules'), 'dir')
+  cpSync(join(packagedRoot, 'runtime-node-modules'), join(shadowRoot, 'node_modules'), {
+    recursive: true,
+    dereference: true
+  })
   writeFileSync(markerFile, '')
   writeFileSync(versionFile, currentVersion)
 
@@ -1011,6 +1047,20 @@ export async function ensureRuntime(): Promise<{ baseUrl: string; logPath: strin
           didChildError = true
           reject(error)
         })
+      }),
+      new Promise<never>((_, reject) => {
+        child.once('exit', (code, signal) => {
+          reject(
+            new Error(
+              buildStartupErrorMessage(
+                signal
+                  ? `T3Code exited before becoming ready (signal ${signal})`
+                  : `T3Code exited before becoming ready (code ${code ?? 'unknown'})`,
+                logPath
+              )
+            )
+          )
+        })
       })
     ])
 
@@ -1042,6 +1092,9 @@ export async function ensureRuntime(): Promise<{ baseUrl: string; logPath: strin
       closeFileDescriptor(logFd)
       if (runtime?.process === child) {
         runtime = null
+      }
+      if (error instanceof Error && !error.message.includes(logPath)) {
+        throw new Error(buildStartupErrorMessage(error.message, logPath))
       }
       throw error
     } finally {

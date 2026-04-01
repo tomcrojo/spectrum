@@ -12,11 +12,11 @@ const nodeSourcePath = process.execPath;
 const nodeTargetPath = path.join(nodeBinDir, nodeBinaryName);
 const t3codeRoot = path.join(repoRoot, 'resources', 't3code');
 const t3codeServerRoot = path.join(t3codeRoot, 'apps', 'server');
+const T3CODE_ENTRYPOINT_CANDIDATES = ['dist/bin.mjs', 'dist/index.mjs'];
 
 const requiredPaths = [
   path.join(t3codeRoot, 'package.json'),
-  path.join(t3codeServerRoot, 'package.json'),
-  path.join(t3codeServerRoot, 'dist', 'index.mjs')
+  path.join(t3codeServerRoot, 'package.json')
 ];
 
 for (const requiredPath of requiredPaths) {
@@ -27,6 +27,50 @@ for (const requiredPath of requiredPaths) {
     );
     process.exit(1);
   }
+}
+
+function runShellCommand(command, cwd) {
+  execFileSync('/bin/zsh', ['-lc', command], {
+    cwd,
+    stdio: 'inherit'
+  });
+}
+
+function resolveServerEntrypoint() {
+  for (const relativePath of T3CODE_ENTRYPOINT_CANDIDATES) {
+    const absolutePath = path.join(t3codeServerRoot, relativePath);
+    if (fs.existsSync(absolutePath)) {
+      return { absolutePath, relativePath };
+    }
+  }
+
+  return null;
+}
+
+function ensureBuiltArtifacts() {
+  const appShellPath = path.join(t3codeServerRoot, 'dist', 'client', 'index.html');
+  const existingEntrypoint = resolveServerEntrypoint();
+
+  if (existingEntrypoint && fs.existsSync(appShellPath)) {
+    return existingEntrypoint;
+  }
+
+  console.log('Building T3Code runtime assets for packaging...');
+  runShellCommand('bun install --frozen-lockfile', t3codeRoot);
+  runShellCommand('bun run --cwd apps/web build && bun run --cwd apps/server build', t3codeRoot);
+
+  const builtEntrypoint = resolveServerEntrypoint();
+  if (builtEntrypoint && fs.existsSync(appShellPath)) {
+    return builtEntrypoint;
+  }
+
+  const missingPath =
+    builtEntrypoint?.absolutePath ?? path.join(t3codeServerRoot, T3CODE_ENTRYPOINT_CANDIDATES[0]);
+  console.error(`Missing packaged runtime dependency: ${missingPath}`);
+  console.error(
+    'Make sure the T3Code submodule is initialized and the server build output exists before packaging.'
+  );
+  process.exit(1);
 }
 
 function readJson(filePath) {
@@ -49,6 +93,8 @@ function resolveDependencyVersion(packageName, version, catalog) {
 function writeJson(filePath, value) {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
+
+ensureBuiltArtifacts();
 
 const monorepoManifest = readJson(path.join(t3codeRoot, 'package.json'));
 const serverManifest = readJson(path.join(t3codeServerRoot, 'package.json'));
@@ -98,7 +144,6 @@ execFileSync('bun', ['install', '--production', '--linker', 'hoisted'], {
 });
 
 fs.renameSync(path.join(t3codeStageDir, 'node_modules'), runtimeNodeModulesDir);
-fs.symlinkSync('.', path.join(runtimeNodeModulesDir, 'node_modules'), 'dir');
 
 for (const cleanupPath of ['bun.lock', 'bun.lockb']) {
   fs.rmSync(path.join(t3codeStageDir, cleanupPath), { force: true });

@@ -13,6 +13,8 @@ Important:
   - It only works when Spectrum is already running and a workspace session is active.
   - \`--connect\` means "attach to the current Spectrum workspace session".
   - In Spectrum-managed shells, prefer \`$SPECTRUM_BROWSER\` first if \`browser\` is not on PATH.
+  - Inside \`browser --connect\` scripts, use \`browser.getPage(...)\` / \`browser.newPage(...)\`; do not open raw \`/devtools/page/...\` WebSocket connections yourself.
+  - Close temporary panels you create when they are no longer needed.
 
 For simple tasks, prefer the built-in panel commands:
   browser open <url> [--name <label>] [--focus]

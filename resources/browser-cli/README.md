@@ -14,6 +14,8 @@ It controls browser panels inside a running Spectrum workspace. It does not open
 - `browser.newPage(...)` prefers a temporary helper panel so automation can attach without stealing the user's focus
 - `browser.listPages()` only lists mounted browser panels in the connected workspace
 - `--connect` attaches to the active Spectrum workspace session, not to arbitrary Chrome or a random DevTools endpoint
+- inside `browser --connect` scripts, use `browser.getPage(...)` / `browser.newPage(...)` instead of opening raw `/devtools/page/...` WebSocket connections yourself
+- agent-created temporary panels should be closed when they are no longer needed
 
 ## Preconditions
 
@@ -91,6 +93,8 @@ const page = await browser.getPage("docs");
 console.log(await page.title());
 EOF
 ```
+
+Do not bypass the CLI's page helpers with a manual CDP socket such as `new WebSocket("ws://127.0.0.1:.../devtools/page/...")` inside the script. That skips Spectrum's panel lifecycle and makes agent behavior less predictable.
 
 ## Common mistakes
 

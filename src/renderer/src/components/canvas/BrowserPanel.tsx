@@ -6,7 +6,9 @@ import {
 } from '@renderer/components/shared/IssueCopyButton'
 import { browserApi } from '@renderer/lib/ipc'
 import {
+  formatBrowserLoadFailure,
   enqueueBrowserRuntimeCommand,
+  isFatalBrowserLoadFailure,
   registerBrowserSlot
 } from '@renderer/lib/browser-runtime'
 import { incrementDevMountCount } from '@renderer/lib/dev-performance'
@@ -192,13 +194,14 @@ export function BrowserPanel({
       errorCode: number
       errorDescription: string
       validatedURL: string
+      isMainFrame?: boolean
     }) => {
-      if (event.errorCode === -3) {
+      if (!isFatalBrowserLoadFailure(event)) {
         return
       }
 
       browserUiStore.updateBrowserUi(panelId, {
-        loadError: `Failed to load ${event.validatedURL} (${event.errorCode}): ${event.errorDescription}`,
+        loadError: formatBrowserLoadFailure(event),
         isLocalLoading: false
       })
     }

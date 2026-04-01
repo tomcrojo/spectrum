@@ -15,6 +15,32 @@ interface CdpTargetRuntime extends CdpTargetSnapshot {
   browserSessionIds: Set<string>
 }
 
+interface BrowserClientState {
+  discoverTargets: boolean
+  autoAttach: boolean
+  flattenMode: boolean
+  sessionToTarget: Map<string, string>
+  autoAttachedSessionIds: Set<string>
+}
+
+interface WebContentsDebugger {
+  isAttached(): boolean
+  attach(protocolVersion: string): void
+  detach(): void
+  sendCommand(method: string, params?: Record<string, unknown>): Promise<unknown>
+  on(event: 'message', listener: (...args: unknown[]) => void): void
+  removeListener(event: 'message', listener: (...args: unknown[]) => void): void
+}
+
+interface WebContentsLike {
+  debugger: WebContentsDebugger
+}
+
+interface CdpProxyDependencies {
+  getWebContentsById(webContentsId: number): WebContentsLike | null
+  randomId(): string
+}
+
 export class CdpProxy {
   private readonly browserId = randomUUID()
   private readonly targets = new Map<string, CdpTargetRuntime>()
@@ -22,14 +48,18 @@ export class CdpProxy {
   private readonly wsServer = new WebSocketServer({ noServer: true })
   private port: number | null = null
   private readonly debuggerListeners = new Map<number, (...args: unknown[]) => void>()
-  private readonly browserClients = new Set<WebSocket>()
+  private readonly browserClients = new Map<WebSocket, BrowserClientState>()
 
   constructor(
     private readonly workspaceId: string,
     private readonly onTargetAutomationStateChanged?: (
       targetId: string,
       automationAttached: boolean
-    ) => void
+    ) => void,
+    private readonly dependencies: CdpProxyDependencies = {
+      getWebContentsById: (webContentsId) => webContents.fromId(webContentsId) as WebContentsLike | null,
+      randomId: () => randomUUID()
+    }
   ) {
     this.server.on('upgrade', this.handleUpgrade.bind(this))
   }
@@ -72,18 +102,30 @@ export class CdpProxy {
   registerTarget(target: CdpTargetSnapshot): void {
     const existing = this.targets.get(target.id)
     if (existing) {
+      const previousWebContentsId = existing.webContentsId
       existing.title = target.title
       existing.url = target.url
       existing.webContentsId = target.webContentsId
+      if (previousWebContentsId !== target.webContentsId) {
+        this.detachDebuggerIfUnused(previousWebContentsId)
+        if (existing.clients.size > 0 || existing.browserSessionIds.size > 0) {
+          this.ensureDebuggerAttached(target.webContentsId)
+        }
+      }
+      this.emitTargetInfoChanged(existing)
       this.emitAutomationStateChanged(target.id)
       return
     }
 
-    this.targets.set(target.id, {
+    const nextTarget: CdpTargetRuntime = {
       ...target,
       clients: new Set<WebSocket>(),
       browserSessionIds: new Set<string>()
-    })
+    }
+
+    this.targets.set(target.id, nextTarget)
+    this.emitTargetCreated(nextTarget)
+    this.autoAttachNewTarget(nextTarget)
     this.emitAutomationStateChanged(target.id)
   }
 
@@ -98,6 +140,7 @@ export class CdpProxy {
     if (typeof patch.url === 'string') {
       target.url = patch.url
     }
+    this.emitTargetInfoChanged(target)
   }
 
   unregisterTarget(targetId: string): void {
@@ -111,6 +154,8 @@ export class CdpProxy {
     }
     target.clients.clear()
 
+    this.removeBrowserSessionsForTarget(targetId)
+    this.emitTargetDestroyed(targetId)
     this.detachDebuggerIfUnused(target.webContentsId)
     this.targets.delete(targetId)
     this.emitAutomationStateChanged(targetId)
@@ -131,7 +176,7 @@ export class CdpProxy {
 
     this.targets.clear()
 
-    for (const client of this.browserClients) {
+    for (const client of this.browserClients.keys()) {
       client.close()
     }
     this.browserClients.clear()
@@ -151,6 +196,7 @@ export class CdpProxy {
   ): void {
     const port = this.port ?? 0
     const host = `127.0.0.1:${port}`
+    const { pathname } = new URL(req.url ?? '/', 'http://127.0.0.1')
 
     if (req.method !== 'GET') {
       res.statusCode = 405
@@ -158,7 +204,7 @@ export class CdpProxy {
       return
     }
 
-    if (req.url === '/json/version') {
+    if (pathname === '/json/version' || pathname === '/json/version/') {
       this.writeJson(res, {
         Browser: 'Spectrum/Electron',
         'Protocol-Version': '1.3',
@@ -167,7 +213,12 @@ export class CdpProxy {
       return
     }
 
-    if (req.url === '/json/list' || req.url === '/json') {
+    if (
+      pathname === '/json/list' ||
+      pathname === '/json/list/' ||
+      pathname === '/json' ||
+      pathname === '/json/'
+    ) {
       const list = this.listTargets().map((target) => ({
         id: target.id,
         type: 'page',
@@ -179,7 +230,7 @@ export class CdpProxy {
       return
     }
 
-    if (req.url === '/json/protocol') {
+    if (pathname === '/json/protocol' || pathname === '/json/protocol/') {
       this.writeJson(res, {})
       return
     }
@@ -214,8 +265,14 @@ export class CdpProxy {
   }
 
   private handleBrowserSocket(ws: WebSocket): void {
-    this.browserClients.add(ws)
-    const sessionToTarget = new Map<string, string>()
+    const clientState: BrowserClientState = {
+      discoverTargets: false,
+      autoAttach: false,
+      flattenMode: false,
+      sessionToTarget: new Map<string, string>(),
+      autoAttachedSessionIds: new Set<string>()
+    }
+    this.browserClients.set(ws, clientState)
 
     ws.on('message', async (raw) => {
       let message: any
@@ -231,10 +288,11 @@ export class CdpProxy {
 
       try {
         const result = await this.handleBrowserCommand(
+          ws,
+          clientState,
           message.method,
           message.params ?? {},
-          message.sessionId,
-          sessionToTarget
+          message.sessionId
         )
         ws.send(JSON.stringify({ id: message.id, result }))
       } catch (error) {
@@ -248,23 +306,17 @@ export class CdpProxy {
     })
 
     ws.on('close', () => {
-      for (const [sessionId, targetId] of sessionToTarget) {
-        const target = this.targets.get(targetId)
-        if (target) {
-          target.browserSessionIds.delete(sessionId)
-          this.detachDebuggerIfUnused(target.webContentsId)
-          this.emitAutomationStateChanged(targetId)
-        }
-      }
+      this.cleanupBrowserClientSessions(clientState)
       this.browserClients.delete(ws)
     })
   }
 
   private async handleBrowserCommand(
+    ws: WebSocket,
+    clientState: BrowserClientState,
     method: string,
     params: Record<string, unknown>,
-    sessionId: string | undefined,
-    sessionToTarget: Map<string, string>
+    sessionId: string | undefined
   ): Promise<unknown> {
     if (method === 'Browser.getVersion') {
       return {
@@ -280,19 +332,47 @@ export class CdpProxy {
       return { browserContextIds: ['default'] }
     }
 
-    if (method === 'Target.setDiscoverTargets' || method === 'Target.setAutoAttach') {
+    if (method === 'Target.setDiscoverTargets') {
+      clientState.discoverTargets = params.discover === true
+      if (clientState.discoverTargets) {
+        for (const target of this.targets.values()) {
+          this.sendBrowserEvent(ws, 'Target.targetCreated', {
+            targetInfo: this.buildTargetInfo(target, false)
+          })
+        }
+      }
+      return {}
+    }
+
+    if (method === 'Target.setAutoAttach') {
+      const shouldAutoAttach = params.autoAttach === true && params.flatten === true
+
+      if (!shouldAutoAttach) {
+        clientState.autoAttach = false
+        clientState.flattenMode = false
+        this.cleanupAutoAttachedSessions(clientState)
+        return {}
+      }
+
+      clientState.autoAttach = true
+      clientState.flattenMode = true
+
+      for (const target of this.targets.values()) {
+        const attachedSessionId = this.ensureAttachedBrowserSession(clientState, target)
+        if (attachedSessionId) {
+          this.sendAttachedToTarget(ws, target, attachedSessionId)
+        }
+      }
       return {}
     }
 
     if (method === 'Target.getTargets') {
       return {
         targetInfos: this.listTargets().map((target) => ({
-          targetId: target.id,
-          type: 'page',
-          title: target.title,
-          url: target.url,
-          attached: false,
-          browserContextId: 'default'
+          ...this.buildTargetInfo(
+            target,
+            this.isTargetAttachedForClient(target.id, clientState)
+          )
         }))
       }
     }
@@ -303,8 +383,8 @@ export class CdpProxy {
       if (!target) {
         throw new Error(`Unknown target: ${targetId}`)
       }
-      const nextSessionId = randomUUID()
-      sessionToTarget.set(nextSessionId, targetId)
+      const nextSessionId = this.dependencies.randomId()
+      clientState.sessionToTarget.set(nextSessionId, targetId)
       target.browserSessionIds.add(nextSessionId)
       this.ensureDebuggerAttached(target.webContentsId)
       this.emitAutomationStateChanged(targetId)
@@ -313,9 +393,10 @@ export class CdpProxy {
 
     if (method === 'Target.detachFromTarget') {
       const detachedSessionId = String(params.sessionId ?? '')
-      const targetId = sessionToTarget.get(detachedSessionId)
+      const targetId = clientState.sessionToTarget.get(detachedSessionId)
       if (targetId) {
-        sessionToTarget.delete(detachedSessionId)
+        clientState.sessionToTarget.delete(detachedSessionId)
+        clientState.autoAttachedSessionIds.delete(detachedSessionId)
         const target = this.targets.get(targetId)
         if (target) {
           target.browserSessionIds.delete(detachedSessionId)
@@ -331,7 +412,7 @@ export class CdpProxy {
     }
 
     if (sessionId) {
-      const targetId = sessionToTarget.get(sessionId)
+      const targetId = clientState.sessionToTarget.get(sessionId)
       if (!targetId) {
         throw new Error(`Unknown session: ${sessionId}`)
       }
@@ -339,7 +420,7 @@ export class CdpProxy {
       if (!target) {
         throw new Error(`Unknown target for session: ${sessionId}`)
       }
-      const wc = webContents.fromId(target.webContentsId)
+      const wc = this.dependencies.getWebContentsById(target.webContentsId)
       if (!wc) {
         throw new Error(`Missing webContents for target: ${targetId}`)
       }
@@ -358,7 +439,7 @@ export class CdpProxy {
       return
     }
 
-    const wc = webContents.fromId(target.webContentsId)
+    const wc = this.dependencies.getWebContentsById(target.webContentsId)
     if (!wc) {
       ws.close()
       return
@@ -405,7 +486,7 @@ export class CdpProxy {
   }
 
   private ensureDebuggerAttached(webContentsId: number): void {
-    const wc = webContents.fromId(webContentsId)
+    const wc = this.dependencies.getWebContentsById(webContentsId)
     if (!wc) {
       return
     }
@@ -435,7 +516,7 @@ export class CdpProxy {
         }
       }
 
-      for (const browserClient of this.browserClients) {
+      for (const browserClient of this.browserClients.keys()) {
         if (browserClient.readyState !== browserClient.OPEN) {
           continue
         }
@@ -455,7 +536,7 @@ export class CdpProxy {
       return
     }
 
-    const wc = webContents.fromId(webContentsId)
+    const wc = this.dependencies.getWebContentsById(webContentsId)
     if (!wc) {
       this.debuggerListeners.delete(webContentsId)
       return
@@ -485,5 +566,166 @@ export class CdpProxy {
     res.statusCode = 200
     res.setHeader('Content-Type', 'application/json')
     res.end(JSON.stringify(payload))
+  }
+
+  private buildTargetInfo(target: CdpTargetSnapshot, attached: boolean): Record<string, unknown> {
+    return {
+      targetId: target.id,
+      type: 'page',
+      title: target.title,
+      url: target.url,
+      attached,
+      browserContextId: 'default'
+    }
+  }
+
+  private isTargetAttachedForClient(targetId: string, clientState: BrowserClientState): boolean {
+    for (const attachedTargetId of clientState.sessionToTarget.values()) {
+      if (attachedTargetId === targetId) {
+        return true
+      }
+    }
+    return false
+  }
+
+  private sendBrowserEvent(ws: WebSocket, method: string, params: Record<string, unknown>): void {
+    if (ws.readyState !== ws.OPEN) {
+      return
+    }
+
+    ws.send(JSON.stringify({ method, params }))
+  }
+
+  private sendAttachedToTarget(
+    ws: WebSocket,
+    target: CdpTargetSnapshot,
+    sessionId: string
+  ): void {
+    this.sendBrowserEvent(ws, 'Target.attachedToTarget', {
+      sessionId,
+      targetInfo: this.buildTargetInfo(target, true),
+      waitingForDebugger: false
+    })
+  }
+
+  private emitTargetCreated(target: CdpTargetSnapshot): void {
+    for (const [browserClient, clientState] of this.browserClients) {
+      if (!clientState.discoverTargets) {
+        continue
+      }
+
+      this.sendBrowserEvent(browserClient, 'Target.targetCreated', {
+        targetInfo: this.buildTargetInfo(target, false)
+      })
+    }
+  }
+
+  private emitTargetInfoChanged(target: CdpTargetSnapshot): void {
+    for (const [browserClient, clientState] of this.browserClients) {
+      if (!clientState.discoverTargets) {
+        continue
+      }
+
+      this.sendBrowserEvent(browserClient, 'Target.targetInfoChanged', {
+        targetInfo: this.buildTargetInfo(
+          target,
+          this.isTargetAttachedForClient(target.id, clientState)
+        )
+      })
+    }
+  }
+
+  private emitTargetDestroyed(targetId: string): void {
+    for (const [browserClient, clientState] of this.browserClients) {
+      if (!clientState.discoverTargets) {
+        continue
+      }
+
+      this.sendBrowserEvent(browserClient, 'Target.targetDestroyed', { targetId })
+    }
+  }
+
+  private ensureAttachedBrowserSession(
+    clientState: BrowserClientState,
+    target: CdpTargetRuntime
+  ): string | null {
+    for (const [sessionId, attachedTargetId] of clientState.sessionToTarget.entries()) {
+      if (attachedTargetId === target.id) {
+        return null
+      }
+    }
+
+    const sessionId = this.dependencies.randomId()
+    clientState.sessionToTarget.set(sessionId, target.id)
+    clientState.autoAttachedSessionIds.add(sessionId)
+    target.browserSessionIds.add(sessionId)
+    this.ensureDebuggerAttached(target.webContentsId)
+    this.emitAutomationStateChanged(target.id)
+    return sessionId
+  }
+
+  private autoAttachNewTarget(target: CdpTargetRuntime): void {
+    for (const [browserClient, clientState] of this.browserClients) {
+      if (!clientState.autoAttach || !clientState.flattenMode) {
+        continue
+      }
+
+      const sessionId = this.ensureAttachedBrowserSession(clientState, target)
+      if (!sessionId) {
+        continue
+      }
+
+      this.sendAttachedToTarget(browserClient, target, sessionId)
+    }
+  }
+
+  private removeBrowserSessionsForTarget(targetId: string): void {
+    for (const [browserClient, clientState] of this.browserClients) {
+      const detachedSessionIds = Array.from(clientState.sessionToTarget.entries())
+        .filter(([, attachedTargetId]) => attachedTargetId === targetId)
+        .map(([sessionId]) => sessionId)
+
+      for (const sessionId of detachedSessionIds) {
+        clientState.sessionToTarget.delete(sessionId)
+        clientState.autoAttachedSessionIds.delete(sessionId)
+      }
+    }
+  }
+
+  private cleanupBrowserClientSessions(clientState: BrowserClientState): void {
+    for (const [sessionId, targetId] of clientState.sessionToTarget) {
+      const target = this.targets.get(targetId)
+      if (!target) {
+        continue
+      }
+
+      target.browserSessionIds.delete(sessionId)
+      this.detachDebuggerIfUnused(target.webContentsId)
+      this.emitAutomationStateChanged(targetId)
+    }
+
+    clientState.sessionToTarget.clear()
+    clientState.autoAttachedSessionIds.clear()
+  }
+
+  private cleanupAutoAttachedSessions(clientState: BrowserClientState): void {
+    for (const sessionId of clientState.autoAttachedSessionIds) {
+      const targetId = clientState.sessionToTarget.get(sessionId)
+      if (!targetId) {
+        continue
+      }
+
+      clientState.sessionToTarget.delete(sessionId)
+      const target = this.targets.get(targetId)
+      if (!target) {
+        continue
+      }
+
+      target.browserSessionIds.delete(sessionId)
+      this.detachDebuggerIfUnused(target.webContentsId)
+      this.emitAutomationStateChanged(targetId)
+    }
+
+    clientState.autoAttachedSessionIds.clear()
   }
 }
