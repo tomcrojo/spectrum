@@ -114,6 +114,7 @@ export const t3codeApi = {
     }>(T3CODE_CHANNELS.ENSURE_PROJECT, input),
   ensurePanelThread: (input: {
     panelId: string
+    workspaceId: string
     spectrumProjectId: string
     projectPath: string
     projectName: string
@@ -146,6 +147,31 @@ export const t3codeApi = {
 export const browserApi = {
   activate: (input: { workspaceId: string; panelId: string }) =>
     invoke<boolean>(BROWSER_CHANNELS.ACTIVATE, input),
+  close: (input: { workspaceId: string; panelId: string }) =>
+    invoke<boolean>(BROWSER_CHANNELS.CLOSE, input),
+  snapshot: (input: {
+    projectId: string | null
+    activeWorkspaceId?: string | null
+  }) =>
+    invoke<{
+      panels: Array<{
+        panelId: string
+        workspaceId: string
+        projectId: string
+        url: string
+        panelTitle: string
+        isTemporary?: boolean
+        parentPanelId?: string
+        returnToPanelId?: string
+        openedBy?: 'user' | 'agent' | 'popup'
+        afterPanelId?: string
+        width?: number
+        height?: number
+      }>
+      focusedBrowserPanelId: string | null
+      focusedByWorkspace: Record<string, string | null>
+      automationAttachedPanelIds: string[]
+    }>(BROWSER_CHANNELS.SNAPSHOT, input),
   openTemporary: (input: {
     workspaceId: string
     projectId: string
@@ -162,7 +188,6 @@ export const browserApi = {
   sessionSync: (input: {
     activeProjectId: string | null
     activeWorkspaceId: string | null
-    focusedBrowserPanelId: string | null
     userFocusedPanelId?: string | null
   }) => invoke<boolean>(BROWSER_CHANNELS.SESSION_SYNC, input),
   webviewReady: (input: {

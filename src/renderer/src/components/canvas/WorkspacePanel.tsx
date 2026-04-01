@@ -38,6 +38,7 @@ interface WorkspacePanelProps {
   initialWidth?: number
   initialHeight?: number
   initialUrl?: string
+  browserRuntimeHostEnabled: boolean
 }
 
 interface FilePanelChromeState {
@@ -194,7 +195,8 @@ function WorkspacePanelImpl({
   style,
   initialWidth,
   initialHeight,
-  initialUrl
+  initialUrl,
+  browserRuntimeHostEnabled
 }: WorkspacePanelProps) {
   const resolvedTheme = useResolvedTheme()
   const autoCenterFocusedPanel = useUiStore((state) => state.autoCenterFocusedPanel)
@@ -506,6 +508,7 @@ function WorkspacePanelImpl({
               autoFocus={isFocused}
               isResizing={isResizing}
               hydrationState={hydrationState}
+              hostEnabled={browserRuntimeHostEnabled}
             />
           ) : panelType === 'file' ? (
             <FilePanel

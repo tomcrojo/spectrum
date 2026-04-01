@@ -7,7 +7,6 @@ import { useWorkspacesStore } from '@renderer/stores/workspaces.store'
 export function useBrowserCliSessionSync(): void {
   const activeProjectId = useUiStore((state) => state.activeProjectId)
   const focusedPanelId = useWorkspacesStore((state) => state.focusedPanelId)
-  const focusedBrowserPanelId = useWorkspacesStore((state) => state.focusedBrowserPanelId)
   const activeWorkspaceId = usePanelRuntimeStore((state) => state.activeWorkspaceId)
 
   useEffect(() => {
@@ -15,9 +14,8 @@ export function useBrowserCliSessionSync(): void {
       .sessionSync({
         activeProjectId,
         activeWorkspaceId,
-        focusedBrowserPanelId,
         userFocusedPanelId: focusedPanelId
       })
       .catch(() => {})
-  }, [activeProjectId, activeWorkspaceId, focusedBrowserPanelId, focusedPanelId])
+  }, [activeProjectId, activeWorkspaceId, focusedPanelId])
 }

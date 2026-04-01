@@ -1,7 +1,10 @@
 import { BrowserWindow } from 'electron'
 import { nanoid } from 'nanoid'
 import { BROWSER_CHANNELS } from '@shared/ipc-channels'
-import { unregisterCdpTarget } from '../cdp/CdpProxyManager'
+import {
+  hasAttachedAutomationClients,
+  unregisterCdpTarget
+} from '../cdp/CdpProxyManager'
 
 export interface BrowserPanelState {
   panelId: string
@@ -17,6 +20,13 @@ export interface BrowserPanelState {
   width?: number
   height?: number
   webContentsId?: number
+}
+
+export interface BrowserSnapshot {
+  panels: BrowserPanelState[]
+  focusedBrowserPanelId: string | null
+  focusedByWorkspace: Record<string, string | null>
+  automationAttachedPanelIds: string[]
 }
 
 const panelsById = new Map<string, BrowserPanelState>()
@@ -38,6 +48,12 @@ export function setBrowserPanelMainWindow(window: BrowserWindow): void {
 
 export function clearBrowserPanelMainWindow(): void {
   mainWindow = null
+}
+
+export function clearAllBrowserPanels(): void {
+  panelsById.clear()
+  panelIdByWebContentsId.clear()
+  focusedAgentPanelIdByWorkspace.clear()
 }
 
 export function openBrowserPanel(input: {
@@ -62,6 +78,10 @@ export function openBrowserPanel(input: {
   panelsById.set(panel.panelId, panel)
   focusedAgentPanelIdByWorkspace.set(panel.workspaceId, panel.panelId)
   emitToRenderer(BROWSER_CHANNELS.OPEN, panel)
+  emitToRenderer(BROWSER_CHANNELS.FOCUS_CHANGED, {
+    workspaceId: panel.workspaceId,
+    panelId: panel.panelId
+  })
   return panel
 }
 
@@ -187,8 +207,78 @@ export function listBrowserPanels(workspaceId: string): BrowserPanelState[] {
   return Array.from(panelsById.values()).filter((panel) => panel.workspaceId === workspaceId)
 }
 
+export function listBrowserPanelsForProject(projectId: string): BrowserPanelState[] {
+  return Array.from(panelsById.values()).filter((panel) => panel.projectId === projectId)
+}
+
 export function getFocusedBrowserPanelId(workspaceId: string): string | null {
   return focusedAgentPanelIdByWorkspace.get(workspaceId) ?? null
+}
+
+export function getFocusedBrowserPanelMapForProject(
+  projectId: string
+): Record<string, string | null> {
+  const nextMap: Record<string, string | null> = {}
+
+  for (const panel of panelsById.values()) {
+    if (!(panel.workspaceId in nextMap)) {
+      nextMap[panel.workspaceId] = null
+    }
+  }
+
+  for (const [workspaceId, panelId] of focusedAgentPanelIdByWorkspace.entries()) {
+    const panel = panelsById.get(panelId)
+    if (!panel || panel.projectId !== projectId) {
+      continue
+    }
+
+    nextMap[workspaceId] = panelId
+  }
+
+  return nextMap
+}
+
+export function getBrowserSnapshot(input: {
+  projectId: string | null
+  activeWorkspaceId?: string | null
+}): BrowserSnapshot {
+  if (!input.projectId) {
+    return {
+      panels: [],
+      focusedBrowserPanelId: null,
+      focusedByWorkspace: {},
+      automationAttachedPanelIds: []
+    }
+  }
+
+  const panels = listBrowserPanelsForProject(input.projectId)
+  const focusedByWorkspace = getFocusedBrowserPanelMapForProject(input.projectId)
+  const automationAttachedPanelIds = panels.flatMap((panel) => {
+    if (
+      typeof panel.webContentsId === 'number' &&
+      hasAttachedAutomationClients(panel.workspaceId, panel.webContentsId)
+    ) {
+      return [panel.panelId]
+    }
+
+    return []
+  })
+
+  const focusedBrowserPanelId =
+    (input.activeWorkspaceId
+      ? focusedByWorkspace[input.activeWorkspaceId] ?? null
+      : null) ??
+    Object.values(focusedByWorkspace).find(
+      (panelId): panelId is string => typeof panelId === 'string' && panelId.length > 0
+    ) ??
+    null
+
+  return {
+    panels,
+    focusedBrowserPanelId,
+    focusedByWorkspace,
+    automationAttachedPanelIds
+  }
 }
 
 export function updateBrowserPanelFromRenderer(input: {
@@ -296,6 +386,10 @@ export function activateBrowserPanel(
 
   focusedAgentPanelIdByWorkspace.set(workspaceId, panelId)
   emitToRenderer(BROWSER_CHANNELS.ACTIVATE, {
+    workspaceId,
+    panelId
+  })
+  emitToRenderer(BROWSER_CHANNELS.FOCUS_CHANGED, {
     workspaceId,
     panelId
   })

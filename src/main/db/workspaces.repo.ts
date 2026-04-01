@@ -70,6 +70,17 @@ function rowToWorkspace(row: any): Workspace {
   }
 }
 
+interface WorkspaceRow {
+  id: string
+  project_id: string
+  name: string
+  layout_state: string
+  archived: number
+  created_at: string
+  updated_at: string
+  last_panel_edited_at: string | null
+}
+
 export function listWorkspaces(input: string | ListWorkspacesInput): Workspace[] {
   const db = getDb()
   const projectId = typeof input === 'string' ? input : input.projectId
@@ -189,7 +200,9 @@ export function deleteWorkspace(id: string): boolean {
 
 export function updateWorkspace(input: UpdateWorkspaceInput): Workspace | null {
   const db = getDb()
-  const existing = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(input.id)
+  const existing = db
+    .prepare('SELECT * FROM workspaces WHERE id = ?')
+    .get(input.id) as WorkspaceRow | undefined
   if (!existing) {
     return null
   }
@@ -248,7 +261,9 @@ export function updateWorkspaceLastPanelEditedAt(
   input: UpdateWorkspaceLastPanelEditedAtInput
 ): Workspace | null {
   const db = getDb()
-  const existing = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(input.id)
+  const existing = db
+    .prepare('SELECT * FROM workspaces WHERE id = ?')
+    .get(input.id) as WorkspaceRow | undefined
   if (!existing) {
     return null
   }

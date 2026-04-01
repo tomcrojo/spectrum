@@ -17,6 +17,7 @@ import { readFileSync, readdirSync, existsSync, mkdirSync } from 'fs'
 import { homedir, tmpdir } from 'os'
 import { nanoid } from 'nanoid'
 import * as pty from 'node-pty'
+import { randomUUID } from 'node:crypto'
 import {
   ensureRuntime,
   ensureT3Project,
@@ -29,6 +30,10 @@ import {
 } from '../main/t3code/T3CodeManager'
 import { BROWSER_CHANNELS, T3CODE_CHANNELS } from '../shared/ipc-channels'
 import { getRandomProjectColor, normalizeProjectColor } from '@shared/project.types'
+import {
+  readBrowserCliThreadBindings,
+  upsertBrowserCliThreadBindingRecord
+} from '../main/browser-cli/BrowserCliThreadBindingStore'
 
 // ─── Database Setup ────────────────────────────────────────────────────
 
@@ -216,6 +221,15 @@ function listWorkspacesForProject(args: string | { projectId: string; includeArc
     .map(rowToWorkspace)
 }
 
+function getProject(projectId: string) {
+  const row = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId)
+  return row ? rowToProject(row) : null
+}
+
+function listWorkspaces(projectId: string, includeArchived = false) {
+  return listWorkspacesForProject({ projectId, includeArchived })
+}
+
 // ─── PTY Manager ──────────────────────────────────────────────────────
 
 interface PtyInstance {
@@ -247,6 +261,7 @@ interface BrowserPanelState {
 const browserPanels = new Map<string, BrowserPanelState>()
 const browserTokens = new Map<string, { workspaceId: string; projectId: string }>()
 const focusedBrowserPanelIdByWorkspace = new Map<string, string>()
+const userFocusedPanelIdByWorkspace = new Map<string, string | null>()
 let browserApiServer: http.Server | null = null
 let browserApiPort: number | null = null
 const TEMPORARY_BROWSER_PANEL_WIDTH = 350
@@ -297,6 +312,39 @@ function revokeBrowserToken(token: string): void {
   browserTokens.delete(token)
 }
 
+function bindBrowserCliThread(input: {
+  threadId: string
+  workspaceId: string
+  projectId: string
+}): void {
+  if (browserApiPort === null) {
+    throw new Error('Browser API server is not started')
+  }
+
+  const existing = readBrowserCliThreadBindings().find((entry) => entry.threadId === input.threadId)
+  const shouldReuseToken =
+    existing?.workspaceId === input.workspaceId && existing.projectId === input.projectId
+
+  if (existing && !shouldReuseToken) {
+    revokeBrowserToken(existing.browserApiToken)
+  }
+
+  const browserApiToken = shouldReuseToken
+    ? existing.browserApiToken
+    : randomUUID().replace(/-/g, '')
+
+  registerBrowserToken(browserApiToken, input.workspaceId, input.projectId)
+
+  upsertBrowserCliThreadBindingRecord({
+    threadId: input.threadId,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    browserApiBaseUrl: `http://127.0.0.1:${browserApiPort}`,
+    browserApiToken,
+    updatedAt: new Date().toISOString()
+  })
+}
+
 function pushBrowserEvent(channel: string, payload: unknown): void {
   const message = JSON.stringify({
     type: channel,
@@ -308,6 +356,122 @@ function pushBrowserEvent(channel: string, payload: unknown): void {
       client.send(message)
     }
   }
+}
+
+function listBrowserPanelsForProject(projectId: string): BrowserPanelState[] {
+  return Array.from(browserPanels.values()).filter((panel) => panel.projectId === projectId)
+}
+
+function getFocusedBrowserPanelMapForProject(projectId: string): Record<string, string | null> {
+  const nextMap: Record<string, string | null> = {}
+
+  for (const panel of browserPanels.values()) {
+    if (panel.projectId === projectId && !(panel.workspaceId in nextMap)) {
+      nextMap[panel.workspaceId] = null
+    }
+  }
+
+  for (const [workspaceId, panelId] of focusedBrowserPanelIdByWorkspace.entries()) {
+    const panel = browserPanels.get(panelId)
+    if (!panel || panel.projectId !== projectId) {
+      continue
+    }
+
+    nextMap[workspaceId] = panelId
+  }
+
+  return nextMap
+}
+
+function getBrowserSnapshot(input: {
+  projectId: string | null
+  activeWorkspaceId?: string | null
+}) {
+  if (!input.projectId) {
+    return {
+      panels: [],
+      focusedBrowserPanelId: null,
+      focusedByWorkspace: {},
+      automationAttachedPanelIds: []
+    }
+  }
+
+  const panels = listBrowserPanelsForProject(input.projectId)
+  const focusedByWorkspace = getFocusedBrowserPanelMapForProject(input.projectId)
+  const focusedBrowserPanelId =
+    (input.activeWorkspaceId
+      ? focusedByWorkspace[input.activeWorkspaceId] ?? null
+      : null) ??
+    Object.values(focusedByWorkspace).find(
+      (panelId): panelId is string => typeof panelId === 'string' && panelId.length > 0
+    ) ??
+    null
+
+  return {
+    panels,
+    focusedBrowserPanelId,
+    focusedByWorkspace,
+    automationAttachedPanelIds: [] as string[]
+  }
+}
+
+function resolveReturnBrowserPanelId(panel: BrowserPanelState): string | null {
+  const preferredIds = [panel.returnToPanelId, panel.parentPanelId]
+
+  for (const preferredId of preferredIds) {
+    if (!preferredId) {
+      continue
+    }
+
+    const preferredPanel = browserPanels.get(preferredId)
+    if (preferredPanel && preferredPanel.workspaceId === panel.workspaceId) {
+      return preferredId
+    }
+  }
+
+  return null
+}
+
+function closeBrowserPanel(workspaceId: string, panelId: string): BrowserPanelState | null {
+  const panel = browserPanels.get(panelId)
+  if (!panel || panel.workspaceId !== workspaceId) {
+    return null
+  }
+
+  browserPanels.delete(panelId)
+  if (focusedBrowserPanelIdByWorkspace.get(workspaceId) === panelId) {
+    const nextFocusedPanelId = resolveReturnBrowserPanelId(panel)
+    if (nextFocusedPanelId) {
+      focusedBrowserPanelIdByWorkspace.set(workspaceId, nextFocusedPanelId)
+    } else {
+      focusedBrowserPanelIdByWorkspace.delete(workspaceId)
+    }
+    pushBrowserEvent(BROWSER_CHANNELS.FOCUS_CHANGED, {
+      workspaceId,
+      panelId: nextFocusedPanelId
+    })
+  }
+
+  return panel
+}
+
+function activateBrowserPanel(workspaceId: string, panelId: string): BrowserPanelState | null {
+  const panel = browserPanels.get(panelId)
+  if (!panel || panel.workspaceId !== workspaceId) {
+    return null
+  }
+
+  focusedBrowserPanelIdByWorkspace.set(workspaceId, panelId)
+  pushBrowserEvent(BROWSER_CHANNELS.ACTIVATE, {
+    workspaceId,
+    panelId
+  })
+  pushBrowserEvent(BROWSER_CHANNELS.FOCUS_CHANGED, {
+    workspaceId,
+    panelId
+  })
+
+  return panel
 }
 
 function readRequestBody(req: http.IncomingMessage): Promise<any> {
@@ -376,6 +540,10 @@ function startBrowserApiServer(): Promise<number> {
       browserPanels.set(panel.panelId, panel)
       focusedBrowserPanelIdByWorkspace.set(scope.workspaceId, panel.panelId)
       pushBrowserEvent(BROWSER_CHANNELS.OPEN, panel)
+      pushBrowserEvent(BROWSER_CHANNELS.FOCUS_CHANGED, {
+        workspaceId: scope.workspaceId,
+        panelId: panel.panelId
+      })
       sendJson(res, 200, { panelId: panel.panelId })
       return
     }
@@ -434,28 +602,10 @@ function startBrowserApiServer(): Promise<number> {
 
     if (req.url === '/browser/close') {
       const panelId = typeof body.panelId === 'string' ? body.panelId : ''
-      const panel = browserPanels.get(panelId)
-      if (!panel || panel.workspaceId !== scope.workspaceId) {
+      const panel = closeBrowserPanel(scope.workspaceId, panelId)
+      if (!panel) {
         sendJson(res, 404, { error: 'Panel not found' })
         return
-      }
-      browserPanels.delete(panelId)
-      if (focusedBrowserPanelIdByWorkspace.get(scope.workspaceId) === panelId) {
-        const returnPanelId =
-          panel.returnToPanelId && browserPanels.has(panel.returnToPanelId)
-            ? panel.returnToPanelId
-            : panel.parentPanelId && browserPanels.has(panel.parentPanelId)
-              ? panel.parentPanelId
-              : null
-        if (returnPanelId) {
-          focusedBrowserPanelIdByWorkspace.set(scope.workspaceId, returnPanelId)
-        } else {
-          focusedBrowserPanelIdByWorkspace.delete(scope.workspaceId)
-        }
-        pushBrowserEvent(BROWSER_CHANNELS.FOCUS_CHANGED, {
-          workspaceId: scope.workspaceId,
-          panelId: returnPanelId
-        })
       }
       pushBrowserEvent(BROWSER_CHANNELS.CLOSE, {
         panelId,
@@ -503,26 +653,47 @@ function startBrowserApiServer(): Promise<number> {
 
     if (req.url === '/browser/activate' || req.url === '/browser/set-agent-focus') {
       const panelId = typeof body.panelId === 'string' ? body.panelId : ''
-      const panel = browserPanels.get(panelId)
-      if (!panel || panel.workspaceId !== scope.workspaceId) {
+      const panel = activateBrowserPanel(scope.workspaceId, panelId)
+      if (!panel) {
         sendJson(res, 404, { error: 'Panel not found' })
         return
       }
-      focusedBrowserPanelIdByWorkspace.set(scope.workspaceId, panelId)
-      pushBrowserEvent(BROWSER_CHANNELS.ACTIVATE, {
-        workspaceId: scope.workspaceId,
-        panelId
-      })
-      pushBrowserEvent(BROWSER_CHANNELS.FOCUS_CHANGED, {
-        workspaceId: scope.workspaceId,
-        panelId
-      })
       sendJson(res, 200, { ok: true })
       return
     }
 
     if (req.url === '/browser/cdp-endpoint') {
       sendJson(res, 200, { endpoint: null })
+      return
+    }
+
+    if (req.url === '/browser/session') {
+      const project = getProject(scope.projectId)
+      const workspace = listWorkspaces(scope.projectId, true).find(
+        (entry) => entry.id === scope.workspaceId
+      )
+
+      sendJson(res, 200, {
+        appInstanceId: `workspace:${scope.workspaceId}`,
+        processId: process.pid,
+        projectId: scope.projectId,
+        workspaceId: scope.workspaceId,
+        projectName: project?.name ?? null,
+        workspaceName: workspace?.name ?? null,
+        browserApiBaseUrl: `http://127.0.0.1:${browserApiPort}`,
+        browserApiToken: token,
+        cdpEndpoint: null,
+        focusedBrowserPanelId: focusedBrowserPanelIdByWorkspace.get(scope.workspaceId) ?? null,
+        userFocusedPanelId: userFocusedPanelIdByWorkspace.get(scope.workspaceId) ?? null,
+        focused: true,
+        lastHeartbeatAt: new Date().toISOString(),
+        capabilities: {
+          activatePanel: true,
+          createPanel: true,
+          closePanel: true,
+          listPanels: true
+        }
+      })
       return
     }
 
@@ -1000,6 +1171,16 @@ const handlers: Record<string, Handler> = {
       spectrumProjectId: args.projectId ?? resolvedInstanceId,
       projectPath: args.projectPath,
       projectName: args.projectPath.split('/').filter(Boolean).at(-1) ?? 'Project'
+    }).then((binding) => {
+      if (args.workspaceId) {
+        bindBrowserCliThread({
+          threadId: binding.t3ThreadId,
+          workspaceId: args.workspaceId,
+          projectId: args.projectId ?? resolvedInstanceId
+        })
+      }
+
+      return binding
     })
   },
 
@@ -1046,6 +1227,7 @@ const handlers: Record<string, Handler> = {
 
   [T3CODE_CHANNELS.ENSURE_PANEL_THREAD]: (args: {
     panelId: string
+    workspaceId: string
     spectrumProjectId: string
     projectPath: string
     projectName: string
@@ -1059,6 +1241,14 @@ const handlers: Record<string, Handler> = {
       projectName: args.projectName,
       existingT3ProjectId: args.existingT3ProjectId,
       existingT3ThreadId: args.existingT3ThreadId
+    }).then((binding) => {
+      bindBrowserCliThread({
+        threadId: binding.t3ThreadId,
+        workspaceId: args.workspaceId,
+        projectId: args.spectrumProjectId
+      })
+
+      return binding
     }),
 
   [T3CODE_CHANNELS.GET_THREAD_INFO]: (args: { t3ThreadId: string }) => getThreadInfo(args.t3ThreadId),
@@ -1098,22 +1288,95 @@ const handlers: Record<string, Handler> = {
     return true
   },
 
+  [BROWSER_CHANNELS.SNAPSHOT]: (payload: {
+    projectId: string | null
+    activeWorkspaceId?: string | null
+  }) => getBrowserSnapshot(payload),
+
+  [BROWSER_CHANNELS.LIST]: (payload: { workspaceId: string }) => ({
+    focusedBrowserPanelId: focusedBrowserPanelIdByWorkspace.get(payload.workspaceId) ?? null,
+    panels: Array.from(browserPanels.values()).filter(
+      (panel) => panel.workspaceId === payload.workspaceId
+    )
+  }),
+
+  [BROWSER_CHANNELS.GET]: (payload: { panelId: string }) => browserPanels.get(payload.panelId) ?? null,
+
+  [BROWSER_CHANNELS.SESSION]: (payload: { workspaceId?: string } | undefined) => {
+    const workspaceId =
+      payload?.workspaceId ??
+      Array.from(focusedBrowserPanelIdByWorkspace.keys())[0] ??
+      null
+
+    if (!workspaceId) {
+      return null
+    }
+
+    const panel = Array.from(browserPanels.values()).find((entry) => entry.workspaceId === workspaceId)
+    if (!panel) {
+      return null
+    }
+
+    const project = getProject(panel.projectId)
+    const workspace = listWorkspaces(panel.projectId, true).find((entry) => entry.id === workspaceId)
+
+    return {
+      appInstanceId: `workspace:${workspaceId}`,
+      processId: process.pid,
+      projectId: panel.projectId,
+      workspaceId,
+      projectName: project?.name ?? null,
+      workspaceName: workspace?.name ?? null,
+      browserApiBaseUrl: browserApiPort ? `http://127.0.0.1:${browserApiPort}` : null,
+      browserApiToken: null,
+      cdpEndpoint: null,
+      focusedBrowserPanelId: focusedBrowserPanelIdByWorkspace.get(workspaceId) ?? null,
+      userFocusedPanelId: userFocusedPanelIdByWorkspace.get(workspaceId) ?? null,
+      focused: true,
+      lastHeartbeatAt: new Date().toISOString(),
+      capabilities: {
+        activatePanel: true,
+        createPanel: true,
+        closePanel: true,
+        listPanels: true
+      }
+    }
+  },
+
   [BROWSER_CHANNELS.SESSION_SYNC]: (payload: {
+    activeProjectId: string | null
     activeWorkspaceId: string | null
-    focusedBrowserPanelId: string | null
+    userFocusedPanelId?: string | null
   }) => {
     if (payload.activeWorkspaceId) {
-      if (payload.focusedBrowserPanelId) {
-        focusedBrowserPanelIdByWorkspace.set(
-          payload.activeWorkspaceId,
-          payload.focusedBrowserPanelId
-        )
+      if (payload.userFocusedPanelId) {
+        userFocusedPanelIdByWorkspace.set(payload.activeWorkspaceId, payload.userFocusedPanelId)
       } else {
-        focusedBrowserPanelIdByWorkspace.delete(payload.activeWorkspaceId)
+        userFocusedPanelIdByWorkspace.delete(payload.activeWorkspaceId)
       }
     }
     return true
   },
+
+  [BROWSER_CHANNELS.ACTIVATE]: (payload: { workspaceId: string; panelId: string }) =>
+    Boolean(activateBrowserPanel(payload.workspaceId, payload.panelId)),
+
+  [BROWSER_CHANNELS.CLOSE]: (payload: { workspaceId: string; panelId: string }) => {
+    const panel = closeBrowserPanel(payload.workspaceId, payload.panelId)
+    if (!panel) {
+      return false
+    }
+
+    pushBrowserEvent(BROWSER_CHANNELS.CLOSE, {
+      panelId: payload.panelId,
+      workspaceId: payload.workspaceId
+    })
+    return true
+  },
+
+  [BROWSER_CHANNELS.CAPTURE_PREVIEW]: () => ({
+    dataUrl: null
+  }),
 
   [BROWSER_CHANNELS.OPEN_TEMPORARY]: (payload: {
     workspaceId: string

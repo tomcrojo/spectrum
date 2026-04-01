@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { BROWSER_CHANNELS } from '@shared/ipc-channels'
 import { transport } from '@renderer/lib/transport'
 import { browserApi } from '@renderer/lib/ipc'
@@ -29,7 +29,7 @@ interface BrowserResizeEvent {
   height: number
 }
 
-function reconcileBrowserState(projectId: string | null): Promise<void> {
+function performBrowserReconcile(projectId: string | null): Promise<void> {
   if (!projectId) {
     useWorkspacesStore.getState().reconcileBrowserPanels([], {})
     return Promise.resolve()
@@ -82,14 +82,81 @@ export function useBrowserApiListener(): void {
   const focusedPanelId = useWorkspacesStore((state) => state.focusedPanelId)
   const focusedBrowserPanelId = useWorkspacesStore((state) => state.focusedBrowserPanelId)
   const activePanels = useWorkspacesStore((state) => state.activePanels)
+  const reconcileTimerRef = useRef<number | null>(null)
+  const pendingProjectIdRef = useRef<string | null>(null)
+  const pendingResolversRef = useRef<Array<() => void>>([])
+  const inFlightReconcileRef = useRef<Promise<void> | null>(null)
 
-  const reconcileActiveProject = useCallback(() => {
-    return reconcileBrowserState(useUiStore.getState().activeProjectId)
+  const resolvePendingReconcileRequests = useCallback(() => {
+    const resolvers = pendingResolversRef.current.splice(0)
+    for (const resolve of resolvers) {
+      resolve()
+    }
   }, [])
 
+  const scheduleBrowserReconcile = useCallback(
+    (projectId: string | null, delayMs = 75) => {
+      if (reconcileTimerRef.current !== null) {
+        window.clearTimeout(reconcileTimerRef.current)
+        reconcileTimerRef.current = null
+      }
+
+      if (!projectId) {
+        pendingProjectIdRef.current = null
+        return performBrowserReconcile(null).finally(() => {
+          resolvePendingReconcileRequests()
+        })
+      }
+
+      pendingProjectIdRef.current = projectId
+
+      return new Promise<void>((resolve) => {
+        pendingResolversRef.current.push(resolve)
+        reconcileTimerRef.current = window.setTimeout(() => {
+          reconcileTimerRef.current = null
+
+          const runReconcile = async () => {
+            if (inFlightReconcileRef.current) {
+              await inFlightReconcileRef.current
+            }
+
+            const reconcilePromise = performBrowserReconcile(pendingProjectIdRef.current)
+            inFlightReconcileRef.current = reconcilePromise
+
+            try {
+              await reconcilePromise
+            } finally {
+              if (inFlightReconcileRef.current === reconcilePromise) {
+                inFlightReconcileRef.current = null
+              }
+            }
+          }
+
+          void runReconcile().finally(() => {
+            resolvePendingReconcileRequests()
+          })
+        }, delayMs)
+      })
+    },
+    [resolvePendingReconcileRequests]
+  )
+
+  const reconcileActiveProject = useCallback(() => {
+    return scheduleBrowserReconcile(useUiStore.getState().activeProjectId, 0)
+  }, [scheduleBrowserReconcile])
+
   useEffect(() => {
-    void reconcileBrowserState(activeProjectId)
-  }, [activeProjectId])
+    void scheduleBrowserReconcile(activeProjectId, 0)
+  }, [activeProjectId, scheduleBrowserReconcile])
+
+  useEffect(() => {
+    return () => {
+      if (reconcileTimerRef.current !== null) {
+        window.clearTimeout(reconcileTimerRef.current)
+      }
+      resolvePendingReconcileRequests()
+    }
+  }, [resolvePendingReconcileRequests])
 
   useEffect(() => {
     const handleWindowFocus = () => {
@@ -139,7 +206,7 @@ export function useBrowserApiListener(): void {
       const workspace = state.workspaces.find((entry) => entry.id === payload.workspaceId)
 
       if (!project || !workspace) {
-        void reconcileBrowserState(payload.projectId)
+        void scheduleBrowserReconcile(payload.projectId)
         return
       }
 
@@ -201,7 +268,7 @@ export function useBrowserApiListener(): void {
           .activePanels.find((entry) => entry.panelId === payload.panelId)
 
         if (!panel || panel.panelType !== 'browser') {
-          void reconcileActiveProject()
+          void scheduleBrowserReconcile(useUiStore.getState().activeProjectId)
           return
         }
 
@@ -216,7 +283,7 @@ export function useBrowserApiListener(): void {
         .activePanels.find((entry) => entry.panelId === payload.panelId)
 
       if (!panel || panel.panelType !== 'browser') {
-        void reconcileActiveProject()
+        void scheduleBrowserReconcile(useUiStore.getState().activeProjectId)
         return
       }
 
@@ -229,7 +296,7 @@ export function useBrowserApiListener(): void {
         .activePanels.find((entry) => entry.panelId === payload.panelId)
 
       if (!panel || panel.panelType !== 'browser') {
-        void reconcileActiveProject()
+        void scheduleBrowserReconcile(useUiStore.getState().activeProjectId)
         return
       }
 
@@ -251,7 +318,7 @@ export function useBrowserApiListener(): void {
           .activePanels.find((entry) => entry.panelId === payload.panelId)
 
         if (!panel || panel.panelType !== 'browser') {
-          void reconcileActiveProject()
+          void scheduleBrowserReconcile(useUiStore.getState().activeProjectId)
           return
         }
 
@@ -286,5 +353,5 @@ export function useBrowserApiListener(): void {
       removeFocusChanged()
       removeAutomationStateChanged()
     }
-  }, [reconcileActiveProject])
+  }, [reconcileActiveProject, scheduleBrowserReconcile])
 }

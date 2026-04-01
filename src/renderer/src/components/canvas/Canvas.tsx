@@ -11,6 +11,7 @@ import {
   recordDevPerformanceTiming,
   setDevPerformanceCounter
 } from '@renderer/lib/dev-performance'
+import { isBrowserRuntimeHostEnabled } from '@renderer/lib/browser-runtime'
 import { WorkspacePanel } from './WorkspacePanel'
 import { NewCanvasItemMenu } from './NewCanvasItemMenu'
 import { CanvasToolbar } from './CanvasToolbar'
@@ -18,6 +19,7 @@ import { EdgeButton } from './EdgeButton'
 import { cn } from '@renderer/lib/cn'
 import { nanoid } from 'nanoid'
 import type { PanelType, PanelHydrationState, Workspace } from '@shared/workspace.types'
+import { BrowserRuntimeHost } from './BrowserRuntimeHost'
 
 const VIRTUAL_PADDING = 5000
 const STRUCTURED_SCROLL_ALLOWANCE = 288
@@ -112,6 +114,7 @@ export function Canvas() {
   const setActiveWorkspaceId = usePanelRuntimeStore((state) => state.setActiveWorkspaceId)
   const setPanelHydrationState = usePanelRuntimeStore((state) => state.setPanelHydrationState)
   const { projects } = useProjectsStore()
+  const [browserRuntimeHostEnabled] = useState(() => isBrowserRuntimeHostEnabled())
   const didAutoOpenRef = useRef<string | null>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
   const canvasWheelCleanupRef = useRef<(() => void) | null>(null)
@@ -163,7 +166,7 @@ export function Canvas() {
   const paddedInsets = useMemo(
     () => ({
       top: canvasInsets.top + (isFreeCanvas ? VIRTUAL_PADDING : STRUCTURED_SCROLL_ALLOWANCE),
-      right: canvasInsets.right + (isFreeCanvas ? VIRTUAL_PADDING : 0),
+      right: canvasInsets.right + (isFreeCanvas ? VIRTUAL_PADDING : STRUCTURED_SCROLL_ALLOWANCE),
       bottom: canvasInsets.bottom + (isFreeCanvas ? VIRTUAL_PADDING : 0),
       left: canvasInsets.left + (isFreeCanvas ? VIRTUAL_PADDING : STRUCTURED_SCROLL_ALLOWANCE)
     }),
@@ -234,10 +237,20 @@ export function Canvas() {
       let nextHydrationState: PanelHydrationState = panelRuntimeById[panel.panelId]?.hydrationState ?? 'cold'
 
       if (panel.panelType === 'browser') {
-        nextHydrationState =
-          panel.workspaceId === activeWorkspaceId || panel.panelId === focusedBrowserPanelId
-            ? 'live'
-            : 'cold'
+        if (browserRuntimeHostEnabled) {
+          const runtimeMode = panelRuntimeById[panel.panelId]?.browserRuntimeMode ?? 'cold'
+          nextHydrationState =
+            runtimeMode === 'visible'
+              ? 'live'
+              : runtimeMode === 'headless'
+                ? 'preview'
+                : 'cold'
+        } else {
+          nextHydrationState =
+            panel.workspaceId === activeWorkspaceId || panel.panelId === focusedBrowserPanelId
+              ? 'live'
+              : 'cold'
+        }
       } else if (panel.panelType === 't3code') {
         if (runtimePowerMode === 'high') {
           nextHydrationState = 'live'
@@ -276,6 +289,7 @@ export function Canvas() {
     activeWorkspaceId,
     focusedBrowserPanelId,
     focusedPanelId,
+    browserRuntimeHostEnabled,
     panelRuntimeById,
     runtimePowerMode,
     setPanelHydrationState
@@ -1051,6 +1065,7 @@ export function Canvas() {
                             initialWidth={panel.width}
                             initialHeight={panel.height}
                             initialUrl={panel.url}
+                            browserRuntimeHostEnabled={browserRuntimeHostEnabled}
                           />
 
                           {showBottomButton && (
@@ -1095,6 +1110,8 @@ export function Canvas() {
           </div>
         )}
       </div>
+
+      <BrowserRuntimeHost hostEnabled={browserRuntimeHostEnabled} />
 
       {isFreeCanvas && (
         <div className="pointer-events-none absolute bottom-3 left-3 z-20">

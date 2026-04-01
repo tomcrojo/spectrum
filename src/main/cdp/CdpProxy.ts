@@ -418,11 +418,12 @@ export class CdpProxy {
       return
     }
 
-    const listener = (
-      _event: unknown,
-      method: string,
-      params: Record<string, unknown>
-    ) => {
+    const listener = (...args: unknown[]) => {
+      const [, method, params] = args as [
+        unknown,
+        string,
+        Record<string, unknown>
+      ]
       const target = this.getTargetByWebContentsId(webContentsId)
       if (!target) {
         return

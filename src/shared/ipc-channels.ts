@@ -53,6 +53,7 @@ export const BROWSER_CHANNELS = {
   OPEN: 'browser:open',
   OPEN_TEMPORARY: 'browser:open-temporary',
   CLOSE: 'browser:close',
+  SNAPSHOT: 'browser:snapshot',
   RESIZE: 'browser:resize',
   ACTIVATE: 'browser:activate',
   LIST: 'browser:list',

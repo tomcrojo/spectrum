@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef } from 'react'
 import { browserApi } from '@renderer/lib/ipc'
 import {
   enqueueBrowserRuntimeCommand,
-  isBrowserRuntimeHostEnabled,
   registerBrowserSlot
 } from '@renderer/lib/browser-runtime'
 import { incrementDevMountCount } from '@renderer/lib/dev-performance'
@@ -18,6 +17,7 @@ interface BrowserPanelProps {
   autoFocus: boolean
   isResizing: boolean
   hydrationState: 'live' | 'preview' | 'cold'
+  hostEnabled: boolean
 }
 
 const TEMPORARY_POPUP_WIDTH = 350
@@ -40,12 +40,12 @@ export function BrowserPanel({
   initialUrl,
   autoFocus,
   isResizing,
-  hydrationState
+  hydrationState,
+  hostEnabled
 }: BrowserPanelProps) {
   const updatePanelLayout = useWorkspacesStore((state) => state.updatePanelLayout)
   const browserUi = useBrowserUiStore((state) => state.browserUiById[panelId])
   const panelRuntime = usePanelRuntimeStore((state) => state.panelRuntimeById[panelId])
-  const hostEnabled = isBrowserRuntimeHostEnabled()
   const isElectron = typeof window !== 'undefined' && typeof window.api !== 'undefined'
   const webviewRef = useRef<HTMLWebViewElement | null>(null)
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
