@@ -1,17 +1,31 @@
 import { create } from 'zustand'
 import type { PanelHydrationState } from '@shared/workspace.types'
+import type { BrowserRuntimeMode } from '@renderer/lib/browser-runtime'
 
 const MAX_BROWSER_PREVIEWS = 12
 
 export type ThreadNotificationKind = 'requires-input' | 'completed'
 
+export interface PanelFailureState {
+  source: 'render' | 'async-init'
+  summary: string
+  debug?: string | null
+  occurredAt: number
+}
+
 export interface PanelRuntimeState {
   hydrationState: PanelHydrationState
   lastVisibleAt: number | null
   lastHydratedAt: number | null
+  recoveryNonce: number
+  panelFailure?: PanelFailureState
   previewDataUrl?: string
   browserAutomationAttached: boolean
+  browserRuntimeMode: BrowserRuntimeMode
+  browserRegisteredInMain: boolean
   browserWebContentsId?: number
+  browserLastUserInteractionAt: number | null
+  browserLastAgentInteractionAt: number | null
   t3ThreadTitle?: string | null
   t3LastUserMessageAt?: string | null
   t3NotificationKind?: ThreadNotificationKind | null
@@ -26,8 +40,13 @@ interface PanelRuntimeStoreState {
   ensurePanelRuntime: (panelId: string) => void
   prunePanels: (panelIds: string[]) => void
   updatePanelRuntime: (panelId: string, patch: Partial<PanelRuntimeState>) => void
+  setPanelFailure: (panelId: string, failure: PanelFailureState) => void
+  clearPanelFailure: (panelId: string) => void
+  retryPanel: (panelId: string) => void
   setPanelHydrationState: (panelId: string, hydrationState: PanelHydrationState) => void
   markPanelVisible: (panelId: string) => void
+  markBrowserUserInteraction: (panelId: string) => void
+  markBrowserAgentInteraction: (panelId: string) => void
 }
 
 function createInitialRuntimeState(): PanelRuntimeState {
@@ -35,7 +54,12 @@ function createInitialRuntimeState(): PanelRuntimeState {
     hydrationState: 'cold',
     lastVisibleAt: null,
     lastHydratedAt: null,
-    browserAutomationAttached: false
+    recoveryNonce: 0,
+    browserAutomationAttached: false,
+    browserRuntimeMode: 'cold',
+    browserRegisteredInMain: false,
+    browserLastUserInteractionAt: null,
+    browserLastAgentInteractionAt: null
   }
 }
 
@@ -122,6 +146,61 @@ export const usePanelRuntimeStore = create<PanelRuntimeStoreState>((set, get) =>
     }))
   },
 
+  setPanelFailure: (panelId, failure) => {
+    const current = get().panelRuntimeById[panelId] ?? createInitialRuntimeState()
+    const didChange =
+      current.panelFailure?.source !== failure.source ||
+      current.panelFailure?.summary !== failure.summary ||
+      current.panelFailure?.debug !== failure.debug ||
+      current.panelFailure?.occurredAt !== failure.occurredAt
+
+    if (!didChange) {
+      return
+    }
+
+    set((state) => ({
+      panelRuntimeById: {
+        ...state.panelRuntimeById,
+        [panelId]: {
+          ...current,
+          panelFailure: failure
+        }
+      }
+    }))
+  },
+
+  clearPanelFailure: (panelId) => {
+    const current = get().panelRuntimeById[panelId] ?? createInitialRuntimeState()
+    if (!current.panelFailure) {
+      return
+    }
+
+    set((state) => ({
+      panelRuntimeById: {
+        ...state.panelRuntimeById,
+        [panelId]: {
+          ...current,
+          panelFailure: undefined
+        }
+      }
+    }))
+  },
+
+  retryPanel: (panelId) => {
+    const current = get().panelRuntimeById[panelId] ?? createInitialRuntimeState()
+
+    set((state) => ({
+      panelRuntimeById: {
+        ...state.panelRuntimeById,
+        [panelId]: {
+          ...current,
+          panelFailure: undefined,
+          recoveryNonce: current.recoveryNonce + 1
+        }
+      }
+    }))
+  },
+
   setPanelHydrationState: (panelId, hydrationState) => {
     const now = Date.now()
     const current = get().panelRuntimeById[panelId] ?? createInitialRuntimeState()
@@ -146,5 +225,17 @@ export const usePanelRuntimeStore = create<PanelRuntimeStoreState>((set, get) =>
 
   markPanelVisible: (panelId) => {
     get().updatePanelRuntime(panelId, { lastVisibleAt: Date.now() })
+  },
+
+  markBrowserUserInteraction: (panelId) => {
+    get().updatePanelRuntime(panelId, {
+      browserLastUserInteractionAt: Date.now()
+    })
+  },
+
+  markBrowserAgentInteraction: (panelId) => {
+    get().updatePanelRuntime(panelId, {
+      browserLastAgentInteractionAt: Date.now()
+    })
   }
 }))

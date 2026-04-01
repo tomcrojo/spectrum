@@ -9,6 +9,7 @@ import { T3CodePanel } from './T3CodePanel'
 import { BrowserPanel } from './BrowserPanel'
 import { FilePanel } from './FilePanel'
 import { PanelPlaceholder } from './PanelPlaceholder'
+import { PanelContentHost } from './PanelContentHost'
 import { PanelGlyph } from '@renderer/components/shared/PanelIcons'
 import type { PanelHydrationState, PanelType } from '@shared/workspace.types'
 
@@ -473,53 +474,55 @@ function WorkspacePanelImpl({
           setFocusedPanel={setFocusedPanel}
           autoCenterFocusedPanel={autoCenterFocusedPanel}
         />
-        {panelType === 't3code' ? (
-          <T3CodePanel
-            panelId={panelId}
-            workspaceId={workspaceId}
-            projectId={projectId}
-            projectName={projectName}
-            projectPath={cwd}
-            t3ProjectId={t3ProjectId}
-            t3ThreadId={t3ThreadId}
-            theme={resolvedTheme}
-            autoFocus={isFocused}
-            hydrationState={hydrationState === 'preview' ? 'cold' : hydrationState}
-            watchPriority={watchPriority}
-          />
-        ) : panelType === 'terminal' ? (
-          <TerminalPanel
-            terminalId={panelId}
-            cwd={cwd}
-            projectId={projectId}
-            workspaceId={workspaceId}
-            autoFocus={isFocused}
-          />
-        ) : panelType === 'browser' ? (
-          <BrowserPanel
-            panelId={panelId}
-            workspaceId={workspaceId}
-            projectId={projectId}
-            initialUrl={initialUrl}
-            autoFocus={isFocused}
-            isResizing={isResizing}
-            hydrationState={hydrationState}
-          />
-        ) : panelType === 'file' ? (
-          <FilePanel
-            panelId={panelId}
-            workspaceId={workspaceId}
-            projectId={projectId}
-            projectPath={cwd}
-            initialFilePath={filePath}
-            initialCursorLine={cursorLine}
-            initialCursorColumn={cursorColumn}
-            autoFocus={isFocused}
-            onChromeStateChange={setFileChromeState}
-          />
-        ) : (
-          <PanelPlaceholder type={panelType} />
-        )}
+        <PanelContentHost panelId={panelId}>
+          {panelType === 't3code' ? (
+            <T3CodePanel
+              panelId={panelId}
+              workspaceId={workspaceId}
+              projectId={projectId}
+              projectName={projectName}
+              projectPath={cwd}
+              t3ProjectId={t3ProjectId}
+              t3ThreadId={t3ThreadId}
+              theme={resolvedTheme}
+              autoFocus={isFocused}
+              hydrationState={hydrationState === 'preview' ? 'cold' : hydrationState}
+              watchPriority={watchPriority}
+            />
+          ) : panelType === 'terminal' ? (
+            <TerminalPanel
+              terminalId={panelId}
+              cwd={cwd}
+              projectId={projectId}
+              workspaceId={workspaceId}
+              autoFocus={isFocused}
+            />
+          ) : panelType === 'browser' ? (
+            <BrowserPanel
+              panelId={panelId}
+              workspaceId={workspaceId}
+              projectId={projectId}
+              initialUrl={initialUrl}
+              autoFocus={isFocused}
+              isResizing={isResizing}
+              hydrationState={hydrationState}
+            />
+          ) : panelType === 'file' ? (
+            <FilePanel
+              panelId={panelId}
+              workspaceId={workspaceId}
+              projectId={projectId}
+              projectPath={cwd}
+              initialFilePath={filePath}
+              initialCursorLine={cursorLine}
+              initialCursorColumn={cursorColumn}
+              autoFocus={isFocused}
+              onChromeStateChange={setFileChromeState}
+            />
+          ) : (
+            <PanelPlaceholder type={panelType} />
+          )}
+        </PanelContentHost>
       </div>
 
       <div onMouseDown={onResizeStart} className="absolute bottom-0 right-0 z-20 h-6 w-6 cursor-se-resize" style={{ touchAction: 'none' }}>

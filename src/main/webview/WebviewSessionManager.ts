@@ -11,6 +11,22 @@ export function isKnownWebviewId(webContentsId: number): boolean {
   return knownWebviewIds.has(webContentsId)
 }
 
+export function clearKnownWebviews(): void {
+  knownWebviewIds.clear()
+}
+
+function describePanelScope(webContentsId: number): string {
+  const panel = getBrowserPanelByWebContentsId(webContentsId)
+  if (!panel) {
+    console.warn(
+      `[webview] Unable to resolve browser panel for guest ${webContentsId}; dropping panel-scoped work`
+    )
+    return `guest:${webContentsId}`
+  }
+
+  return `panel:${panel.panelId} workspace:${panel.workspaceId}`
+}
+
 export function initWebviewSecurity(mainWindow: BrowserWindow): void {
   mainWindow.webContents.session.setPermissionRequestHandler(
     (_wc, permission, callback) => {
@@ -36,6 +52,20 @@ export function initWebviewSecurity(mainWindow: BrowserWindow): void {
   mainWindow.webContents.on('did-attach-webview', (_event, guestWebContents) => {
     const guestId = guestWebContents.id
     knownWebviewIds.add(guestId)
+
+    guestWebContents.on('render-process-gone', (_event, details) => {
+      console.warn(
+        `[webview] render-process-gone ${describePanelScope(guestId)} reason=${details.reason} exitCode=${details.exitCode}`
+      )
+    })
+
+    guestWebContents.on('unresponsive', () => {
+      console.warn(`[webview] unresponsive ${describePanelScope(guestId)}`)
+    })
+
+    guestWebContents.on('responsive', () => {
+      console.info(`[webview] responsive ${describePanelScope(guestId)}`)
+    })
 
     guestWebContents.once('destroyed', () => {
       knownWebviewIds.delete(guestId)

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { nanoid } from 'nanoid'
 import type { OpenFileInPanelInput, OpenFileInPanelResult } from '@shared/file.types'
+import type { BrowserPanelSnapshot } from '@renderer/lib/browser-runtime'
 import type {
   Workspace,
   CreateWorkspaceInput,
@@ -10,7 +11,8 @@ import type {
   WorkspaceLayoutState,
   PanelOpenedBy
 } from '@shared/workspace.types'
-import { filesApi, workspacesApi } from '@renderer/lib/ipc'
+import { browserApi, filesApi, workspacesApi } from '@renderer/lib/ipc'
+import { useBrowserUiStore } from './browser-ui.store'
 import { usePanelRuntimeStore } from './panel-runtime.store'
 
 export interface ActiveWorkspacePanel {
@@ -40,6 +42,7 @@ interface WorkspacesState {
   activePanels: ActiveWorkspacePanel[]
   focusedPanelId: string | null
   focusedBrowserPanelId: string | null
+  focusedBrowserPanelByWorkspace: Record<string, string | null>
   lastFocusedPanelByWorkspace: Record<string, string>
   dirtyPanelIds: Record<string, boolean>
   closePanelGuardById: Record<string, () => boolean | Promise<boolean>>
@@ -62,9 +65,13 @@ interface WorkspacesState {
   closeActivePanel: (panelId: string) => void
   requestClosePanel: (panelId: string) => Promise<void>
   setFocusedPanel: (panelId: string | null) => void
-  setFocusedBrowserPanel: (panelId: string | null) => void
+  setFocusedBrowserPanel: (panelId: string | null, workspaceId?: string | null) => void
   restoreFocusedBrowserPanel: (fromTemporaryPanelId: string) => void
   focusWorkspace: (workspaceId: string) => void
+  reconcileBrowserPanels: (
+    panels: BrowserPanelSnapshot[],
+    focusedByWorkspace: Record<string, string | null>
+  ) => void
   openFilePanel: (input: OpenFileInPanelInput | OpenFileInPanelResult) => Promise<string>
   setPanelDirty: (panelId: string, isDirty: boolean) => void
   registerPanelCloseGuard: (
@@ -281,10 +288,90 @@ function isNewerTimestamp(
 
 function syncRuntimePanels(panels: ActiveWorkspacePanel[]): void {
   const runtimeStore = usePanelRuntimeStore.getState()
+  const browserUiStore = useBrowserUiStore.getState()
+  const browserPanelIds: string[] = []
   for (const panel of panels) {
     runtimeStore.ensurePanelRuntime(panel.panelId)
+    if (panel.panelType === 'browser') {
+      browserPanelIds.push(panel.panelId)
+      browserUiStore.ensureBrowserUi(panel.panelId, panel.url)
+      if (panel.url) {
+        browserUiStore.syncUrlFromRuntime(panel.panelId, panel.url)
+      }
+    }
   }
   runtimeStore.prunePanels(panels.map((panel) => panel.panelId))
+  browserUiStore.pruneBrowserUi(browserPanelIds)
+}
+
+function pruneFocusedBrowserPanelMap(
+  focusedByWorkspace: Record<string, string | null>,
+  panels: ActiveWorkspacePanel[]
+): Record<string, string | null> {
+  const nextMap: Record<string, string | null> = {}
+  const browserPanelIds = new Set(
+    panels
+      .filter((panel) => panel.panelType === 'browser')
+      .map((panel) => panel.panelId)
+  )
+
+  for (const [workspaceId, panelId] of Object.entries(focusedByWorkspace)) {
+    if (!panelId) {
+      continue
+    }
+
+    if (browserPanelIds.has(panelId)) {
+      nextMap[workspaceId] = panelId
+    }
+  }
+
+  return nextMap
+}
+
+function resolveFocusedBrowserPanelId(
+  focusedByWorkspace: Record<string, string | null>,
+  panels: ActiveWorkspacePanel[]
+): string | null {
+  const browserPanelIds = new Set(
+    panels
+      .filter((panel) => panel.panelType === 'browser')
+      .map((panel) => panel.panelId)
+  )
+  const activeWorkspaceId = usePanelRuntimeStore.getState().activeWorkspaceId
+
+  if (activeWorkspaceId) {
+    const activeWorkspaceFocusedPanelId = focusedByWorkspace[activeWorkspaceId]
+    if (activeWorkspaceFocusedPanelId && browserPanelIds.has(activeWorkspaceFocusedPanelId)) {
+      return activeWorkspaceFocusedPanelId
+    }
+  }
+
+  for (const panelId of Object.values(focusedByWorkspace)) {
+    if (panelId && browserPanelIds.has(panelId)) {
+      return panelId
+    }
+  }
+
+  return null
+}
+
+function insertBrowserPanel(
+  panels: ActiveWorkspacePanel[],
+  panel: ActiveWorkspacePanel
+): ActiveWorkspacePanel[] {
+  const preferredAfterId = panel.parentPanelId ?? panel.returnToPanelId ?? null
+  if (preferredAfterId && panels.some((entry) => entry.panelId === preferredAfterId)) {
+    return insertPanelAtPosition(panels, panel, preferredAfterId)
+  }
+
+  const workspacePanels = panels.filter((entry) => entry.workspaceId === panel.workspaceId)
+  const lastWorkspacePanel = workspacePanels.at(-1)
+
+  if (!lastWorkspacePanel) {
+    return [...panels, panel]
+  }
+
+  return insertPanelAtPosition(panels, panel, lastWorkspacePanel.panelId)
 }
 
 function scheduleSave(workspaceId: string, getState: () => WorkspacesState): void {
@@ -403,6 +490,7 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
   activePanels: [],
   focusedPanelId: null,
   focusedBrowserPanelId: null,
+  focusedBrowserPanelByWorkspace: {},
   lastFocusedPanelByWorkspace: {},
   dirtyPanelIds: {},
   closePanelGuardById: {},
@@ -472,11 +560,14 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
         workspaces: state.workspaces.filter((entry) => entry.id !== id),
         activePanels: remainingPanels,
         focusedPanelId: nextFocusedPanelId,
-        focusedBrowserPanelId:
-          state.focusedBrowserPanelId &&
-          remainingPanels.some((panel) => panel.panelId === state.focusedBrowserPanelId)
-            ? state.focusedBrowserPanelId
-            : null,
+        focusedBrowserPanelByWorkspace: pruneFocusedBrowserPanelMap(
+          state.focusedBrowserPanelByWorkspace,
+          remainingPanels
+        ),
+        focusedBrowserPanelId: resolveFocusedBrowserPanelId(
+          pruneFocusedBrowserPanelMap(state.focusedBrowserPanelByWorkspace, remainingPanels),
+          remainingPanels
+        ),
         dirtyPanelIds: Object.fromEntries(
           Object.entries(state.dirtyPanelIds).filter(([panelId]) =>
             remainingPanels.some((panel) => panel.panelId === panelId)
@@ -528,11 +619,14 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
         ),
         activePanels: nextPanels,
         focusedPanelId: nextFocusedPanelId,
-        focusedBrowserPanelId:
-          state.focusedBrowserPanelId &&
-          nextPanels.some((panel) => panel.panelId === state.focusedBrowserPanelId)
-            ? state.focusedBrowserPanelId
-            : null,
+        focusedBrowserPanelByWorkspace: pruneFocusedBrowserPanelMap(
+          state.focusedBrowserPanelByWorkspace,
+          nextPanels
+        ),
+        focusedBrowserPanelId: resolveFocusedBrowserPanelId(
+          pruneFocusedBrowserPanelMap(state.focusedBrowserPanelByWorkspace, nextPanels),
+          nextPanels
+        ),
         lastFocusedPanelByWorkspace: Object.fromEntries(
           Object.entries(state.lastFocusedPanelByWorkspace).filter(([workspaceId]) => workspaceId !== id)
         )
@@ -603,11 +697,14 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
       return {
         activePanels: mergedPanels,
         focusedPanelId: preferredPanelId,
-        focusedBrowserPanelId:
-          state.focusedBrowserPanelId &&
-          mergedPanels.some((panel) => panel.panelId === state.focusedBrowserPanelId)
-            ? state.focusedBrowserPanelId
-            : null,
+        focusedBrowserPanelByWorkspace: pruneFocusedBrowserPanelMap(
+          state.focusedBrowserPanelByWorkspace,
+          mergedPanels
+        ),
+        focusedBrowserPanelId: resolveFocusedBrowserPanelId(
+          pruneFocusedBrowserPanelMap(state.focusedBrowserPanelByWorkspace, mergedPanels),
+          mergedPanels
+        ),
         lastFocusedPanelByWorkspace:
           preferredPanelId
             ? {
@@ -625,6 +722,7 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
       activePanels: panels,
       focusedPanelId: null,
       focusedBrowserPanelId: null,
+      focusedBrowserPanelByWorkspace: {},
       lastFocusedPanelByWorkspace: buildInitialLastFocusedPanelMap(panels)
     })
   },
@@ -642,8 +740,6 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
       return {
         activePanels: nextPanels,
         focusedPanelId: panel.panelId,
-        focusedBrowserPanelId:
-          panel.panelType === 'browser' ? panel.panelId : state.focusedBrowserPanelId,
         lastFocusedPanelByWorkspace: {
           ...state.lastFocusedPanelByWorkspace,
           [panel.workspaceId]: panel.panelId
@@ -662,11 +758,7 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
       const nextPanels = [...state.activePanels, panel]
       syncRuntimePanels(nextPanels)
       return {
-        activePanels: nextPanels,
-        focusedBrowserPanelId:
-          panel.panelType === 'browser' && !state.focusedBrowserPanelId
-            ? panel.panelId
-            : state.focusedBrowserPanelId
+        activePanels: nextPanels
       }
     })
     scheduleSave(panel.workspaceId, get)
@@ -686,8 +778,6 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
       return {
         activePanels: nextPanels,
         focusedPanelId: panel.panelId,
-        focusedBrowserPanelId:
-          panel.panelType === 'browser' ? panel.panelId : state.focusedBrowserPanelId,
         lastFocusedPanelByWorkspace: {
           ...state.lastFocusedPanelByWorkspace,
           [panel.workspaceId]: panel.panelId
@@ -707,11 +797,7 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
 
       syncRuntimePanels(nextPanels)
       return {
-        activePanels: nextPanels,
-        focusedBrowserPanelId:
-          panel.panelType === 'browser' && panel.isTemporary
-            ? panel.panelId
-            : state.focusedBrowserPanelId
+        activePanels: nextPanels
       }
     })
     scheduleSave(panel.workspaceId, get)
@@ -732,8 +818,7 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
       syncRuntimePanels(nextPanels)
 
       return {
-        activePanels: nextPanels,
-        focusedBrowserPanelId: nextPanel.panelId
+        activePanels: nextPanels
       }
     })
   },
@@ -758,8 +843,6 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
       return {
         activePanels: nextPanels,
         focusedPanelId: panel.panelId,
-        focusedBrowserPanelId:
-          panel.panelType === 'browser' ? panel.panelId : state.focusedBrowserPanelId,
         lastFocusedPanelByWorkspace: {
           ...state.lastFocusedPanelByWorkspace,
           [panel.workspaceId]: panel.panelId
@@ -791,21 +874,28 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
 
       syncRuntimePanels(nextPanels)
       setActiveWorkspaceFromPanel(nextFocusedPanelId, nextPanels)
-
-      return {
-        activePanels: nextPanels,
-        focusedPanelId: nextFocusedPanelId,
-        focusedBrowserPanelId:
-          state.focusedBrowserPanelId === panelId && panel
-            ? getPreferredBrowserPanelId(
+      const nextFocusedBrowserPanelByWorkspace = pruneFocusedBrowserPanelMap(
+        panel && state.focusedBrowserPanelByWorkspace[panel.workspaceId] === panelId
+          ? {
+              ...state.focusedBrowserPanelByWorkspace,
+              [panel.workspaceId]: getPreferredBrowserPanelId(
                 panel.workspaceId,
                 nextPanels,
                 panel.returnToPanelId ?? panel.parentPanelId ?? null
               )
-            : state.focusedBrowserPanelId &&
-                nextPanels.some((entry) => entry.panelId === state.focusedBrowserPanelId)
-              ? state.focusedBrowserPanelId
-              : null,
+            }
+          : state.focusedBrowserPanelByWorkspace,
+        nextPanels
+      )
+
+      return {
+        activePanels: nextPanels,
+        focusedPanelId: nextFocusedPanelId,
+        focusedBrowserPanelByWorkspace: nextFocusedBrowserPanelByWorkspace,
+        focusedBrowserPanelId: resolveFocusedBrowserPanelId(
+          nextFocusedBrowserPanelByWorkspace,
+          nextPanels
+        ),
         dirtyPanelIds: Object.fromEntries(
           Object.entries(state.dirtyPanelIds).filter(([entryPanelId]) => entryPanelId !== panelId)
         ),
@@ -851,6 +941,21 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
       }
     }
 
+    const panel = get().activePanels.find((entry) => entry.panelId === panelId)
+    if (panel?.panelType === 'browser') {
+      try {
+        const closed = await browserApi.close({
+          workspaceId: panel.workspaceId,
+          panelId
+        })
+        if (closed) {
+          return
+        }
+      } catch (error) {
+        console.error(`[browser] Failed to close browser panel ${panelId}:`, error)
+      }
+    }
+
     get().closeActivePanel(panelId)
   },
 
@@ -869,8 +974,6 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
 
       return {
         focusedPanelId: panelId,
-        focusedBrowserPanelId:
-          panel.panelType === 'browser' ? panelId : state.focusedBrowserPanelId,
         lastFocusedPanelByWorkspace: {
           ...state.lastFocusedPanelByWorkspace,
           [panel.workspaceId]: panelId
@@ -879,20 +982,45 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
     })
   },
 
-  setFocusedBrowserPanel: (panelId) => {
+  setFocusedBrowserPanel: (panelId, workspaceId) => {
     set((state) => {
-      if (!panelId) {
+      if (!panelId && !workspaceId) {
         return state.focusedBrowserPanelId === null ? state : { focusedBrowserPanelId: null }
       }
 
-      const panel = state.activePanels.find((entry) => entry.panelId === panelId)
-      if (!panel || panel.panelType !== 'browser') {
+      const panel = panelId
+        ? state.activePanels.find((entry) => entry.panelId === panelId)
+        : null
+      const resolvedWorkspaceId = workspaceId ?? panel?.workspaceId ?? null
+
+      if (panelId && (!panel || panel.panelType !== 'browser' || !resolvedWorkspaceId)) {
         return state
       }
 
-      return state.focusedBrowserPanelId === panelId
+      const nextFocusedBrowserPanelByWorkspace = pruneFocusedBrowserPanelMap(
+        resolvedWorkspaceId
+          ? {
+              ...state.focusedBrowserPanelByWorkspace,
+              [resolvedWorkspaceId]: panelId
+            }
+          : state.focusedBrowserPanelByWorkspace,
+        state.activePanels
+      )
+      const nextFocusedBrowserPanelId = resolveFocusedBrowserPanelId(
+        nextFocusedBrowserPanelByWorkspace,
+        state.activePanels
+      )
+      const currentFocusedWorkspaceId = resolvedWorkspaceId
+        ? state.focusedBrowserPanelByWorkspace[resolvedWorkspaceId] ?? null
+        : null
+
+      return state.focusedBrowserPanelId === nextFocusedBrowserPanelId &&
+        currentFocusedWorkspaceId === panelId
         ? state
-        : { focusedBrowserPanelId: panelId }
+        : {
+            focusedBrowserPanelByWorkspace: nextFocusedBrowserPanelByWorkspace,
+            focusedBrowserPanelId: nextFocusedBrowserPanelId
+          }
     })
   },
 
@@ -908,10 +1036,23 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
         state.activePanels,
         panel.returnToPanelId ?? panel.parentPanelId ?? null
       )
+      const nextFocusedBrowserPanelByWorkspace = pruneFocusedBrowserPanelMap(
+        {
+          ...state.focusedBrowserPanelByWorkspace,
+          [panel.workspaceId]: nextFocusedBrowserPanelId
+        },
+        state.activePanels
+      )
 
       return nextFocusedBrowserPanelId === state.focusedBrowserPanelId
         ? state
-        : { focusedBrowserPanelId: nextFocusedBrowserPanelId }
+        : {
+            focusedBrowserPanelByWorkspace: nextFocusedBrowserPanelByWorkspace,
+            focusedBrowserPanelId: resolveFocusedBrowserPanelId(
+              nextFocusedBrowserPanelByWorkspace,
+              state.activePanels
+            )
+          }
     })
   },
 
@@ -926,12 +1067,104 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
 
       return {
         focusedPanelId: panelId,
+        focusedBrowserPanelId:
+          resolveFocusedBrowserPanelId(state.focusedBrowserPanelByWorkspace, state.activePanels),
         lastFocusedPanelByWorkspace: {
           ...state.lastFocusedPanelByWorkspace,
           [workspaceId]: panelId
         }
       }
     })
+  },
+
+  reconcileBrowserPanels: (panels, focusedByWorkspace) => {
+    const snapshotById = new Map(panels.map((panel) => [panel.panelId, panel]))
+    const runtimeStore = usePanelRuntimeStore.getState()
+    useBrowserUiStore.getState().reconcileSnapshots(panels)
+
+    set((state) => {
+      let nextPanels = state.activePanels.reduce<ActiveWorkspacePanel[]>((acc, panel) => {
+        if (panel.panelType !== 'browser') {
+          acc.push(panel)
+          return acc
+        }
+
+        const snapshot = snapshotById.get(panel.panelId)
+        if (!snapshot) {
+          if (!runtimeStore.panelRuntimeById[panel.panelId]?.browserRegisteredInMain) {
+            acc.push(panel)
+          }
+          return acc
+        }
+
+        acc.push({
+          ...panel,
+          workspaceId: snapshot.workspaceId,
+          panelTitle: snapshot.panelTitle?.trim() || panel.panelTitle,
+          isTemporary: snapshot.isTemporary,
+          parentPanelId: snapshot.parentPanelId,
+          returnToPanelId: snapshot.returnToPanelId,
+          openedBy: snapshot.openedBy,
+          url: snapshot.url,
+          width: snapshot.width,
+          height: snapshot.height
+        })
+        return acc
+      }, [])
+
+      for (const snapshot of panels) {
+        if (nextPanels.some((panel) => panel.panelId === snapshot.panelId)) {
+          continue
+        }
+
+        const workspace = state.workspaces.find((entry) => entry.id === snapshot.workspaceId)
+        const existingWorkspacePanel = state.activePanels.find(
+          (entry) => entry.workspaceId === snapshot.workspaceId
+        )
+
+        if (!workspace && !existingWorkspacePanel) {
+          continue
+        }
+
+        nextPanels = insertBrowserPanel(nextPanels, {
+          panelId: snapshot.panelId,
+          workspaceId: snapshot.workspaceId,
+          workspaceName:
+            workspace?.name ?? existingWorkspacePanel?.workspaceName ?? 'Workspace',
+          cwd: existingWorkspacePanel?.cwd ?? '',
+          panelType: 'browser',
+          panelTitle: snapshot.panelTitle?.trim() || 'Browser',
+          isTemporary: snapshot.isTemporary,
+          parentPanelId: snapshot.parentPanelId,
+          returnToPanelId: snapshot.returnToPanelId,
+          openedBy: snapshot.openedBy,
+          url: snapshot.url,
+          width: snapshot.width,
+          height: snapshot.height
+        })
+      }
+
+      syncRuntimePanels(nextPanels)
+      const nextFocusedBrowserPanelByWorkspace = pruneFocusedBrowserPanelMap(
+        focusedByWorkspace,
+        nextPanels
+      )
+
+      return {
+        activePanels: nextPanels,
+        focusedBrowserPanelByWorkspace: nextFocusedBrowserPanelByWorkspace,
+        focusedBrowserPanelId: resolveFocusedBrowserPanelId(
+          nextFocusedBrowserPanelByWorkspace,
+          nextPanels
+        )
+      }
+    })
+
+    for (const panel of panels) {
+      runtimeStore.updatePanelRuntime(panel.panelId, {
+        browserRegisteredInMain: true
+      })
+    }
   },
 
   openFilePanel: async (input) => {
@@ -961,9 +1194,9 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
         cursorColumn: normalized.column
       }
 
-      const focusedPanel =
-        state.focusedPanelId &&
-        state.activePanels.find((panel) => panel.panelId === state.focusedPanelId)
+      const focusedPanel = state.focusedPanelId
+        ? state.activePanels.find((panel) => panel.panelId === state.focusedPanelId) ?? null
+        : null
       const nextPanels = [...state.activePanels]
 
       if (focusedPanel?.workspaceId === normalized.workspaceId) {
@@ -1089,6 +1322,7 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
       activePanels: panels,
       focusedPanelId: null,
       focusedBrowserPanelId: null,
+      focusedBrowserPanelByWorkspace: {},
       lastFocusedPanelByWorkspace: buildInitialLastFocusedPanelMap(panels)
     })
   }

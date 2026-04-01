@@ -113,9 +113,9 @@ export function T3CodePanel({
   const followUpBehavior = useUiStore((state) => state.followUpBehavior)
   const assistantStreaming = useUiStore((state) => state.assistantStreaming)
   const updatePanelRuntime = usePanelRuntimeStore((state) => state.updatePanelRuntime)
+  const setPanelFailure = usePanelRuntimeStore((state) => state.setPanelFailure)
   const addToast = useNotificationsStore((state) => state.addToast)
   const [binding, setBinding] = useState<ThreadBinding | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [iframeUrl, setIframeUrl] = useState<string | null>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const parkedThreadTitle = usePanelRuntimeStore((state) => state.panelRuntimeById[panelId]?.t3ThreadTitle)
@@ -154,7 +154,7 @@ export function T3CodePanel({
 
     let cancelled = false
 
-    const applyThreadInfo = (threadInfo: ThreadInfo) => {
+    const applyThreadInfo = (threadInfo: Omit<ThreadInfo, 'url'>) => {
       if (cancelled) {
         return
       }
@@ -177,6 +177,7 @@ export function T3CodePanel({
     t3codeApi
       .ensurePanelThread({
         panelId,
+        workspaceId,
         spectrumProjectId: projectId,
         projectPath,
         projectName,
@@ -193,7 +194,6 @@ export function T3CodePanel({
           t3ProjectId: runtime.t3ProjectId,
           t3ThreadId: runtime.t3ThreadId
         })
-        setError(null)
 
         if (
           runtime.t3ProjectId !== t3ProjectId ||
@@ -213,7 +213,12 @@ export function T3CodePanel({
       })
       .catch((nextError: Error) => {
         if (!cancelled) {
-          setError(nextError.message)
+          setPanelFailure(panelId, {
+            source: 'async-init',
+            summary: 'The embedded T3Code panel failed to start.',
+            debug: nextError.stack ?? nextError.message,
+            occurredAt: Date.now()
+          })
         }
       })
 
@@ -226,6 +231,7 @@ export function T3CodePanel({
     projectId,
     projectName,
     projectPath,
+    setPanelFailure,
     t3ProjectId,
     t3ThreadId,
     updatePanelLayout,
@@ -403,7 +409,12 @@ export function T3CodePanel({
       }
 
       if (!cancelled) {
-        setError('Timed out waiting for the embedded T3Code app to become reachable')
+        setPanelFailure(panelId, {
+          source: 'async-init',
+          summary: 'The embedded T3Code app did not become reachable in time.',
+          debug: `Base URL: ${binding.baseUrl}`,
+          occurredAt: Date.now()
+        })
       }
     }
 
@@ -412,7 +423,7 @@ export function T3CodePanel({
     return () => {
       cancelled = true
     }
-  }, [binding?.baseUrl, hydrationState, themedUrl])
+  }, [binding?.baseUrl, hydrationState, panelId, setPanelFailure, themedUrl])
 
   useEffect(() => {
     postTheme()
@@ -467,17 +478,6 @@ export function T3CodePanel({
       iframeRef.current?.focus({ preventScroll: true })
     })
   }, [autoFocus, hydrationState, iframeUrl])
-
-  if (error) {
-    return (
-      <div className="flex h-full items-center justify-center px-6 text-center">
-        <div>
-          <p className="mb-2 text-sm text-red-400">Failed to start T3Code</p>
-          <p className="text-xs text-text-muted">{error}</p>
-        </div>
-      </div>
-    )
-  }
 
   if (hydrationState !== 'live') {
     return (
