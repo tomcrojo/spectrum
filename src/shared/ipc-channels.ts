@@ -7,6 +7,12 @@ export const PROJECT_CHANNELS = {
   DELETE: 'project:delete'
 } as const
 
+export const APP_CHANNELS = {
+  ZOOM_IN: 'app:zoom-in',
+  ZOOM_OUT: 'app:zoom-out',
+  RESET_ZOOM: 'app:reset-zoom'
+} as const
+
 // Task channels
 export const TASK_CHANNELS = {
   LIST: 'task:list',

@@ -684,6 +684,8 @@ export function Canvas() {
       return
     }
 
+    event.currentTarget.focus({ preventScroll: true })
+
     const canvas = canvasRef.current
     if (!canvas) return
 
@@ -982,9 +984,10 @@ export function Canvas() {
       <div
         ref={setCanvasNode}
         data-canvas-scroll-root="true"
+        tabIndex={-1}
         onMouseDown={handleCanvasPointerDown}
         className={cn(
-          'canvas-grid absolute inset-0 overflow-auto',
+          'canvas-grid absolute inset-0 overflow-auto focus:outline-none',
           isFreeCanvas
             ? isPanning
               ? 'cursor-grabbing select-none'

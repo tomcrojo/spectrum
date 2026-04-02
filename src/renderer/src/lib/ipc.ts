@@ -1,4 +1,5 @@
 import {
+  APP_CHANNELS,
   PROJECT_CHANNELS,
   TASK_CHANNELS,
   WORKSPACE_CHANNELS,
@@ -38,6 +39,12 @@ import { transport } from './transport'
 
 function invoke<T>(channel: string, ...args: any[]): Promise<T> {
   return transport.invoke(channel, ...args)
+}
+
+export const appApi = {
+  zoomIn: () => invoke<number>(APP_CHANNELS.ZOOM_IN),
+  zoomOut: () => invoke<number>(APP_CHANNELS.ZOOM_OUT),
+  resetZoom: () => invoke<number>(APP_CHANNELS.RESET_ZOOM)
 }
 
 // Projects
