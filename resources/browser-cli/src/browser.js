@@ -41,10 +41,96 @@ async function buildTargetIdToPageMap(browser) {
   return new Map(targetPairs.filter(([targetId]) => Boolean(targetId)));
 }
 
+function withTimeout(promise, timeoutMs) {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return promise;
+  }
+
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`cleanup timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+    }),
+  ]);
+}
+
 export class BrowserCli {
-  constructor(api) {
+  constructor(api, options = {}) {
     this.api = api;
     this.aliasStateFile = path.join(path.dirname(getBrowserCliTmpDir()), "state.json");
+    this.logger = options.logger ?? console;
+    this.scriptExecutionDepth = 0;
+    this.ownedPanelIds = new Set();
+  }
+
+  beginScriptExecution() {
+    this.scriptExecutionDepth += 1;
+  }
+
+  registerOwnedPanel(panelId) {
+    if (this.scriptExecutionDepth <= 0 || typeof panelId !== "string" || panelId.length === 0) {
+      return;
+    }
+
+    this.ownedPanelIds.add(panelId);
+  }
+
+  deregisterOwnedPanel(panelId) {
+    this.ownedPanelIds.delete(panelId);
+  }
+
+  async finishScriptExecution(options = {}) {
+    if (this.scriptExecutionDepth <= 0) {
+      return;
+    }
+
+    this.scriptExecutionDepth -= 1;
+    if (this.scriptExecutionDepth > 0) {
+      return;
+    }
+
+    const cleanupTimeoutMs = Number.isFinite(options.cleanupTimeoutMs)
+      ? options.cleanupTimeoutMs
+      : 5_000;
+    const ownedPanelIds = Array.from(this.ownedPanelIds);
+    this.ownedPanelIds.clear();
+
+    await Promise.allSettled(
+      ownedPanelIds.map(async (panelId) => {
+        try {
+          await withTimeout(Promise.resolve(this.closePanel(panelId)), cleanupTimeoutMs);
+        } catch (error) {
+          this.logger?.error?.(
+            `[browser-cli] cleanup timed out or failed for panel ${panelId}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      })
+    );
+  }
+
+  trackOwnedPage(page, panelId) {
+    return new Proxy(page, {
+      get: (target, prop, receiver) => {
+        if (prop === "close") {
+          return async () => {
+            try {
+              return await target.close();
+            } finally {
+              this.deregisterOwnedPanel(panelId);
+            }
+          };
+        }
+
+        const value = Reflect.get(target, prop, receiver);
+        if (typeof value === "function") {
+          return value.bind(target);
+        }
+
+        return value;
+      },
+    });
   }
 
   async loadAliasState() {
@@ -280,13 +366,19 @@ export class BrowserCli {
   }
 
   async newPage(options = {}) {
+    const shouldAutoCleanup = options.persistent !== true;
     const panel =
-      options.persistent === true
-        ? await this.openPanel({ ...options, openedBy: options.openedBy ?? "agent" })
-        : await this.openTemporaryPanel({ ...options, openedBy: options.openedBy ?? "agent" });
+      shouldAutoCleanup
+        ? await this.openTemporaryPanel({ ...options, openedBy: options.openedBy ?? "agent" })
+        : await this.openPanel({ ...options, openedBy: options.openedBy ?? "agent" });
+
+    if (shouldAutoCleanup) {
+      this.registerOwnedPanel(panel.panelId);
+    }
 
     try {
-      return await this.waitForPanel(panel.panelId);
+      const page = await this.waitForPanel(panel.panelId);
+      return shouldAutoCleanup ? this.trackOwnedPage(page, panel.panelId) : page;
     } catch (error) {
       if (error instanceof BrowserCliError && error.code === "TARGET_NOT_READY") {
         throw new BrowserCliError(
@@ -315,6 +407,7 @@ export class BrowserCli {
     }
 
     await this.api.post("/browser/close", { panelId: summary.panelId });
+    this.deregisterOwnedPanel(summary.panelId);
 
     const aliases = await this.loadAliasState();
     const nextAliases = Object.fromEntries(
