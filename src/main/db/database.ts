@@ -13,7 +13,7 @@ export function getDb(): Database.Database {
 }
 
 export function initDatabase(): Database.Database {
-  const dbPath = join(app.getPath('userData'), 'spectrum.db')
+  const dbPath = process.env.SPECTRUM_DB_PATH || join(app.getPath('userData'), 'spectrum.db')
   db = new Database(dbPath)
 
   // Enable WAL mode for better read performance

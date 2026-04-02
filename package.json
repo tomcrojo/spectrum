@@ -20,6 +20,7 @@
     "dev": "unset ELECTRON_RUN_AS_NODE && electron-vite dev",
     "dev:server": "node scripts/dev-server.cjs",
     "dev:browser": "node scripts/dev-browser.cjs",
+    "benchmark:perf": "node scripts/perf-benchmark.mjs",
     "typecheck:node": "tsc -p tsconfig.node.json --noEmit",
     "typecheck:web": "tsc -p tsconfig.web.json --noEmit",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
