@@ -107,6 +107,10 @@ var BROWSER_CHANNELS = {
 // src/main/t3code/config.ts
 var import_fs = require("fs");
 var import_path = require("path");
+var T3CODE_ENTRYPOINT_CANDIDATES = [
+  "apps/server/dist/bin.mjs",
+  "apps/server/dist/index.mjs"
+];
 function findProjectRoot() {
   const candidates = [
     process.cwd(),
@@ -167,11 +171,26 @@ function findExistingT3CodeSourcePath(preferredPath) {
   }
   return (0, import_path.resolve)(preferredPath ?? (0, import_path.join)(projectRoot, "resources", "t3code"));
 }
+function resolveT3CodeEntrypoint(sourcePath, preferredEntrypoint) {
+  const candidates = [
+    preferredEntrypoint,
+    ...T3CODE_ENTRYPOINT_CANDIDATES
+  ].filter((value) => Boolean(value));
+  for (const candidate of candidates) {
+    if ((0, import_fs.existsSync)((0, import_path.join)(sourcePath, candidate))) {
+      return candidate;
+    }
+  }
+  return preferredEntrypoint ?? T3CODE_ENTRYPOINT_CANDIDATES[0];
+}
+var defaultSourcePath = findExistingT3CodeSourcePath(
+  (0, import_path.join)(projectRoot, "resources", "t3code")
+);
 var defaultConfig = {
-  sourcePath: findExistingT3CodeSourcePath((0, import_path.join)(projectRoot, "resources", "t3code")),
+  sourcePath: defaultSourcePath,
   installCommand: "bun install --frozen-lockfile",
   buildCommand: "bun run --cwd apps/web build && bun run --cwd apps/server build",
-  entrypoint: "apps/server/dist/index.mjs"
+  entrypoint: resolveT3CodeEntrypoint(defaultSourcePath)
 };
 var cachedConfig = null;
 function getT3CodeConfig() {
@@ -185,13 +204,17 @@ function getT3CodeConfig() {
     const parsed = JSON.parse(
       (0, import_fs.readFileSync)(configPath, "utf8")
     );
+    const sourcePath = findExistingT3CodeSourcePath(
+      parsed.t3code?.sourcePath ? (0, import_path.resolve)(projectRoot, parsed.t3code.sourcePath) : defaultConfig.sourcePath
+    );
     cachedConfig = {
-      sourcePath: findExistingT3CodeSourcePath(
-        parsed.t3code?.sourcePath ? (0, import_path.resolve)(projectRoot, parsed.t3code.sourcePath) : defaultConfig.sourcePath
-      ),
+      sourcePath,
       installCommand: parsed.t3code?.installCommand || defaultConfig.installCommand,
       buildCommand: parsed.t3code?.buildCommand || defaultConfig.buildCommand,
-      entrypoint: parsed.t3code?.entrypoint || defaultConfig.entrypoint
+      entrypoint: resolveT3CodeEntrypoint(
+        sourcePath,
+        parsed.t3code?.entrypoint || defaultConfig.entrypoint
+      )
     };
   } catch {
     cachedConfig = defaultConfig;
@@ -290,6 +313,9 @@ function isPackagedT3CodeSource(sourcePath) {
 function getPackagedT3CodeShadowRoot() {
   return (0, import_path3.join)((0, import_os2.homedir)(), ".spectrum-dev", "embedded", "t3code-runtime");
 }
+function getT3CodeAppShellPath(sourcePath) {
+  return (0, import_path3.join)(sourcePath, "apps", "server", "dist", "client", "index.html");
+}
 function writeRuntimePackageManifest(targetPath, name) {
   (0, import_fs2.writeFileSync)(
     targetPath,
@@ -304,16 +330,43 @@ function writeRuntimePackageManifest(targetPath, name) {
     )
   );
 }
+function readLogExcerpt(logPath, lineCount = 40) {
+  if (!(0, import_fs2.existsSync)(logPath)) {
+    return null;
+  }
+  try {
+    const lines = (0, import_fs2.readFileSync)(logPath, "utf8").trim().split("\n");
+    const excerpt = lines.slice(-lineCount).join("\n").trim();
+    return excerpt.length > 0 ? excerpt : null;
+  } catch {
+    return null;
+  }
+}
+function buildStartupErrorMessage(message, logPath) {
+  const excerpt = readLogExcerpt(logPath);
+  if (!excerpt) {
+    return `${message}. See log: ${logPath}`;
+  }
+  return `${message}. See log: ${logPath}
+
+Recent log output:
+${excerpt}`;
+}
 function ensurePackagedT3CodeRuntimeReady() {
+  const config = getT3CodeConfig();
   const packagedRoot = getPackagedT3CodeRoot();
   const shadowRoot = getPackagedT3CodeShadowRoot();
   const versionFile = (0, import_path3.join)(shadowRoot, ".version");
   const markerFile = (0, import_path3.join)(shadowRoot, ".spectrum-packaged-t3code-runtime");
   const currentVersion = import_electron2.app.getVersion();
-  if ((0, import_fs2.existsSync)((0, import_path3.join)(shadowRoot, "apps", "server", "dist", "index.mjs")) && (0, import_fs2.existsSync)((0, import_path3.join)(shadowRoot, "node_modules")) && (0, import_fs2.existsSync)(markerFile) && (0, import_fs2.existsSync)(versionFile) && (0, import_fs2.statSync)(versionFile).isFile()) {
+  const shadowEntrypointPath = (0, import_path3.join)(shadowRoot, config.entrypoint);
+  const shadowAppShellPath = getT3CodeAppShellPath(shadowRoot);
+  const shadowNodeModulesPath = (0, import_path3.join)(shadowRoot, "node_modules");
+  if ((0, import_fs2.existsSync)(shadowEntrypointPath) && (0, import_fs2.existsSync)(shadowAppShellPath) && (0, import_fs2.existsSync)(shadowNodeModulesPath) && (0, import_fs2.existsSync)(markerFile) && (0, import_fs2.existsSync)(versionFile) && (0, import_fs2.statSync)(versionFile).isFile()) {
     try {
       const version = (0, import_fs2.readFileSync)(versionFile, "utf8").trim();
-      if (version === currentVersion) {
+      const nodeModulesStats = (0, import_fs2.lstatSync)(shadowNodeModulesPath);
+      if (version === currentVersion && !nodeModulesStats.isSymbolicLink()) {
         return shadowRoot;
       }
     } catch {
@@ -341,7 +394,10 @@ function ensurePackagedT3CodeRuntimeReady() {
     (0, import_path3.join)(shadowRoot, "apps", "server", "dist"),
     { recursive: true }
   );
-  (0, import_fs2.symlinkSync)((0, import_path3.join)(packagedRoot, "runtime-node-modules"), (0, import_path3.join)(shadowRoot, "node_modules"), "dir");
+  (0, import_fs2.cpSync)((0, import_path3.join)(packagedRoot, "runtime-node-modules"), (0, import_path3.join)(shadowRoot, "node_modules"), {
+    recursive: true,
+    dereference: true
+  });
   (0, import_fs2.writeFileSync)(markerFile, "");
   (0, import_fs2.writeFileSync)(versionFile, currentVersion);
   return shadowRoot;
@@ -942,6 +998,18 @@ async function ensureRuntime() {
           didChildError = true;
           reject(error);
         });
+      }),
+      new Promise((_, reject) => {
+        child.once("exit", (code, signal) => {
+          reject(
+            new Error(
+              buildStartupErrorMessage(
+                signal ? `T3Code exited before becoming ready (signal ${signal})` : `T3Code exited before becoming ready (code ${code ?? "unknown"})`,
+                logPath
+              )
+            )
+          );
+        });
       })
     ]);
     child.on("exit", () => {
@@ -970,6 +1038,9 @@ async function ensureRuntime() {
       closeFileDescriptor(logFd);
       if (runtime?.process === child) {
         runtime = null;
+      }
+      if (error instanceof Error && !error.message.includes(logPath)) {
+        throw new Error(buildStartupErrorMessage(error.message, logPath));
       }
       throw error;
     } finally {
