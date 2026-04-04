@@ -1,77 +1,97 @@
+import type { ComponentProps } from 'react'
+import { HugeiconsIcon } from '@hugeicons/react'
+import {
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator
+} from '@renderer/components/ui/dropdown-menu'
 import { cn } from '@renderer/lib/cn'
 
-interface MenuOption {
+export interface CanvasMenuOption {
+  icon: Parameters<typeof HugeiconsIcon>[0]['icon']
   label: string
   description: string
   onSelect: () => void
 }
 
 interface NewCanvasItemMenuProps {
-  open: boolean
-  onClose: () => void
-  panelOptions: MenuOption[]
-  workspaceOption: MenuOption
+  panelOptions: CanvasMenuOption[]
+  workspaceOption?: CanvasMenuOption
+  side?: ComponentProps<typeof DropdownMenuContent>['side']
+  align?: ComponentProps<typeof DropdownMenuContent>['align']
+  className?: string
 }
 
 export function NewCanvasItemMenu({
-  open,
-  onClose,
   panelOptions,
-  workspaceOption
+  workspaceOption,
+  side = 'bottom',
+  align = 'start',
+  className
 }: NewCanvasItemMenuProps) {
-  if (!open) {
-    return null
-  }
-
   return (
-    <>
-      <button
-        aria-label="Close new item menu"
-        className="fixed inset-0 z-20 cursor-default"
-        onClick={onClose}
-      />
-      <div className="absolute left-0 top-11 z-30 w-72 rounded-xl border border-border bg-bg-raised p-2 shadow-2xl shadow-black/35">
-        <div className="px-2 pb-2 pt-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
-            New Panel
-          </p>
-        </div>
+    <DropdownMenuContent
+      side={side}
+      align={align}
+      sideOffset={12}
+      className={cn(
+        'w-[19.25rem] min-w-[19.25rem] rounded-[1.75rem] border-border/38 bg-popover/84 p-1.5 text-foreground before:rounded-[inherit]',
+        className
+      )}
+    >
+      <DropdownMenuLabel className="px-3.5 pb-1 pt-2.5 text-[9px] font-semibold uppercase tracking-[0.24em] text-muted-foreground/66">
+        New Panel
+      </DropdownMenuLabel>
 
-        <div className="space-y-1">
-          {panelOptions.map((option) => (
-            <button
-              key={option.label}
-              onClick={option.onSelect}
-              className={cn(
-                'w-full rounded-lg px-3 py-2 text-left transition-colors',
-                'hover:bg-bg-hover'
-              )}
-            >
-              <div className="text-sm font-medium text-text-primary">{option.label}</div>
-              <div className="mt-1 text-xs leading-4 text-text-muted">{option.description}</div>
-            </button>
-          ))}
-        </div>
-
-        <div className="my-2 border-t border-border-subtle" />
-
-        <div className="px-2 pb-2 pt-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
-            New Workspace
-          </p>
-        </div>
-
-        <button
-          onClick={workspaceOption.onSelect}
-          className={cn(
-            'w-full rounded-lg px-3 py-2 text-left transition-colors',
-            'hover:bg-bg-hover'
-          )}
+      {panelOptions.map((option) => (
+        <DropdownMenuItem
+          key={option.label}
+          onSelect={option.onSelect}
+          className="items-start rounded-[1.35rem] px-3 py-2.5"
         >
-          <div className="text-sm font-medium text-text-primary">{workspaceOption.label}</div>
-          <div className="mt-1 text-xs leading-4 text-text-muted">{workspaceOption.description}</div>
-        </button>
-      </div>
-    </>
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full border border-border/40 bg-foreground/[0.04] text-foreground/70">
+              <HugeiconsIcon icon={option.icon} size={16} strokeWidth={1.8} />
+            </div>
+            <div className="flex min-w-0 flex-col gap-0.75">
+              <span className="text-[0.95rem] font-medium tracking-[-0.02em] text-foreground/90">
+                {option.label}
+              </span>
+              <span className="max-w-[14.5rem] text-[0.82rem] leading-5 text-muted-foreground/74">
+                {option.description}
+              </span>
+            </div>
+          </div>
+        </DropdownMenuItem>
+      ))}
+
+      {workspaceOption ? (
+        <>
+          <DropdownMenuSeparator className="mx-1.5 my-1.5" />
+          <DropdownMenuLabel className="px-3.5 pb-1 pt-1 text-[9px] font-semibold uppercase tracking-[0.24em] text-muted-foreground/66">
+            New Workspace
+          </DropdownMenuLabel>
+          <DropdownMenuItem
+            onSelect={workspaceOption.onSelect}
+            className="items-start rounded-[1.35rem] px-3 py-2.5"
+          >
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full border border-border/40 bg-foreground/[0.04] text-foreground/70">
+                <HugeiconsIcon icon={workspaceOption.icon} size={16} strokeWidth={1.8} />
+              </div>
+              <div className="flex min-w-0 flex-col gap-0.75">
+                <span className="text-[0.95rem] font-medium tracking-[-0.02em] text-foreground/90">
+                  {workspaceOption.label}
+                </span>
+                <span className="max-w-[14.5rem] text-[0.82rem] leading-5 text-muted-foreground/74">
+                  {workspaceOption.description}
+                </span>
+              </div>
+            </div>
+          </DropdownMenuItem>
+        </>
+      ) : null}
+    </DropdownMenuContent>
   )
 }

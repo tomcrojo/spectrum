@@ -4,6 +4,7 @@ import { t3codeApi } from '@renderer/lib/ipc'
 import { openFileInWorkspace } from '@renderer/lib/open-file'
 import { transport } from '@renderer/lib/transport'
 import { incrementDevMountCount } from '@renderer/lib/dev-performance'
+import { suggestT3CodeTitleFromPrompt } from '@renderer/lib/t3code-auto-title'
 import { usePanelRuntimeStore } from '@renderer/stores/panel-runtime.store'
 import { useUiStore } from '@renderer/stores/ui.store'
 import { useWorkspacesStore } from '@renderer/stores/workspaces.store'
@@ -65,6 +66,26 @@ function isOpenFileMessage(
   )
 }
 
+function isFirstUserMessageEvent(
+  value: unknown
+): value is {
+  type: 'spectrum:first-user-message'
+  payload: {
+    text: string
+  }
+} {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const candidate = value as {
+    type?: unknown
+    payload?: { text?: unknown }
+  }
+
+  return candidate.type === 'spectrum:first-user-message' && typeof candidate.payload?.text === 'string'
+}
+
 function T3CodeShell({
   label,
   threadTitle,
@@ -106,6 +127,7 @@ export function T3CodePanel({
   watchPriority
 }: T3CodePanelProps) {
   const updatePanelLayout = useWorkspacesStore((state) => state.updatePanelLayout)
+  const applyAutoTitleToT3CodePanel = useWorkspacesStore((state) => state.applyAutoTitleToT3CodePanel)
   const updateWorkspaceLastPanelEditedAt = useWorkspacesStore(
     (state) => state.updateWorkspaceLastPanelEditedAt
   )
@@ -159,9 +181,6 @@ export function T3CodePanel({
         return
       }
 
-      if (threadInfo.threadTitle?.trim()) {
-        updatePanelLayout(panelId, { panelTitle: threadInfo.threadTitle.trim() })
-      }
       if (threadInfo.providerId) {
         updatePanelLayout(panelId, { providerId: threadInfo.providerId })
       }
@@ -198,13 +217,11 @@ export function T3CodePanel({
         if (
           runtime.t3ProjectId !== t3ProjectId ||
           runtime.t3ThreadId !== t3ThreadId ||
-          runtime.threadTitle?.trim() ||
           runtime.providerId
         ) {
           updatePanelLayout(panelId, {
             t3ProjectId: runtime.t3ProjectId,
             t3ThreadId: runtime.t3ThreadId,
-            panelTitle: runtime.threadTitle?.trim() || undefined,
             providerId: runtime.providerId ?? undefined
           })
         }
@@ -274,15 +291,7 @@ export function T3CodePanel({
           return
         }
 
-        updatePanelLayout(
-          panelId,
-          payload.threadTitle?.trim()
-            ? {
-                panelTitle: payload.threadTitle.trim(),
-                providerId: payload.providerId ?? undefined
-              }
-            : { providerId: payload.providerId ?? undefined }
-        )
+        updatePanelLayout(panelId, { providerId: payload.providerId ?? undefined })
 
         // Get previous notification kind to detect transitions
         const prevRuntime = usePanelRuntimeStore.getState().panelRuntimeById[panelId]
@@ -313,7 +322,7 @@ export function T3CodePanel({
           if (currentFocusedPanelId !== panelId) {
             const currentActivePanels = useWorkspacesStore.getState().activePanels
             const activePanel = currentActivePanels.find((p) => p.panelId === panelId)
-            const resolvedPanelTitle = payload.threadTitle?.trim() || activePanel?.panelTitle || 'T3Code'
+            const resolvedPanelTitle = activePanel?.panelTitle || payload.threadTitle?.trim() || 'T3Code'
 
             playNotificationSound()
             addToast({
@@ -449,6 +458,14 @@ export function T3CodePanel({
         return
       }
 
+      if (isFirstUserMessageEvent(event.data)) {
+        const nextTitle = suggestT3CodeTitleFromPrompt(event.data.payload.text)
+        if (nextTitle) {
+          void applyAutoTitleToT3CodePanel(panelId, nextTitle)
+        }
+        return
+      }
+
       if (!isOpenFileMessage(event.data)) {
         return
       }
@@ -467,7 +484,7 @@ export function T3CodePanel({
     return () => {
       window.removeEventListener('message', handleMessage)
     }
-  }, [binding?.baseUrl, projectId, workspaceId])
+  }, [applyAutoTitleToT3CodePanel, binding?.baseUrl, panelId, projectId, workspaceId])
 
   useEffect(() => {
     if (!autoFocus || !iframeUrl || hydrationState !== 'live') {

@@ -6,7 +6,9 @@ import type {
   Workspace,
   CreateWorkspaceInput,
   UpdateWorkspaceInput,
+  WorkspaceStatus,
   PanelType,
+  PanelTitleSource,
   PanelConfig,
   WorkspaceLayoutState,
   PanelOpenedBy
@@ -22,6 +24,8 @@ export interface ActiveWorkspacePanel {
   cwd: string
   panelType: PanelType
   panelTitle: string
+  titleSource?: PanelTitleSource
+  hasAutoRenamed?: boolean
   isTemporary?: boolean
   parentPanelId?: string
   returnToPanelId?: string
@@ -52,6 +56,7 @@ interface WorkspacesState {
   createWorkspace: (input: CreateWorkspaceInput) => Promise<Workspace>
   updateWorkspace: (input: UpdateWorkspaceInput) => Promise<Workspace | null>
   deleteWorkspace: (id: string) => Promise<void>
+  unloadWorkspace: (id: string) => Promise<void>
   archiveWorkspace: (id: string) => Promise<void>
   unarchiveWorkspace: (id: string) => Promise<Workspace | null>
   reopenWorkspace: (workspaceId: string, cwd: string) => Promise<void>
@@ -87,6 +92,8 @@ interface WorkspacesState {
         | 'width'
         | 'height'
         | 'panelTitle'
+        | 'titleSource'
+        | 'hasAutoRenamed'
         | 'providerId'
         | 't3ProjectId'
         | 't3ThreadId'
@@ -97,11 +104,62 @@ interface WorkspacesState {
     >
   ) => void
   updateWorkspaceLastPanelEditedAt: (workspaceId: string, timestamp: string) => Promise<void>
+  applyAutoTitleToT3CodePanel: (panelId: string, title: string) => Promise<void>
   restorePanelsFromWorkspaces: (workspaces: Workspace[], cwd: string) => void
 }
 
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const workspaceMutationVersionByProjectId = new Map<string, number>()
 const AUTOSAVE_DELAY = 400
+const DEFAULT_T3CODE_PANEL_TITLE = 'T3Code'
+const DEFAULT_T3CODE_THREAD_TITLE = 'New thread'
+const DEFAULT_WORKSPACE_NAME_PATTERN = /^Workspace \d+$/
+
+function getWorkspaceMutationVersion(projectId: string): number {
+  return workspaceMutationVersionByProjectId.get(projectId) ?? 0
+}
+
+function bumpWorkspaceMutationVersion(projectId: string): number {
+  const nextVersion = getWorkspaceMutationVersion(projectId) + 1
+  workspaceMutationVersionByProjectId.set(projectId, nextVersion)
+  return nextVersion
+}
+
+function isWorkspaceStatus(
+  value: Workspace['status'],
+  status: WorkspaceStatus
+): boolean {
+  return value === status
+}
+
+function isDefaultT3CodePanelTitle(title: string): boolean {
+  const trimmed = title.trim()
+  return trimmed === DEFAULT_T3CODE_PANEL_TITLE || trimmed === DEFAULT_T3CODE_THREAD_TITLE
+}
+
+function canAutoRenameT3CodePanel(panel: ActiveWorkspacePanel): boolean {
+  if (panel.panelType !== 't3code' || panel.hasAutoRenamed || panel.titleSource === 'user') {
+    return false
+  }
+
+  if (panel.titleSource === 'default') {
+    return true
+  }
+
+  return panel.titleSource === undefined && isDefaultT3CodePanelTitle(panel.panelTitle)
+}
+
+function isDefaultWorkspaceName(name: string): boolean {
+  return DEFAULT_WORKSPACE_NAME_PATTERN.test(name.trim())
+}
+
+function canAutoRenameWorkspace(workspace: Workspace): boolean {
+  if (workspace.hasAutoRenamed || workspace.nameSource === 'user') {
+    return false
+  }
+
+  return workspace.nameSource === 'default' || isDefaultWorkspaceName(workspace.name)
+}
 
 function getFilePanelTitle(relativePath: string, filePath: string): string {
   const candidate = relativePath.split('/').at(-1)?.split('\\').at(-1)?.trim()
@@ -133,6 +191,8 @@ function buildLayoutState(panels: ActiveWorkspacePanel[]): WorkspaceLayoutState 
     id: panel.panelId,
     type: panel.panelType,
     title: panel.panelTitle,
+    titleSource: panel.titleSource,
+    hasAutoRenamed: panel.hasAutoRenamed,
     isTemporary: panel.isTemporary,
     parentPanelId: panel.parentPanelId,
     returnToPanelId: panel.returnToPanelId,
@@ -166,6 +226,8 @@ export function buildPanelsFromWorkspace(workspace: Workspace, cwd: string): Act
     cwd,
     panelType: panel.type,
     panelTitle: panel.title,
+    titleSource: panel.titleSource,
+    hasAutoRenamed: panel.hasAutoRenamed,
     isTemporary: panel.isTemporary,
     parentPanelId: panel.parentPanelId,
     returnToPanelId: panel.returnToPanelId,
@@ -261,6 +323,9 @@ function syncWorkspaceSnapshot(
   }
 
   workspace.layoutState = persistedWorkspace.layoutState
+  workspace.name = persistedWorkspace.name
+  workspace.nameSource = persistedWorkspace.nameSource
+  workspace.hasAutoRenamed = persistedWorkspace.hasAutoRenamed
   workspace.updatedAt = persistedWorkspace.updatedAt
   workspace.lastPanelEditedAt = persistedWorkspace.lastPanelEditedAt
 }
@@ -458,6 +523,8 @@ function patchChangesPanel(
       | 'width'
       | 'height'
       | 'panelTitle'
+      | 'titleSource'
+      | 'hasAutoRenamed'
       | 'providerId'
       | 't3ProjectId'
       | 't3ThreadId'
@@ -496,7 +563,11 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
   closePanelGuardById: {},
 
   loadWorkspaces: async (projectId, includeArchived = false) => {
+    const requestVersion = getWorkspaceMutationVersion(projectId)
     const workspaces = await workspacesApi.list({ projectId, includeArchived })
+    if (requestVersion !== getWorkspaceMutationVersion(projectId)) {
+      return
+    }
     set((state) => ({
       workspaces: includeArchived
         ? [
@@ -505,7 +576,8 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
           ]
         : [
             ...state.workspaces.filter(
-              (workspace) => workspace.projectId !== projectId || workspace.archived
+              (workspace) =>
+                workspace.projectId !== projectId || isWorkspaceStatus(workspace.status, 'archived')
             ),
             ...workspaces
           ]
@@ -517,12 +589,17 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
   },
 
   createWorkspace: async (input) => {
+    bumpWorkspaceMutationVersion(input.projectId)
     const workspace = await workspacesApi.create(input)
     set((state) => ({ workspaces: [...state.workspaces, workspace] }))
     return workspace
   },
 
   updateWorkspace: async (input) => {
+    const existingWorkspace = get().workspaces.find((entry) => entry.id === input.id)
+    if (existingWorkspace) {
+      bumpWorkspaceMutationVersion(existingWorkspace.projectId)
+    }
     const workspace = await workspacesApi.update(input)
     if (!workspace) {
       return null
@@ -544,6 +621,7 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
       return
     }
 
+    bumpWorkspaceMutationVersion(workspace.projectId)
     clearPendingSave(id)
 
     set((state) => {
@@ -592,10 +670,75 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
     }
   },
 
+  unloadWorkspace: async (id) => {
+    const workspace = get().workspaces.find((entry) => entry.id === id)
+    if (!workspace) {
+      return
+    }
+
+    bumpWorkspaceMutationVersion(workspace.projectId)
+    await flushWorkspaceLayout(id, get)
+    const persistedWorkspace = await workspacesApi.update({ id, status: 'saved' })
+    if (!persistedWorkspace) {
+      return
+    }
+
+    set((state) => {
+      const nextPanels = state.activePanels.filter((panel) => panel.workspaceId !== id)
+      const nextFocusedPanelId =
+        state.focusedPanelId && nextPanels.some((panel) => panel.panelId === state.focusedPanelId)
+          ? state.focusedPanelId
+          : nextPanels.at(-1)?.panelId ?? null
+      const nextFocusedBrowserPanelByWorkspace = pruneFocusedBrowserPanelMap(
+        state.focusedBrowserPanelByWorkspace,
+        nextPanels
+      )
+
+      syncRuntimePanels(nextPanels)
+      if (nextFocusedPanelId) {
+        setActiveWorkspaceFromPanel(nextFocusedPanelId, nextPanels)
+      } else {
+        usePanelRuntimeStore.getState().setActiveWorkspaceId(null)
+      }
+
+      return {
+        workspaces: state.workspaces.map((entry) =>
+          entry.id === persistedWorkspace.id ? persistedWorkspace : entry
+        ),
+        activePanels: nextPanels,
+        focusedPanelId: nextFocusedPanelId,
+        focusedBrowserPanelByWorkspace: nextFocusedBrowserPanelByWorkspace,
+        focusedBrowserPanelId: resolveFocusedBrowserPanelId(
+          nextFocusedBrowserPanelByWorkspace,
+          nextPanels
+        ),
+        dirtyPanelIds: Object.fromEntries(
+          Object.entries(state.dirtyPanelIds).filter(([panelId]) =>
+            nextPanels.some((panel) => panel.panelId === panelId)
+          )
+        ),
+        closePanelGuardById: Object.fromEntries(
+          Object.entries(state.closePanelGuardById).filter(([panelId]) =>
+            nextPanels.some((panel) => panel.panelId === panelId)
+          )
+        ),
+        lastFocusedPanelByWorkspace: Object.fromEntries(
+          Object.entries(state.lastFocusedPanelByWorkspace).filter(([workspaceId]) => workspaceId !== id)
+        )
+      }
+    })
+  },
+
   archiveWorkspace: async (id) => {
-    const persistedWorkspace = await flushWorkspaceLayout(id, get)
-    await workspacesApi.archive(id)
-    const archivedAt = new Date().toISOString()
+    const workspace = get().workspaces.find((entry) => entry.id === id)
+    if (workspace) {
+      bumpWorkspaceMutationVersion(workspace.projectId)
+    }
+    await flushWorkspaceLayout(id, get)
+    const persistedWorkspace = await workspacesApi.update({ id, status: 'archived' })
+    if (!persistedWorkspace) {
+      return
+    }
 
     set((state) => {
       const nextPanels = state.activePanels.filter((panel) => panel.workspaceId !== id)
@@ -609,13 +752,7 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
 
       return {
         workspaces: state.workspaces.map((workspace) =>
-          workspace.id === id
-            ? {
-                ...(persistedWorkspace ?? workspace),
-                archived: true,
-                updatedAt: archivedAt
-              }
-            : workspace
+          workspace.id === id ? persistedWorkspace : workspace
         ),
         activePanels: nextPanels,
         focusedPanelId: nextFocusedPanelId,
@@ -635,7 +772,11 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
   },
 
   unarchiveWorkspace: async (id) => {
-    const workspace = await workspacesApi.update({ id, archived: false })
+    const existingWorkspace = get().workspaces.find((entry) => entry.id === id)
+    if (existingWorkspace) {
+      bumpWorkspaceMutationVersion(existingWorkspace.projectId)
+    }
+    const workspace = await workspacesApi.update({ id, status: 'saved' })
     if (!workspace) {
       return null
     }
@@ -653,9 +794,33 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
       return
     }
 
+    bumpWorkspaceMutationVersion(workspace.projectId)
+    if (!isWorkspaceStatus(workspace.status, 'active')) {
+      const persistedWorkspace = await workspacesApi.update({ id: workspaceId, status: 'active' })
+      if (!persistedWorkspace) {
+        return
+      }
+
+      set((state) => ({
+        workspaces: state.workspaces.map((entry) =>
+          entry.id === persistedWorkspace.id ? persistedWorkspace : entry
+        )
+      }))
+
+      workspace = persistedWorkspace
+    }
+
     if (workspace.layoutState.panels.length === 0) {
       const layoutState = {
-        panels: [{ id: nanoid(), type: 't3code' as const, title: 'T3Code' }],
+        panels: [
+          {
+            id: nanoid(),
+            type: 't3code' as const,
+            title: DEFAULT_T3CODE_PANEL_TITLE,
+            titleSource: 'default' as const,
+            hasAutoRenamed: false
+          }
+        ],
         sizes: [1]
       }
       const persistedWorkspace = await workspacesApi.updateLayout({ id: workspaceId, layoutState })
@@ -857,7 +1022,7 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
     if (panel) {
       const workspacePanels = get().activePanels.filter((entry) => entry.workspaceId === panel.workspaceId)
       if (workspacePanels.length === 1) {
-        void get().deleteWorkspace(panel.workspaceId)
+        void get().unloadWorkspace(panel.workspaceId)
         return
       }
     }
@@ -1312,6 +1477,96 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
         entry.id === persistedWorkspace.id ? persistedWorkspace : entry
       )
     }))
+  },
+
+  applyAutoTitleToT3CodePanel: async (panelId, rawTitle) => {
+    const nextTitle = rawTitle.trim()
+    if (!nextTitle) {
+      return
+    }
+
+    let workspaceId: string | null = null
+    let shouldRenameWorkspace = false
+
+    set((state) => {
+      const panel = state.activePanels.find((entry) => entry.panelId === panelId)
+      if (!panel || !canAutoRenameT3CodePanel(panel) || panel.panelTitle === nextTitle) {
+        return state
+      }
+
+      workspaceId = panel.workspaceId
+
+      return {
+        activePanels: state.activePanels.map((entry) =>
+          entry.panelId === panelId
+            ? {
+                ...entry,
+                panelTitle: nextTitle,
+                titleSource: 'auto',
+                hasAutoRenamed: true
+              }
+            : entry
+        ),
+        workspaces: state.workspaces.map((workspace) => {
+          if (workspace.id !== panel.workspaceId) {
+            return workspace
+          }
+
+          shouldRenameWorkspace = canAutoRenameWorkspace(workspace)
+
+          return {
+            ...workspace,
+            layoutState: {
+              ...workspace.layoutState,
+              panels: workspace.layoutState.panels.map((entry) =>
+                entry.id === panelId
+                  ? {
+                      ...entry,
+                      title: nextTitle,
+                      titleSource: 'auto',
+                      hasAutoRenamed: true
+                    }
+                  : entry
+              )
+            }
+          }
+        })
+      }
+    })
+
+    if (workspaceId) {
+      scheduleSave(workspaceId, get)
+    }
+
+    if (!workspaceId || !shouldRenameWorkspace) {
+      return
+    }
+
+    try {
+      const persistedWorkspace = await workspacesApi.update({
+        id: workspaceId,
+        name: nextTitle,
+        nameSource: 'auto',
+        hasAutoRenamed: true
+      })
+
+      if (!persistedWorkspace) {
+        return
+      }
+
+      set((state) => ({
+        workspaces: state.workspaces.map((entry) =>
+          entry.id === persistedWorkspace.id ? persistedWorkspace : entry
+        ),
+        activePanels: state.activePanels.map((entry) =>
+          entry.workspaceId === persistedWorkspace.id
+            ? { ...entry, workspaceName: persistedWorkspace.name }
+            : entry
+        )
+      }))
+    } catch (error) {
+      console.error(`[workspaces] Failed to auto-rename workspace ${workspaceId}:`, error)
+    }
   },
 
   restorePanelsFromWorkspaces: (workspaces, cwd) => {

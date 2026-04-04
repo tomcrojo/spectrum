@@ -5,7 +5,7 @@ import { ProjectHeader } from './ProjectHeader'
 import { TaskList } from './TaskList'
 import { WorkspaceList } from './WorkspaceList'
 import { ProjectDangerZone } from './ProjectDangerZone'
-import { PROJECT_COLOR_HEX } from '@renderer/lib/project-colors'
+import { getProjectThemeStyle } from '@renderer/lib/project-colors'
 import { DEFAULT_PROJECT_COLOR, type Project, type ProjectColor } from '@shared/project.types'
 import { projectsApi } from '@renderer/lib/ipc'
 
@@ -55,21 +55,18 @@ export function ProjectPage() {
     updateProject({ id: project.id, color }) // persist
   }
 
-  const colorHex = PROJECT_COLOR_HEX[localColor]
-
   return (
     <div
-      className="w-[420px] flex-shrink-0 bg-bg-surface border-l-2 flex flex-col h-full transition-[border-color] duration-200"
-      style={{ borderLeftColor: colorHex }}
+      className="project-theme-shell w-[480px] flex-shrink-0 rounded-[1.4rem] flex flex-col h-[calc(100%-16px)] self-center mr-1.5 ml-1.5 overflow-hidden"
+      style={getProjectThemeStyle(localColor)}
     >
-      {/* Header with close button */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-2">
-        <h2 className="text-xs font-semibold text-text-muted uppercase tracking-wider">
-          Project Details
+      <div className="flex items-center justify-between px-4 pt-3 pb-2">
+        <h2 className="text-[10px] font-semibold text-text-muted uppercase tracking-[0.18em]">
+          Project Dashboard
         </h2>
         <button
           onClick={() => setShowProjectPage(false)}
-          className="text-text-muted hover:text-text-primary transition-colors p-1 rounded hover:bg-bg-hover"
+          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary"
         >
           <svg className="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none">
             <path d="M3 3L11 11M11 3L3 11" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
@@ -77,59 +74,55 @@ export function ProjectPage() {
         </button>
       </div>
 
-      {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="px-4 py-4">
+      <div className="project-theme-scroll flex-1 overflow-y-auto">
+        <div className="px-4 pb-4 pt-0.5">
           <ProjectHeader
             project={project}
             color={localColor}
             onColorChange={handleColorChange}
           />
 
-          <div className="space-y-8">
-            {/* Open Workspaces */}
-            <section className="pb-6 border-b border-border-subtle">
+          <div className="space-y-3">
+            <section className="project-theme-card rounded-xl px-3 py-3">
               <WorkspaceList projectId={project.id} />
             </section>
 
-            {/* Tasks */}
-            <section className="pb-6 border-b border-border-subtle">
-              <TaskList projectId={project.id} />
-            </section>
+            <div className="px-1.5">
+              <section className="project-theme-section">
+                <TaskList projectId={project.id} />
+              </section>
 
-            {/* Variables & Secrets — placeholder */}
-            <section className="pb-6 border-b border-border-subtle">
-              <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">
-                Variables & Secrets
-              </h3>
-              <p className="text-xs text-text-muted">
-                Coming in Phase 4
-              </p>
-            </section>
+              <section className="project-theme-section">
+                <h3 className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+                  Variables & Secrets
+                </h3>
+                <p className="text-[13px] text-text-secondary">
+                  Project-scoped runtime variables will land here once secrets management is wired.
+                </p>
+              </section>
 
-            {/* Decisions — placeholder */}
-            <section className="pb-6 border-b border-border-subtle">
-              <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">
-                Decisions
-              </h3>
-              <p className="text-xs text-text-muted">
-                Coming in Phase 4
-              </p>
-            </section>
+              <section className="project-theme-section">
+                <h3 className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+                  Decisions
+                </h3>
+                <p className="text-[13px] text-text-secondary">
+                  Architecture notes and tradeoffs will become the long-term memory for each project.
+                </p>
+              </section>
 
-            {/* Notes — placeholder */}
-            <section className="pb-6 border-b border-border-subtle">
-              <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">
-                Notes
-              </h3>
-              <p className="text-xs text-text-muted">
-                Coming in Phase 4
-              </p>
-            </section>
+              <section className="project-theme-section">
+                <h3 className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+                  Notes
+                </h3>
+                <p className="text-[13px] text-text-secondary">
+                  Freeform notes will sit alongside decisions, separate from the chat and canvas.
+                </p>
+              </section>
 
-            <section className="pb-2">
-              <ProjectDangerZone project={project} />
-            </section>
+              <section className="project-theme-section pb-0">
+                <ProjectDangerZone project={project} />
+              </section>
+            </div>
           </div>
         </div>
       </div>

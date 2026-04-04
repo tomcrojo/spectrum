@@ -74,20 +74,20 @@ export function AppShell() {
   }, [])
 
   return (
-    <div className="flex h-screen w-screen bg-bg overflow-hidden">
+    <div className="app-shell-backdrop flex h-screen w-screen gap-1.5 overflow-hidden p-1.5">
       {/* Sidebar — fixed width */}
       <div
         className={
           sidebarCollapsed
-            ? 'w-14 flex-shrink-0 transition-[width] duration-200'
-            : 'w-60 flex-shrink-0 transition-[width] duration-200'
+            ? 'w-[3.25rem] flex-shrink-0 transition-[width] duration-200'
+            : 'w-[15rem] flex-shrink-0 transition-[width] duration-200'
         }
       >
         <Sidebar />
       </div>
 
       {/* Main content — left detail rail + canvas */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex min-w-0 flex-1 overflow-hidden">
         {/* Project/settings detail rail — toggleable, pinned next to the sidebar */}
         <ProjectPage />
         <SettingsPage />

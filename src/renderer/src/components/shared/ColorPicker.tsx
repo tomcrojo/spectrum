@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import { PROJECT_COLORS } from '@renderer/lib/project-colors'
 import type { ProjectColor } from '@shared/project.types'
 
@@ -8,104 +7,67 @@ interface ColorPickerProps {
   size?: 'sm' | 'md'
 }
 
-const HEX_CONFIG = {
-  sm: { w: 32, h: 36, vStep: 27, offset: 16 },
-  md: { w: 40, h: 46, vStep: 34.5, offset: 20 },
-} as const
-
-const COLS = 6
-const HEX_CLIP = 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)'
-
-/** Convert a hex color string to its HSL hue (0–360). */
-function hexToHue(hex: string): number {
-  const n = parseInt(hex.replace('#', ''), 16)
-  const r = ((n >> 16) & 0xff) / 255
-  const g = ((n >> 8) & 0xff) / 255
-  const b = (n & 0xff) / 255
-
-  const max = Math.max(r, g, b)
-  const min = Math.min(r, g, b)
-  const d = max - min
-
-  if (d === 0) return 0
-
-  let h: number
-  if (max === r) h = ((g - b) / d) % 6
-  else if (max === g) h = (b - r) / d + 2
-  else h = (r - g) / d + 4
-
-  h = Math.round(h * 60)
-  return h < 0 ? h + 360 : h
-}
-
-/** Sort palette colors by hue so the grid reads like a color wheel. */
-function sortByHue(
-  colors: readonly { id: string; name: string; hex: string }[]
-): typeof PROJECT_COLORS[number][] {
-  return [...colors].sort((a, b) => hexToHue(a.hex) - hexToHue(b.hex)) as typeof PROJECT_COLORS[number][]
-}
-
 export function ColorPicker({ value, onChange, size = 'md' }: ColorPickerProps) {
-  const { w, h, vStep, offset } = HEX_CONFIG[size]
-
-  const sorted = useMemo(() => sortByHue(PROJECT_COLORS), [])
-
-  const rows: (typeof PROJECT_COLORS[number])[][] = []
-  for (let i = 0; i < sorted.length; i += COLS) {
-    rows.push(sorted.slice(i, i + COLS))
-  }
+  const swatchSize = size === 'sm' ? 36 : 44
 
   return (
-    <div className="space-y-0">
-      <div style={{ paddingRight: offset }}>
-        {rows.map((row, rowIndex) => (
-          <div
-            key={rowIndex}
-            className="flex"
-            style={{
-              marginTop: rowIndex === 0 ? 0 : vStep - h,
-              marginLeft: rowIndex % 2 === 1 ? offset : 0,
-            }}
-          >
-            {row.map((color) => {
-              const selected = value === color.id
-              return (
-                <button
-                  key={color.id}
-                  type="button"
-                  onClick={() => onChange(color.id)}
-                  className="relative flex-shrink-0 group"
-                  style={{ width: w, height: h }}
-                  title={`${color.name} ${color.hex}`}
+    <div>
+      <div className="flex flex-wrap gap-3">
+        {PROJECT_COLORS.map((theme) => {
+          const selected = value === theme.id
+          const { blob1, blob2, blob3 } = theme.stops
+          const previewGradient = `linear-gradient(135deg, ${blob1} 0%, ${blob2} 50%, ${blob3} 100%)`
+
+          return (
+            <button
+              key={theme.id}
+              type="button"
+              onClick={() => onChange(theme.id)}
+              className="group relative flex justify-center overflow-visible rounded-full transition-all duration-150 focus-visible:outline-none"
+              style={{
+                width: swatchSize,
+                height: swatchSize,
+                background: previewGradient,
+                outline: selected
+                  ? `2px solid ${theme.primary}`
+                  : '2px solid transparent',
+                outlineOffset: selected ? '2px' : '0px',
+                transform: selected ? 'scale(1.03)' : undefined,
+                boxShadow: selected
+                  ? `0 0 12px color-mix(in oklab, ${theme.primary} 60%, transparent)`
+                  : '0 2px 6px rgba(0,0,0,0.3)',
+              }}
+              aria-label={theme.name}
+              title={theme.name}
+            >
+              {/* Shimmer overlay on hover */}
+              <span
+                className="absolute inset-0 rounded-full opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+                style={{
+                  background: `linear-gradient(135deg, rgba(255,255,255,0.12) 0%, transparent 60%)`,
+                }}
+              />
+
+              {selected ? (
+                <span
+                  className="absolute inset-0 flex items-center justify-center text-[11px] font-semibold"
+                  style={{
+                    color: 'rgba(255,255,255,0.95)',
+                    textShadow: '0 1px 4px rgba(0,0,0,0.7)',
+                  }}
                 >
-                  <span
-                    className="absolute inset-0 transition-transform duration-150 group-hover:-translate-y-0.5"
-                    style={{
-                      background: color.hex,
-                      clipPath: HEX_CLIP,
-                      filter: selected
-                        ? 'drop-shadow(0 0 3px rgba(255,255,255,0.55))'
-                        : undefined,
-                      transform: selected ? 'scale(1.08)' : undefined,
-                    }}
-                  />
-                  {selected && (
-                    <span
-                      className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white z-10"
-                      style={{ textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}
-                    >
-                      ✓
-                    </span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        ))}
-      </div>
-      <div className="pt-3 text-xs text-text-muted">
-        {PROJECT_COLORS.find((c) => c.id === value)?.name} ·{' '}
-        {PROJECT_COLORS.find((c) => c.id === value)?.hex}
+                  ✓
+                </span>
+              ) : null}
+
+              <span
+                className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 -translate-x-1/2 -translate-y-1 rounded-full border border-white/10 bg-black/88 px-2.5 py-1 text-[10px] font-medium tracking-wide whitespace-nowrap text-white opacity-0 shadow-[0_10px_30px_rgba(0,0,0,0.4)] transition-all duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
+              >
+                {theme.name}
+              </span>
+            </button>
+          )
+        })}
       </div>
     </div>
   )

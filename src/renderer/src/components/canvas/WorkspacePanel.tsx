@@ -377,10 +377,10 @@ function WorkspacePanelImpl({
         }
       }}
       className={cn(
-        'relative flex flex-col rounded-lg border',
-        isFocused ? 'border-accent/50' : 'border-border',
+        'relative flex flex-col rounded-xl border',
+        isFocused ? 'border-border/80 shadow-xl shadow-black/25' : 'border-border/50 shadow-md shadow-black/15',
         showBrowserAutomationChrome && 'shadow-[0_0_0_1px_rgba(115,115,115,0.45)]',
-        'bg-bg shadow-lg shadow-black/30',
+        'bg-bg',
         isResizing && 'select-none'
       )}
       style={{
@@ -396,7 +396,7 @@ function WorkspacePanelImpl({
         />
       ) : null}
 
-      <div className="flex h-8 items-center justify-between gap-2 rounded-t-lg border-b border-border-subtle bg-bg-raised px-2.5 flex-shrink-0">
+      <div className="flex h-8 items-center justify-between gap-2 rounded-t-xl border-b border-border/50 bg-bg-raised/80 px-2.5 flex-shrink-0">
         <div className="flex min-w-0 items-center gap-2">
           <PanelGlyph panelType={panelType} providerId={providerId} className="text-text-secondary" />
           <div className="flex min-w-0 items-center gap-2">
@@ -461,7 +461,7 @@ function WorkspacePanelImpl({
               </PanelIconButton>
             </>
           ) : null}
-          <button onClick={onClose} className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary">
+          <button onClick={onClose} className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary">
             <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none">
               <path d="M3 3L9 9M9 3L3 9" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
             </svg>

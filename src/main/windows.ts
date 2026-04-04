@@ -10,7 +10,7 @@ export function createMainWindow(): BrowserWindow {
     show: false,
     backgroundColor: '#0a0a0a',
     titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 16, y: 16 },
+    trafficLightPosition: { x: 14, y: 14 },
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,

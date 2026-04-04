@@ -1269,6 +1269,17 @@ var LEGACY_PROJECT_COLOR_MAP = {
   rose: "rose-dust"
 };
 var DEFAULT_PROJECT_COLOR = PROJECT_COLOR_PALETTE[0].id;
+var PROJECT_ICON_GLYPHS = [
+  { id: "spark", name: "Spark" },
+  { id: "terminal", name: "Terminal" },
+  { id: "folder", name: "Folder" },
+  { id: "planet", name: "Planet" },
+  { id: "rocket", name: "Rocket" },
+  { id: "grid", name: "Grid" },
+  { id: "chip", name: "Chip" },
+  { id: "book", name: "Book" }
+];
+var DEFAULT_PROJECT_ICON = { type: "repo-favicon" };
 function normalizeProjectColor(value) {
   if (!value) return DEFAULT_PROJECT_COLOR;
   const directMatch = PROJECT_COLOR_PALETTE.find((color) => color.id === value);
@@ -1279,6 +1290,109 @@ function normalizeProjectColor(value) {
 function getRandomProjectColor() {
   const index = Math.floor(Math.random() * PROJECT_COLOR_PALETTE.length);
   return PROJECT_COLOR_PALETTE[index].id;
+}
+function normalizeProjectIcon(input) {
+  if (!input || typeof input !== "object") {
+    return null;
+  }
+  const icon = input;
+  if (icon.type === "repo-favicon") {
+    const value = typeof icon.value === "string" ? icon.value.trim() : "";
+    return value ? { type: "repo-favicon", value } : { type: "repo-favicon" };
+  }
+  if (icon.type === "image") {
+    const value = typeof icon.value === "string" ? icon.value.trim() : "";
+    return value ? { type: "image", value } : null;
+  }
+  if (icon.type === "emoji") {
+    const value = typeof icon.value === "string" ? icon.value.trim() : "";
+    return value ? { type: "emoji", value } : null;
+  }
+  if (icon.type === "icon") {
+    const value = typeof icon.value === "string" ? icon.value.trim() : "";
+    const isGlyph = PROJECT_ICON_GLYPHS.some((glyph) => glyph.id === value);
+    return isGlyph ? { type: "icon", value } : null;
+  }
+  return null;
+}
+
+// src/main/project-icons.ts
+var import_node_child_process = require("node:child_process");
+var repoOriginCache = /* @__PURE__ */ new Map();
+function resolveProjectIcon(input, repoPath) {
+  const normalized = deserializeProjectIcon(input) ?? DEFAULT_PROJECT_ICON;
+  if (normalized.type !== "repo-favicon") {
+    return normalized;
+  }
+  const resolvedOrigin = resolveRepoOriginFromGit(repoPath);
+  if (resolvedOrigin) {
+    return {
+      type: "repo-favicon",
+      value: resolvedOrigin
+    };
+  }
+  return normalized.value ? {
+    type: "repo-favicon",
+    value: normalized.value
+  } : {
+    type: "repo-favicon"
+  };
+}
+function serializeProjectIcon(input) {
+  const normalized = deserializeProjectIcon(input);
+  return normalized ? JSON.stringify(normalized) : null;
+}
+function deserializeProjectIcon(input) {
+  if (typeof input === "string") {
+    try {
+      return normalizeProjectIcon(JSON.parse(input));
+    } catch {
+      return null;
+    }
+  }
+  return normalizeProjectIcon(input);
+}
+function resolveRepoOriginFromGit(repoPath) {
+  const cached = repoOriginCache.get(repoPath);
+  if (cached !== void 0) {
+    return cached;
+  }
+  try {
+    const remoteUrl = (0, import_node_child_process.execFileSync)(
+      "git",
+      ["-C", repoPath, "config", "--get", "remote.origin.url"],
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"]
+      }
+    ).trim();
+    const origin = parseGitRemoteToOrigin(remoteUrl);
+    repoOriginCache.set(repoPath, origin);
+    return origin;
+  } catch {
+    repoOriginCache.set(repoPath, null);
+    return null;
+  }
+}
+function parseGitRemoteToOrigin(remoteUrl) {
+  const trimmed = remoteUrl.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    try {
+      const url = new URL(trimmed);
+      return `${url.protocol}//${url.host}`;
+    } catch {
+      return null;
+    }
+  }
+  const sshMatch = trimmed.match(/^(?:ssh:\/\/)?git@([^:/]+)[:/]([^#]+)$/);
+  if (!sshMatch) {
+    return null;
+  }
+  const host = sshMatch[1]?.trim();
+  return host ? `https://${host}` : null;
 }
 
 // src/main/browser-cli/BrowserCliThreadBindingStore.ts
@@ -1361,6 +1475,7 @@ function rowToProject(row) {
     description: row.description,
     progress: row.progress,
     color: normalizeProjectColor(row.color),
+    icon: resolveProjectIcon(deserializeProjectIcon(row.icon), row.repo_path),
     gitWorkspacesEnabled: Boolean(row.git_workspaces_enabled),
     defaultBrowserCookiePolicy: row.default_browser_cookie_policy,
     defaultTerminalMode: row.default_terminal_mode,
@@ -1380,12 +1495,14 @@ function rowToTask(row) {
   };
 }
 function rowToWorkspace(row) {
+  const status = row.status === "active" || row.status === "saved" || row.status === "archived" ? row.status : row.archived ? "archived" : "active";
   return {
     id: row.id,
     projectId: row.project_id,
     name: row.name,
     layoutState: JSON.parse(row.layout_state),
-    archived: Boolean(row.archived),
+    status,
+    archived: status === "archived",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastPanelEditedAt: row.last_panel_edited_at ?? null
@@ -1455,10 +1572,14 @@ function listWorkspacesForProject(args) {
            FROM workspaces w
            INNER JOIN projects p ON p.id = w.project_id
            WHERE w.project_id = ?
-           ORDER BY w.archived ASC, w.created_at ASC` : `SELECT w.*, p.repo_path
+           ORDER BY CASE w.status
+             WHEN 'active' THEN 0
+             WHEN 'saved' THEN 1
+             ELSE 2
+           END ASC, w.created_at ASC` : `SELECT w.*, p.repo_path
            FROM workspaces w
            INNER JOIN projects p ON p.id = w.project_id
-           WHERE w.project_id = ? AND w.archived = 0
+           WHERE w.project_id = ? AND w.status != 'archived'
            ORDER BY w.created_at ASC`
   ).all(projectId).map(backfillWorkspaceLastPanelEditedAt).map(rowToWorkspace);
 }
@@ -1914,15 +2035,17 @@ var handlers = {
     const id = nanoid();
     const now = (/* @__PURE__ */ new Date()).toISOString();
     const color = input.color || getRandomProjectColor();
+    const icon = serializeProjectIcon(input.icon);
     db.prepare(
-      `INSERT INTO projects (id, name, repo_path, description, color, git_workspaces_enabled, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO projects (id, name, repo_path, description, color, icon, git_workspaces_enabled, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       id,
       input.name,
       input.repoPath,
       input.description || "",
       color,
+      icon,
       input.gitWorkspacesEnabled ? 1 : 0,
       now,
       now
@@ -1952,6 +2075,10 @@ var handlers = {
     if (input.color !== void 0) {
       updates.push("color = ?");
       values.push(input.color);
+    }
+    if (input.icon !== void 0) {
+      updates.push("icon = ?");
+      values.push(serializeProjectIcon(input.icon));
     }
     if (input.gitWorkspacesEnabled !== void 0) {
       updates.push("git_workspaces_enabled = ?");
@@ -2035,12 +2162,13 @@ var handlers = {
         project_id,
         name,
         layout_state,
+        status,
         created_at,
         updated_at,
         last_panel_edited_at
       )
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, input.projectId, input.name, defaultLayout, now, now, lastPanelEditedAt);
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, input.projectId, input.name, defaultLayout, "active", now, now, lastPanelEditedAt);
     return rowToWorkspace(
       db.prepare("SELECT * FROM workspaces WHERE id = ?").get(id)
     );
@@ -2055,9 +2183,17 @@ var handlers = {
       updates.push("name = ?");
       values.push(input.name);
     }
+    if (input.status !== void 0) {
+      updates.push("status = ?");
+      values.push(input.status);
+      updates.push("archived = ?");
+      values.push(input.status === "archived" ? 1 : 0);
+    }
     if (input.archived !== void 0) {
       updates.push("archived = ?");
       values.push(input.archived ? 1 : 0);
+      updates.push("status = ?");
+      values.push(input.archived ? "archived" : "active");
     }
     if (updates.length === 1) {
       return rowToWorkspace(existing);
@@ -2107,14 +2243,14 @@ var handlers = {
   "workspace:archive": (id) => {
     const now = (/* @__PURE__ */ new Date()).toISOString();
     const result = db.prepare(
-      "UPDATE workspaces SET archived = 1, updated_at = ? WHERE id = ?"
+      "UPDATE workspaces SET status = 'archived', archived = 1, updated_at = ? WHERE id = ?"
     ).run(now, id);
     return result.changes > 0;
   },
   "workspace:unarchive": (id) => {
     const now = (/* @__PURE__ */ new Date()).toISOString();
     const result = db.prepare(
-      "UPDATE workspaces SET archived = 0, updated_at = ? WHERE id = ?"
+      "UPDATE workspaces SET status = 'saved', archived = 0, updated_at = ? WHERE id = ?"
     ).run(now, id);
     return result.changes > 0;
   },

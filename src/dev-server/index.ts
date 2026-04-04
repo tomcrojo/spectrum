@@ -31,6 +31,11 @@ import {
 import { BROWSER_CHANNELS, T3CODE_CHANNELS } from '../shared/ipc-channels'
 import { getRandomProjectColor, normalizeProjectColor } from '@shared/project.types'
 import {
+  deserializeProjectIcon,
+  resolveProjectIcon,
+  serializeProjectIcon
+} from '../main/project-icons'
+import {
   readBrowserCliThreadBindings,
   upsertBrowserCliThreadBindingRecord
 } from '../main/browser-cli/BrowserCliThreadBindingStore'
@@ -91,8 +96,8 @@ function rowToProject(row: any) {
     name: row.name,
     repoPath: row.repo_path,
     description: row.description,
-    progress: row.progress,
     color: normalizeProjectColor(row.color),
+    icon: resolveProjectIcon(deserializeProjectIcon(row.icon), row.repo_path),
     gitWorkspacesEnabled: Boolean(row.git_workspaces_enabled),
     defaultBrowserCookiePolicy: row.default_browser_cookie_policy,
     defaultTerminalMode: row.default_terminal_mode,
@@ -114,12 +119,20 @@ function rowToTask(row: any) {
 }
 
 function rowToWorkspace(row: any) {
+  const status =
+    row.status === 'active' || row.status === 'saved' || row.status === 'archived'
+      ? row.status
+      : row.archived
+        ? 'archived'
+        : 'active'
+
   return {
     id: row.id,
     projectId: row.project_id,
     name: row.name,
     layoutState: JSON.parse(row.layout_state),
-    archived: Boolean(row.archived),
+    status,
+    archived: status === 'archived',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastPanelEditedAt: row.last_panel_edited_at ?? null
@@ -209,11 +222,15 @@ function listWorkspacesForProject(args: string | { projectId: string; includeArc
            FROM workspaces w
            INNER JOIN projects p ON p.id = w.project_id
            WHERE w.project_id = ?
-           ORDER BY w.archived ASC, w.created_at ASC`
+           ORDER BY CASE w.status
+             WHEN 'active' THEN 0
+             WHEN 'saved' THEN 1
+             ELSE 2
+           END ASC, w.created_at ASC`
         : `SELECT w.*, p.repo_path
            FROM workspaces w
            INNER JOIN projects p ON p.id = w.project_id
-           WHERE w.project_id = ? AND w.archived = 0
+           WHERE w.project_id = ? AND w.status != 'archived'
            ORDER BY w.created_at ASC`
     )
     .all(projectId)
@@ -796,15 +813,17 @@ const handlers: Record<string, Handler> = {
     const id = nanoid()
     const now = new Date().toISOString()
     const color = input.color || getRandomProjectColor()
+    const icon = serializeProjectIcon(input.icon)
     db.prepare(
-      `INSERT INTO projects (id, name, repo_path, description, color, git_workspaces_enabled, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO projects (id, name, repo_path, description, color, icon, git_workspaces_enabled, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       id,
       input.name,
       input.repoPath,
       input.description || '',
       color,
+      icon,
       input.gitWorkspacesEnabled ? 1 : 0,
       now,
       now
@@ -830,13 +849,13 @@ const handlers: Record<string, Handler> = {
       updates.push('description = ?')
       values.push(input.description)
     }
-    if (input.progress !== undefined) {
-      updates.push('progress = ?')
-      values.push(input.progress)
-    }
     if (input.color !== undefined) {
       updates.push('color = ?')
       values.push(input.color)
+    }
+    if (input.icon !== undefined) {
+      updates.push('icon = ?')
+      values.push(serializeProjectIcon(input.icon))
     }
     if (input.gitWorkspacesEnabled !== undefined) {
       updates.push('git_workspaces_enabled = ?')
@@ -934,12 +953,13 @@ const handlers: Record<string, Handler> = {
         project_id,
         name,
         layout_state,
+        status,
         created_at,
         updated_at,
         last_panel_edited_at
       )
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, input.projectId, input.name, defaultLayout, now, now, lastPanelEditedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, input.projectId, input.name, defaultLayout, 'active', now, now, lastPanelEditedAt)
     return rowToWorkspace(
       db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id)
     )
@@ -958,9 +978,18 @@ const handlers: Record<string, Handler> = {
       values.push(input.name)
     }
 
+    if (input.status !== undefined) {
+      updates.push('status = ?')
+      values.push(input.status)
+      updates.push('archived = ?')
+      values.push(input.status === 'archived' ? 1 : 0)
+    }
+
     if (input.archived !== undefined) {
       updates.push('archived = ?')
       values.push(input.archived ? 1 : 0)
+      updates.push('status = ?')
+      values.push(input.archived ? 'archived' : 'active')
     }
 
     if (updates.length === 1) {
@@ -1038,7 +1067,7 @@ const handlers: Record<string, Handler> = {
     const now = new Date().toISOString()
     const result = db
       .prepare(
-        'UPDATE workspaces SET archived = 1, updated_at = ? WHERE id = ?'
+        "UPDATE workspaces SET status = 'archived', archived = 1, updated_at = ? WHERE id = ?"
       )
       .run(now, id)
     return result.changes > 0
@@ -1048,7 +1077,7 @@ const handlers: Record<string, Handler> = {
     const now = new Date().toISOString()
     const result = db
       .prepare(
-        'UPDATE workspaces SET archived = 0, updated_at = ? WHERE id = ?'
+        "UPDATE workspaces SET status = 'saved', archived = 0, updated_at = ? WHERE id = ?"
       )
       .run(now, id)
     return result.changes > 0

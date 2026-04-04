@@ -1,6 +1,6 @@
 {
   "name": "@anthropic-ai/claude-agent-sdk",
-  "version": "0.2.89",
+  "version": "0.2.90",
   "main": "sdk.mjs",
   "types": "sdk.d.ts",
   "exports": {
@@ -65,5 +65,5 @@
     "@img/sharp-win32-arm64": "^0.34.2",
     "@img/sharp-win32-x64": "^0.34.2"
   },
-  "claudeCodeVersion": "2.1.89"
+  "claudeCodeVersion": "2.1.90"
 }

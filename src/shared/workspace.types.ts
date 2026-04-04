@@ -1,11 +1,16 @@
 export type PanelType = 'terminal' | 'browser' | 'chat' | 't3code' | 'file'
 export type PanelHydrationState = 'live' | 'preview' | 'cold'
 export type PanelOpenedBy = 'user' | 'agent' | 'popup'
+export type WorkspaceStatus = 'active' | 'saved' | 'archived'
+export type PanelTitleSource = 'default' | 'auto' | 'user'
+export type WorkspaceNameSource = 'default' | 'auto' | 'user'
 
 export interface PanelConfig {
   id: string
   type: PanelType
   title: string
+  titleSource?: PanelTitleSource
+  hasAutoRenamed?: boolean
   isTemporary?: boolean
   parentPanelId?: string
   returnToPanelId?: string
@@ -35,7 +40,10 @@ export interface Workspace {
   id: string
   projectId: string
   name: string
+  nameSource: WorkspaceNameSource
+  hasAutoRenamed: boolean
   layoutState: WorkspaceLayoutState
+  status: WorkspaceStatus
   archived: boolean
   createdAt: string
   updatedAt: string
@@ -56,6 +64,9 @@ export interface ListWorkspacesInput {
 export interface UpdateWorkspaceInput {
   id: string
   name?: string
+  nameSource?: WorkspaceNameSource
+  hasAutoRenamed?: boolean
+  status?: WorkspaceStatus
   archived?: boolean
 }
 

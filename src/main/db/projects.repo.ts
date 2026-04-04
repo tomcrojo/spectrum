@@ -6,6 +6,7 @@ import type {
   UpdateProjectInput
 } from '@shared/project.types'
 import { getRandomProjectColor, normalizeProjectColor } from '@shared/project.types'
+import { deserializeProjectIcon, resolveProjectIcon, serializeProjectIcon } from '../project-icons'
 
 function rowToProject(row: any): Project {
   return {
@@ -13,8 +14,8 @@ function rowToProject(row: any): Project {
     name: row.name,
     repoPath: row.repo_path,
     description: row.description,
-    progress: row.progress as 0 | 1 | 2 | 3,
     color: normalizeProjectColor(row.color),
+    icon: resolveProjectIcon(deserializeProjectIcon(row.icon), row.repo_path),
     gitWorkspacesEnabled: Boolean(row.git_workspaces_enabled),
     defaultBrowserCookiePolicy: row.default_browser_cookie_policy,
     defaultTerminalMode: row.default_terminal_mode,
@@ -43,11 +44,22 @@ export function createProject(input: CreateProjectInput): Project {
   const id = nanoid()
   const now = new Date().toISOString()
   const color = input.color || getRandomProjectColor()
+  const icon = serializeProjectIcon(input.icon)
 
   db.prepare(
-    `INSERT INTO projects (id, name, repo_path, description, color, git_workspaces_enabled, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, input.name, input.repoPath, input.description || '', color, input.gitWorkspacesEnabled ? 1 : 0, now, now)
+    `INSERT INTO projects (id, name, repo_path, description, color, icon, git_workspaces_enabled, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    id,
+    input.name,
+    input.repoPath,
+    input.description || '',
+    color,
+    icon,
+    input.gitWorkspacesEnabled ? 1 : 0,
+    now,
+    now
+  )
 
   return getProject(id)!
 }
@@ -69,13 +81,13 @@ export function updateProject(input: UpdateProjectInput): Project | null {
     updates.push('description = ?')
     values.push(input.description)
   }
-  if (input.progress !== undefined) {
-    updates.push('progress = ?')
-    values.push(input.progress)
-  }
   if (input.color !== undefined) {
     updates.push('color = ?')
     values.push(input.color)
+  }
+  if (input.icon !== undefined) {
+    updates.push('icon = ?')
+    values.push(serializeProjectIcon(input.icon))
   }
   if (input.gitWorkspacesEnabled !== undefined) {
     updates.push('git_workspaces_enabled = ?')

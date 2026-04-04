@@ -44,7 +44,9 @@ function invoke<T>(channel: string, ...args: any[]): Promise<T> {
 export const appApi = {
   zoomIn: () => invoke<number>(APP_CHANNELS.ZOOM_IN),
   zoomOut: () => invoke<number>(APP_CHANNELS.ZOOM_OUT),
-  resetZoom: () => invoke<number>(APP_CHANNELS.RESET_ZOOM)
+  resetZoom: () => invoke<number>(APP_CHANNELS.RESET_ZOOM),
+  setTrafficLightsVisible: (visible: boolean) =>
+    invoke<void>(APP_CHANNELS.SET_TRAFFIC_LIGHTS_VISIBLE, visible)
 }
 
 // Projects

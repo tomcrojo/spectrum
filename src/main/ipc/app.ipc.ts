@@ -40,4 +40,10 @@ export function registerAppHandlers(): void {
   ipcMain.handle(APP_CHANNELS.RESET_ZOOM, (event) => {
     return setZoomFactorForSender(event.sender, DEFAULT_ZOOM_FACTOR)
   })
+
+  ipcMain.handle(APP_CHANNELS.SET_TRAFFIC_LIGHTS_VISIBLE, (event, visible: boolean) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (!window || process.platform !== 'darwin') return
+    window.setWindowButtonVisibility(visible)
+  })
 }

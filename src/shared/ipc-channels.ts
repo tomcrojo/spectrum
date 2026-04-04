@@ -10,7 +10,8 @@ export const PROJECT_CHANNELS = {
 export const APP_CHANNELS = {
   ZOOM_IN: 'app:zoom-in',
   ZOOM_OUT: 'app:zoom-out',
-  RESET_ZOOM: 'app:reset-zoom'
+  RESET_ZOOM: 'app:reset-zoom',
+  SET_TRAFFIC_LIGHTS_VISIBLE: 'app:set-traffic-lights-visible'
 } as const
 
 // Task channels
