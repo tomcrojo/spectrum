@@ -55,7 +55,7 @@ npm run build
 - SQLite is the source of truth; renderer state should reflect confirmed IPC results
 - IPC channels follow `domain:action`
 - `ELECTRON_RUN_AS_NODE` must be unset when launching Electron directly
-- `resources/t3code` and `resources/dev-browser` are tracked as submodules; if you update them, explain why and call out the upstream commit
+- `resources/t3code` is tracked as a submodule; if you update it, explain why and call out the upstream commit
 - Avoid committing generated outputs such as `artifacts/`, `build/t3code-runtime/`, `build/node-bin/`, `.dev-server.cjs`, or repo-root scratch/design files
 
 ## Pull Request Guidelines

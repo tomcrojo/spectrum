@@ -1,6 +1,3 @@
 [submodule "resources/t3code"]
 	path = resources/t3code
 	url = https://github.com/pingdotgg/t3code.git
-[submodule "resources/dev-browser"]
-	path = resources/dev-browser
-	url = https://github.com/SawyerHood/dev-browser.git

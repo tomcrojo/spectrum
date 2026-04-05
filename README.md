@@ -109,7 +109,6 @@ git submodule update --init --recursive
 Current submodules:
 
 - `resources/t3code`
-- `resources/dev-browser`
 
 Install and start the Electron app:
 
@@ -137,7 +136,7 @@ Important runtime note:
 
 ## Browser Mode
 
-`npm run dev:browser` starts the renderer at `http://localhost:5173` and a standalone backend over WebSocket. This is the easiest way to inspect the app with `dev-browser`, capture screenshots, and test browser/terminal/file flows without launching the Electron shell.
+`npm run dev:browser` starts the renderer at `http://localhost:5173` and a standalone backend over WebSocket. This is the easiest way to inspect the app in a browser, capture screenshots, and test browser/terminal/file flows without launching the Electron shell.
 
 ## Project Layout
 
@@ -164,7 +163,6 @@ Spectrum uses a small mix of local helpers and git submodules for development-ti
 Spectrum stands on the shoulders of projects that shaped its direction. Huge thanks to:
 
 - [T3Code](https://github.com/pingdotgg/t3code)
-- [dev-browser](https://github.com/SawyerHood/dev-browser)
 - [IDX0](https://github.com/galz10/IDX0)
 - [cmux](https://github.com/manaflow-ai/cmux)
 
