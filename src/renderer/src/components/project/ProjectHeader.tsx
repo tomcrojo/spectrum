@@ -3,7 +3,7 @@ import { Button } from '@renderer/components/shared/Button'
 import { ProjectAvatar } from '@renderer/components/shared/ProjectAvatar'
 import { ProjectIconEditor } from '@renderer/components/shared/ProjectIconEditor'
 import { ColorPicker } from '@renderer/components/shared/ColorPicker'
-import { getProjectColorMeta } from '@renderer/lib/project-colors'
+import { getProjectColorMeta, getProjectMeshGradient } from '@renderer/lib/project-colors'
 import { useProjectsStore } from '@renderer/stores/projects.store'
 import type { Project, ProjectColor, ProjectIcon } from '@shared/project.types'
 
@@ -13,13 +13,25 @@ interface ProjectHeaderProps {
   onColorChange: (color: ProjectColor) => void
 }
 
+function formatRepoPath(repoPath: string, visibleAncestors = 2): string {
+  const separator = repoPath.includes('\\') ? '\\' : '/'
+  const trimmedPath = repoPath.replace(/[\\/]+$/, '')
+  const segments = trimmedPath.split(/[\\/]+/).filter(Boolean)
+  const visibleSegmentCount = visibleAncestors + 1
+
+  if (segments.length <= visibleSegmentCount) {
+    return trimmedPath
+  }
+
+  return `…${separator}${segments.slice(-visibleSegmentCount).join(separator)}`
+}
+
 export function ProjectHeader({ project, color, onColorChange }: ProjectHeaderProps) {
   const { updateProject } = useProjectsStore()
   const [editingDescription, setEditingDescription] = useState(false)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [description, setDescription] = useState(project.description)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const colorMeta = getProjectColorMeta(color)
   const [showIconEditor, setShowIconEditor] = useState(false)
   const [iconDraft, setIconDraft] = useState<ProjectIcon>(project.icon ?? { type: 'repo-favicon' })
 
@@ -50,51 +62,72 @@ export function ProjectHeader({ project, color, onColorChange }: ProjectHeaderPr
     updateProject({ id: project.id, icon: iconDraft })
   }
 
+  const displayRepoPath = formatRepoPath(project.repoPath)
+  const colorMeta = getProjectColorMeta(color)
+  const colorPreview = getProjectMeshGradient(color)
+
   return (
-    <div className="mb-3">
-      <div className="project-theme-card mb-3 rounded-xl px-3 py-3">
-        <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="min-w-0 flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={() => {
-              setIconDraft(project.icon ?? { type: 'repo-favicon' })
-              setShowIconEditor((open) => !open)
-            }}
-            className="project-theme-avatar-button rounded-xl transition-transform hover:scale-[1.01]"
-            title="Change project icon"
-          >
-            <ProjectAvatar icon={project.icon} name={project.name} color={color} size={38} className="rounded-[10px] border-none bg-bg/80 text-white" />
-          </button>
-          <div className="min-w-0">
-            <h1 className="truncate text-lg font-semibold tracking-[-0.03em] text-text-primary">{project.name}</h1>
-            <div className="mt-0.5 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setIconDraft(project.icon ?? { type: 'repo-favicon' })
-                  setShowIconEditor((open) => !open)
-                }}
-                className="inline-flex h-5 items-center rounded-md px-1 text-[11px] leading-none text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary"
-              >
-                Change icon
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowColorPicker((open) => !open)}
-                className="inline-flex h-6 items-center gap-1.5 rounded-full border border-border/80 bg-bg/70 px-2 py-0.5 text-[11px] font-medium leading-none text-text-secondary transition-colors hover:border-border hover:text-text-primary"
-                title="Change project color"
-              >
-                <span className="h-2 w-2 rounded-full" style={{ background: colorMeta.primary }} />
-                <span>{colorMeta.name}</span>
-              </button>
-            </div>
+    <div className="mb-5 px-1.5">
+      {/* ── Hero: avatar + name ── */}
+      <div className="mb-4 flex items-center gap-3.5">
+        <button
+          type="button"
+          onClick={() => {
+            setIconDraft(project.icon ?? { type: 'repo-favicon' })
+            setShowIconEditor((open) => !open)
+          }}
+          className="project-theme-avatar-button rounded-[1.1rem] transition-all duration-200 hover:scale-[1.04] hover:brightness-110 focus-visible:outline-none"
+          title="Change project icon"
+        >
+          <ProjectAvatar
+            icon={project.icon}
+            name={project.name}
+            color={color}
+            size={52}
+            className="rounded-[14px] border-none bg-bg/72 text-white"
+          />
+        </button>
+
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-[20px] font-semibold tracking-[-0.035em] leading-tight text-text-primary">
+            {project.name}
+          </h1>
+          <div className="mt-1.5 flex items-center gap-2">
+            <span
+              className="max-w-full select-text cursor-text truncate rounded-md bg-bg-hover/50 px-2 py-0.5 font-mono text-[11px] text-text-muted"
+              title={project.repoPath}
+            >
+              {displayRepoPath}
+            </span>
+            {project.gitWorkspacesEnabled && (
+              <span className="rounded-md bg-bg-hover/40 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-text-muted">
+                git workspaces
+              </span>
+            )}
           </div>
         </div>
+
+        {/* Color picker trigger — compact, positioned at the end */}
+        <button
+          type="button"
+          onClick={() => setShowColorPicker((open) => !open)}
+          className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 transition-all duration-200 hover:scale-110 hover:border-white/20 focus-visible:outline-none"
+          style={{
+            background: colorPreview,
+            backgroundSize: '200% 200%',
+            backgroundPosition: 'center',
+            boxShadow: `0 4px 12px color-mix(in oklab, ${colorMeta.primary} 20%, rgba(0, 0, 0, 0.3))`,
+          }}
+          title={`Change project color: ${colorMeta.name}`}
+          aria-label={`Change project color: ${colorMeta.name}`}
+        >
+          <span className="absolute inset-[2px] rounded-full border border-white/8" />
+        </button>
       </div>
 
-      {showIconEditor ? (
-        <div className="mb-3 space-y-2">
+      {/* ── Icon editor (expandable) ── */}
+      {showIconEditor && (
+        <div className="mb-4 space-y-2">
           <ProjectIconEditor
             value={iconDraft}
             onChange={setIconDraft}
@@ -118,10 +151,11 @@ export function ProjectHeader({ project, color, onColorChange }: ProjectHeaderPr
             </Button>
           </div>
         </div>
-      ) : null}
+      )}
 
+      {/* ── Color picker (expandable) ── */}
       {showColorPicker && (
-        <div className="mb-3 rounded-xl border border-border-subtle bg-bg/70 p-3">
+        <div className="mb-4 rounded-xl border border-border-subtle bg-bg/60 p-3 backdrop-blur-sm">
           <ColorPicker
             value={color}
             onChange={(nextColor) => {
@@ -133,6 +167,7 @@ export function ProjectHeader({ project, color, onColorChange }: ProjectHeaderPr
         </div>
       )}
 
+      {/* ── Description ── */}
       {editingDescription ? (
         <textarea
           ref={textareaRef}
@@ -145,34 +180,23 @@ export function ProjectHeader({ project, color, onColorChange }: ProjectHeaderPr
               setEditingDescription(false)
             }
           }}
-          className="project-theme-description w-full rounded-lg px-2.5 py-1.5 text-[13px] text-text-secondary resize-none outline-none focus:border-[var(--project-border)]"
+          className="project-theme-description w-full rounded-lg px-3 py-2 text-[13px] leading-relaxed text-text-secondary resize-none outline-none focus:border-[var(--project-border)]"
           rows={2}
           placeholder="Add a description..."
         />
       ) : (
-        <p
+        <button
+          type="button"
           onClick={() => setEditingDescription(true)}
-          className="project-theme-description min-h-[36px] cursor-text rounded-lg px-2.5 py-1.5 text-[13px] text-text-secondary transition-colors hover:text-text-primary"
+          className="project-theme-description w-full text-left min-h-[36px] cursor-text rounded-lg px-3 py-2 text-[13px] leading-relaxed text-text-secondary transition-all duration-200 hover:text-text-primary"
         >
           {project.description || (
-            <span className="text-text-muted italic">
-              Click to add a description...
+            <span className="text-text-muted/70 font-light">
+              Add a description…
             </span>
           )}
-        </p>
+        </button>
       )}
-
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
-        <span className="select-text cursor-text rounded-full border border-border/70 bg-bg/65 px-2 py-0.5">
-          {project.repoPath}
-        </span>
-        {project.gitWorkspacesEnabled && (
-          <span className="rounded-full border border-border/80 bg-bg/65 px-2 py-0.5 text-text-secondary">
-            git workspaces
-          </span>
-        )}
-      </div>
-      </div>
     </div>
   )
 }

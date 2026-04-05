@@ -16,6 +16,7 @@ import type {
 import { browserApi, filesApi, workspacesApi } from '@renderer/lib/ipc'
 import { useBrowserUiStore } from './browser-ui.store'
 import { usePanelRuntimeStore } from './panel-runtime.store'
+import { useUiStore } from './ui.store'
 
 export interface ActiveWorkspacePanel {
   panelId: string
@@ -44,6 +45,9 @@ export interface ActiveWorkspacePanel {
 interface WorkspacesState {
   workspaces: Workspace[]
   activePanels: ActiveWorkspacePanel[]
+  residentProjectIds: string[]
+  lastVisitedAtByProjectId: Record<string, string>
+  activeWorkspaceIdByProjectId: Record<string, string | null>
   focusedPanelId: string | null
   focusedBrowserPanelId: string | null
   focusedBrowserPanelByWorkspace: Record<string, string | null>
@@ -106,9 +110,13 @@ interface WorkspacesState {
   updateWorkspaceLastPanelEditedAt: (workspaceId: string, timestamp: string) => Promise<void>
   applyAutoTitleToT3CodePanel: (panelId: string, title: string) => Promise<void>
   restorePanelsFromWorkspaces: (workspaces: Workspace[], cwd: string) => void
+  markProjectVisited: (projectId: string) => void
+  activateProjectView: (projectId: string | null) => void
+  powerOffProject: (projectId: string) => Promise<void>
 }
 
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const pendingLayoutStateByWorkspaceId = new Map<string, WorkspaceLayoutState>()
 const workspaceMutationVersionByProjectId = new Map<string, number>()
 const AUTOSAVE_DELAY = 400
 const DEFAULT_T3CODE_PANEL_TITLE = 'T3Code'
@@ -256,6 +264,33 @@ function buildInitialLastFocusedPanelMap(
   }
 
   return lastFocusedPanelByWorkspace
+}
+
+function getProjectIdForWorkspace(
+  workspaces: Workspace[],
+  workspaceId: string
+): string | null {
+  return workspaces.find((workspace) => workspace.id === workspaceId)?.projectId ?? null
+}
+
+function getWorkspaceIdsForProject(
+  workspaces: Workspace[],
+  projectId: string
+): Set<string> {
+  return new Set(
+    workspaces
+      .filter((workspace) => workspace.projectId === projectId)
+      .map((workspace) => workspace.id)
+  )
+}
+
+function getActivePanelsForProject(
+  panels: ActiveWorkspacePanel[],
+  workspaces: Workspace[],
+  projectId: string
+): ActiveWorkspacePanel[] {
+  const workspaceIds = getWorkspaceIdsForProject(workspaces, projectId)
+  return panels.filter((panel) => workspaceIds.has(panel.workspaceId))
 }
 
 function getPreferredPanelIdForWorkspace(
@@ -420,6 +455,45 @@ function resolveFocusedBrowserPanelId(
   return null
 }
 
+function resolveFocusedBrowserPanelIdForProject(
+  projectId: string,
+  activeWorkspaceIdByProjectId: Record<string, string | null>,
+  focusedByWorkspace: Record<string, string | null>,
+  panels: ActiveWorkspacePanel[],
+  workspaces: Workspace[]
+): string | null {
+  const projectPanels = getActivePanelsForProject(panels, workspaces, projectId)
+  const browserPanelIds = new Set(
+    projectPanels
+      .filter((panel) => panel.panelType === 'browser')
+      .map((panel) => panel.panelId)
+  )
+  const activeWorkspaceId = activeWorkspaceIdByProjectId[projectId] ?? null
+
+  if (activeWorkspaceId) {
+    const activeWorkspaceFocusedPanelId = focusedByWorkspace[activeWorkspaceId]
+    if (activeWorkspaceFocusedPanelId && browserPanelIds.has(activeWorkspaceFocusedPanelId)) {
+      return activeWorkspaceFocusedPanelId
+    }
+  }
+
+  for (const [workspaceId, panelId] of Object.entries(focusedByWorkspace)) {
+    if (!panelId) {
+      continue
+    }
+
+    if (!workspaces.some((workspace) => workspace.id === workspaceId && workspace.projectId === projectId)) {
+      continue
+    }
+
+    if (browserPanelIds.has(panelId)) {
+      return panelId
+    }
+  }
+
+  return null
+}
+
 function insertBrowserPanel(
   panels: ActiveWorkspacePanel[],
   panel: ActiveWorkspacePanel
@@ -440,6 +514,10 @@ function insertBrowserPanel(
 }
 
 function scheduleSave(workspaceId: string, getState: () => WorkspacesState): void {
+  const { activePanels } = getState()
+  const wsPanels = activePanels.filter((panel) => panel.workspaceId === workspaceId)
+  pendingLayoutStateByWorkspaceId.set(workspaceId, buildLayoutState(wsPanels))
+
   const existing = saveTimers.get(workspaceId)
   if (existing) {
     clearTimeout(existing)
@@ -447,15 +525,20 @@ function scheduleSave(workspaceId: string, getState: () => WorkspacesState): voi
 
   const timer = setTimeout(() => {
     saveTimers.delete(workspaceId)
-    const { activePanels, workspaces } = getState()
-    const wsPanels = activePanels.filter((panel) => panel.workspaceId === workspaceId)
+    const { workspaces } = getState()
     const workspace = workspaces.find((entry) => entry.id === workspaceId)
+    const layoutState = pendingLayoutStateByWorkspaceId.get(workspaceId)
     if (!workspace) {
+      pendingLayoutStateByWorkspaceId.delete(workspaceId)
       return
     }
 
-    const layoutState = buildLayoutState(wsPanels)
+    if (!layoutState) {
+      return
+    }
+
     if (serializeLayoutState(layoutState) === serializeLayoutState(workspace.layoutState)) {
+      pendingLayoutStateByWorkspaceId.delete(workspaceId)
       return
     }
 
@@ -465,6 +548,7 @@ function scheduleSave(workspaceId: string, getState: () => WorkspacesState): voi
         if (persistedWorkspace) {
           syncWorkspaceSnapshot(persistedWorkspace, getState)
         }
+        pendingLayoutStateByWorkspaceId.delete(workspaceId)
       })
       .catch((error) => {
         console.error(`[autosave] Failed to save layout for workspace ${workspaceId}:`, error)
@@ -477,11 +561,13 @@ function scheduleSave(workspaceId: string, getState: () => WorkspacesState): voi
 function clearPendingSave(workspaceId: string): void {
   const existing = saveTimers.get(workspaceId)
   if (!existing) {
+    pendingLayoutStateByWorkspaceId.delete(workspaceId)
     return
   }
 
   clearTimeout(existing)
   saveTimers.delete(workspaceId)
+  pendingLayoutStateByWorkspaceId.delete(workspaceId)
 }
 
 async function flushWorkspaceLayout(
@@ -497,12 +583,15 @@ async function flushWorkspaceLayout(
   const { activePanels, workspaces } = getState()
   const workspace = workspaces.find((entry) => entry.id === workspaceId) ?? null
   if (!workspace) {
+    pendingLayoutStateByWorkspaceId.delete(workspaceId)
     return null
   }
 
-  const wsPanels = activePanels.filter((panel) => panel.workspaceId === workspaceId)
-  const layoutState = buildLayoutState(wsPanels)
+  const layoutState =
+    pendingLayoutStateByWorkspaceId.get(workspaceId) ??
+    buildLayoutState(activePanels.filter((panel) => panel.workspaceId === workspaceId))
   if (serializeLayoutState(layoutState) === serializeLayoutState(workspace.layoutState)) {
+    pendingLayoutStateByWorkspaceId.delete(workspaceId)
     return workspace
   }
 
@@ -510,6 +599,7 @@ async function flushWorkspaceLayout(
   if (persistedWorkspace) {
     syncWorkspaceSnapshot(persistedWorkspace, getState)
   }
+  pendingLayoutStateByWorkspaceId.delete(workspaceId)
 
   return persistedWorkspace ?? workspace
 }
@@ -552,9 +642,63 @@ function setActiveWorkspaceFromPanel(panelId: string | null, panels: ActiveWorks
   }
 }
 
+function syncCurrentProjectView(
+  state: Pick<
+    WorkspacesState,
+    | 'workspaces'
+    | 'activePanels'
+    | 'focusedBrowserPanelByWorkspace'
+    | 'lastFocusedPanelByWorkspace'
+    | 'activeWorkspaceIdByProjectId'
+  >,
+  projectId: string | null
+): {
+  focusedPanelId: string | null
+  focusedBrowserPanelId: string | null
+} {
+  if (!projectId) {
+    usePanelRuntimeStore.getState().setActiveWorkspaceId(null)
+    return {
+      focusedPanelId: null,
+      focusedBrowserPanelId: null
+    }
+  }
+
+  const projectPanels = getActivePanelsForProject(state.activePanels, state.workspaces, projectId)
+  const activeWorkspaceId = state.activeWorkspaceIdByProjectId[projectId] ?? null
+  let focusedPanelId: string | null = null
+
+  if (activeWorkspaceId) {
+    focusedPanelId = getPreferredPanelIdForWorkspace(activeWorkspaceId, {
+      activePanels: projectPanels,
+      lastFocusedPanelByWorkspace: state.lastFocusedPanelByWorkspace
+    })
+  }
+
+  if (!focusedPanelId) {
+    focusedPanelId = projectPanels[0]?.panelId ?? null
+  }
+
+  setActiveWorkspaceFromPanel(focusedPanelId, projectPanels)
+
+  return {
+    focusedPanelId,
+    focusedBrowserPanelId: resolveFocusedBrowserPanelIdForProject(
+      projectId,
+      state.activeWorkspaceIdByProjectId,
+      state.focusedBrowserPanelByWorkspace,
+      state.activePanels,
+      state.workspaces
+    )
+  }
+}
+
 export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
   workspaces: [],
   activePanels: [],
+  residentProjectIds: [],
+  lastVisitedAtByProjectId: {},
+  activeWorkspaceIdByProjectId: {},
   focusedPanelId: null,
   focusedBrowserPanelId: null,
   focusedBrowserPanelByWorkspace: {},
@@ -843,6 +987,7 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
     }
 
     set((state) => {
+      const activeProjectId = useUiStore.getState().activeProjectId
       const existingPanelIds = new Set(state.activePanels.map((panel) => panel.panelId))
       const nextPanels = restoredPanels.filter((panel) => !existingPanelIds.has(panel.panelId))
       if (nextPanels.length === 0) {
@@ -851,7 +996,6 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
 
       const mergedPanels = [...state.activePanels, ...nextPanels]
       syncRuntimePanels(mergedPanels)
-      usePanelRuntimeStore.getState().setActiveWorkspaceId(workspaceId)
 
       const preferredPanelId =
         getPreferredPanelIdForWorkspace(workspaceId, {
@@ -859,17 +1003,48 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
           lastFocusedPanelByWorkspace: state.lastFocusedPanelByWorkspace
         }) ?? nextPanels[0]?.panelId ?? null
 
+      const nextActiveWorkspaceIdByProjectId = {
+        ...state.activeWorkspaceIdByProjectId,
+        [workspace.projectId]: workspaceId
+      }
+      const currentProjectView =
+        workspace.projectId === activeProjectId
+          ? syncCurrentProjectView(
+              {
+                ...state,
+                activePanels: mergedPanels,
+                activeWorkspaceIdByProjectId: nextActiveWorkspaceIdByProjectId,
+                focusedBrowserPanelByWorkspace: pruneFocusedBrowserPanelMap(
+                  state.focusedBrowserPanelByWorkspace,
+                  mergedPanels
+                ),
+                lastFocusedPanelByWorkspace:
+                  preferredPanelId
+                    ? {
+                        ...state.lastFocusedPanelByWorkspace,
+                        [workspaceId]: preferredPanelId
+                      }
+                    : state.lastFocusedPanelByWorkspace
+              },
+              workspace.projectId
+            )
+          : {
+              focusedPanelId: state.focusedPanelId,
+              focusedBrowserPanelId: state.focusedBrowserPanelId
+            }
+
       return {
         activePanels: mergedPanels,
-        focusedPanelId: preferredPanelId,
+        residentProjectIds: state.residentProjectIds.includes(workspace.projectId)
+          ? state.residentProjectIds
+          : [...state.residentProjectIds, workspace.projectId],
+        activeWorkspaceIdByProjectId: nextActiveWorkspaceIdByProjectId,
+        focusedPanelId: currentProjectView.focusedPanelId,
         focusedBrowserPanelByWorkspace: pruneFocusedBrowserPanelMap(
           state.focusedBrowserPanelByWorkspace,
           mergedPanels
         ),
-        focusedBrowserPanelId: resolveFocusedBrowserPanelId(
-          pruneFocusedBrowserPanelMap(state.focusedBrowserPanelByWorkspace, mergedPanels),
-          mergedPanels
-        ),
+        focusedBrowserPanelId: currentProjectView.focusedBrowserPanelId,
         lastFocusedPanelByWorkspace:
           preferredPanelId
             ? {
@@ -883,28 +1058,70 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
 
   setActivePanels: (panels) => {
     syncRuntimePanels(panels)
+    const activeProjectId = useUiStore.getState().activeProjectId
+    const activeWorkspaceIdByProjectId = Object.fromEntries(
+      Array.from(
+        new Map(
+          panels.map((panel) => {
+            const projectId = getProjectIdForWorkspace(get().workspaces, panel.workspaceId)
+            return projectId ? [projectId, panel.workspaceId] : [panel.workspaceId, panel.workspaceId]
+          })
+        ).entries()
+      )
+    ) as Record<string, string | null>
+    const lastFocusedPanelByWorkspace = buildInitialLastFocusedPanelMap(panels)
+    const currentProjectView = syncCurrentProjectView(
+      {
+        workspaces: get().workspaces,
+        activePanels: panels,
+        focusedBrowserPanelByWorkspace: {},
+        lastFocusedPanelByWorkspace,
+        activeWorkspaceIdByProjectId
+      },
+      activeProjectId
+    )
     set({
       activePanels: panels,
-      focusedPanelId: null,
-      focusedBrowserPanelId: null,
+      residentProjectIds: Array.from(
+        new Set(
+          panels
+            .map((panel) => getProjectIdForWorkspace(get().workspaces, panel.workspaceId))
+            .filter((projectId): projectId is string => Boolean(projectId))
+        )
+      ),
+      activeWorkspaceIdByProjectId,
+      focusedPanelId: currentProjectView.focusedPanelId,
+      focusedBrowserPanelId: currentProjectView.focusedBrowserPanelId,
       focusedBrowserPanelByWorkspace: {},
-      lastFocusedPanelByWorkspace: buildInitialLastFocusedPanelMap(panels)
+      lastFocusedPanelByWorkspace
     })
   },
 
   addActivePanel: (panel) => {
     set((state) => {
+      const projectId = getProjectIdForWorkspace(state.workspaces, panel.workspaceId)
+      const activeProjectId = useUiStore.getState().activeProjectId
       if (state.activePanels.some((existing) => existing.panelId === panel.panelId)) {
         return state
       }
 
       const nextPanels = [...state.activePanels, panel]
       syncRuntimePanels(nextPanels)
-      usePanelRuntimeStore.getState().setActiveWorkspaceId(panel.workspaceId)
+      const nextActiveWorkspaceIdByProjectId = projectId
+        ? {
+            ...state.activeWorkspaceIdByProjectId,
+            [projectId]: panel.workspaceId
+          }
+        : state.activeWorkspaceIdByProjectId
 
       return {
         activePanels: nextPanels,
-        focusedPanelId: panel.panelId,
+        residentProjectIds:
+          projectId && !state.residentProjectIds.includes(projectId)
+            ? [...state.residentProjectIds, projectId]
+            : state.residentProjectIds,
+        activeWorkspaceIdByProjectId: nextActiveWorkspaceIdByProjectId,
+        focusedPanelId: projectId === activeProjectId ? panel.panelId : state.focusedPanelId,
         lastFocusedPanelByWorkspace: {
           ...state.lastFocusedPanelByWorkspace,
           [panel.workspaceId]: panel.panelId
@@ -916,6 +1133,7 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
 
   addActivePanelWithoutFocus: (panel) => {
     set((state) => {
+      const projectId = getProjectIdForWorkspace(state.workspaces, panel.workspaceId)
       if (state.activePanels.some((existing) => existing.panelId === panel.panelId)) {
         return state
       }
@@ -923,7 +1141,11 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
       const nextPanels = [...state.activePanels, panel]
       syncRuntimePanels(nextPanels)
       return {
-        activePanels: nextPanels
+        activePanels: nextPanels,
+        residentProjectIds:
+          projectId && !state.residentProjectIds.includes(projectId)
+            ? [...state.residentProjectIds, projectId]
+            : state.residentProjectIds
       }
     })
     scheduleSave(panel.workspaceId, get)
@@ -931,6 +1153,8 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
 
   insertPanelAfter: (panel, afterPanelId) => {
     set((state) => {
+      const projectId = getProjectIdForWorkspace(state.workspaces, panel.workspaceId)
+      const activeProjectId = useUiStore.getState().activeProjectId
       if (state.activePanels.some((existing) => existing.panelId === panel.panelId)) {
         return state
       }
@@ -938,11 +1162,21 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
       const nextPanels = insertPanelAtPosition(state.activePanels, panel, afterPanelId)
 
       syncRuntimePanels(nextPanels)
-      usePanelRuntimeStore.getState().setActiveWorkspaceId(panel.workspaceId)
+      const nextActiveWorkspaceIdByProjectId = projectId
+        ? {
+            ...state.activeWorkspaceIdByProjectId,
+            [projectId]: panel.workspaceId
+          }
+        : state.activeWorkspaceIdByProjectId
 
       return {
         activePanels: nextPanels,
-        focusedPanelId: panel.panelId,
+        residentProjectIds:
+          projectId && !state.residentProjectIds.includes(projectId)
+            ? [...state.residentProjectIds, projectId]
+            : state.residentProjectIds,
+        activeWorkspaceIdByProjectId: nextActiveWorkspaceIdByProjectId,
+        focusedPanelId: projectId === activeProjectId ? panel.panelId : state.focusedPanelId,
         lastFocusedPanelByWorkspace: {
           ...state.lastFocusedPanelByWorkspace,
           [panel.workspaceId]: panel.panelId
@@ -954,6 +1188,7 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
 
   insertPanelAfterWithoutFocus: (panel, afterPanelId) => {
     set((state) => {
+      const projectId = getProjectIdForWorkspace(state.workspaces, panel.workspaceId)
       if (state.activePanels.some((existing) => existing.panelId === panel.panelId)) {
         return state
       }
@@ -962,7 +1197,11 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
 
       syncRuntimePanels(nextPanels)
       return {
-        activePanels: nextPanels
+        activePanels: nextPanels,
+        residentProjectIds:
+          projectId && !state.residentProjectIds.includes(projectId)
+            ? [...state.residentProjectIds, projectId]
+            : state.residentProjectIds
       }
     })
     scheduleSave(panel.workspaceId, get)
@@ -990,6 +1229,8 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
 
   prependPanelToWorkspace: (panel) => {
     set((state) => {
+      const projectId = getProjectIdForWorkspace(state.workspaces, panel.workspaceId)
+      const activeProjectId = useUiStore.getState().activeProjectId
       if (state.activePanels.some((existing) => existing.panelId === panel.panelId)) {
         return state
       }
@@ -1003,11 +1244,21 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
       }
 
       syncRuntimePanels(nextPanels)
-      usePanelRuntimeStore.getState().setActiveWorkspaceId(panel.workspaceId)
+      const nextActiveWorkspaceIdByProjectId = projectId
+        ? {
+            ...state.activeWorkspaceIdByProjectId,
+            [projectId]: panel.workspaceId
+          }
+        : state.activeWorkspaceIdByProjectId
 
       return {
         activePanels: nextPanels,
-        focusedPanelId: panel.panelId,
+        residentProjectIds:
+          projectId && !state.residentProjectIds.includes(projectId)
+            ? [...state.residentProjectIds, projectId]
+            : state.residentProjectIds,
+        activeWorkspaceIdByProjectId: nextActiveWorkspaceIdByProjectId,
+        focusedPanelId: projectId === activeProjectId ? panel.panelId : state.focusedPanelId,
         lastFocusedPanelByWorkspace: {
           ...state.lastFocusedPanelByWorkspace,
           [panel.workspaceId]: panel.panelId
@@ -1126,6 +1377,7 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
 
   setFocusedPanel: (panelId) => {
     set((state) => {
+      const activeProjectId = useUiStore.getState().activeProjectId
       if (!panelId) {
         return state.focusedPanelId === null ? state : { focusedPanelId: null }
       }
@@ -1135,10 +1387,21 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
         return state.focusedPanelId === null ? state : { focusedPanelId: null }
       }
 
-      usePanelRuntimeStore.getState().setActiveWorkspaceId(panel.workspaceId)
+      const projectId = getProjectIdForWorkspace(state.workspaces, panel.workspaceId)
+      const nextActiveWorkspaceIdByProjectId = projectId
+        ? {
+            ...state.activeWorkspaceIdByProjectId,
+            [projectId]: panel.workspaceId
+          }
+        : state.activeWorkspaceIdByProjectId
+
+      if (projectId === activeProjectId) {
+        usePanelRuntimeStore.getState().setActiveWorkspaceId(panel.workspaceId)
+      }
 
       return {
-        focusedPanelId: panelId,
+        activeWorkspaceIdByProjectId: nextActiveWorkspaceIdByProjectId,
+        focusedPanelId: projectId === activeProjectId ? panelId : state.focusedPanelId,
         lastFocusedPanelByWorkspace: {
           ...state.lastFocusedPanelByWorkspace,
           [panel.workspaceId]: panelId
@@ -1149,6 +1412,7 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
 
   setFocusedBrowserPanel: (panelId, workspaceId) => {
     set((state) => {
+      const activeProjectId = useUiStore.getState().activeProjectId
       if (!panelId && !workspaceId) {
         return state.focusedBrowserPanelId === null ? state : { focusedBrowserPanelId: null }
       }
@@ -1175,16 +1439,25 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
         nextFocusedBrowserPanelByWorkspace,
         state.activePanels
       )
+      const projectFocusedBrowserPanelId = activeProjectId
+        ? resolveFocusedBrowserPanelIdForProject(
+            activeProjectId,
+            state.activeWorkspaceIdByProjectId,
+            nextFocusedBrowserPanelByWorkspace,
+            state.activePanels,
+            state.workspaces
+          )
+        : nextFocusedBrowserPanelId
       const currentFocusedWorkspaceId = resolvedWorkspaceId
         ? state.focusedBrowserPanelByWorkspace[resolvedWorkspaceId] ?? null
         : null
 
-      return state.focusedBrowserPanelId === nextFocusedBrowserPanelId &&
+      return state.focusedBrowserPanelId === projectFocusedBrowserPanelId &&
         currentFocusedWorkspaceId === panelId
         ? state
         : {
             focusedBrowserPanelByWorkspace: nextFocusedBrowserPanelByWorkspace,
-            focusedBrowserPanelId: nextFocusedBrowserPanelId
+            focusedBrowserPanelId: projectFocusedBrowserPanelId
           }
     })
   },
@@ -1223,17 +1496,37 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
 
   focusWorkspace: (workspaceId) => {
     set((state) => {
+      const activeProjectId = useUiStore.getState().activeProjectId
+      const projectId = getProjectIdForWorkspace(state.workspaces, workspaceId)
       const panelId = getPreferredPanelIdForWorkspace(workspaceId, state)
       if (!panelId) {
         return state
       }
 
-      usePanelRuntimeStore.getState().setActiveWorkspaceId(workspaceId)
+      if (projectId === activeProjectId) {
+        usePanelRuntimeStore.getState().setActiveWorkspaceId(workspaceId)
+      }
+
+      const nextActiveWorkspaceIdByProjectId = projectId
+        ? {
+            ...state.activeWorkspaceIdByProjectId,
+            [projectId]: workspaceId
+          }
+        : state.activeWorkspaceIdByProjectId
 
       return {
-        focusedPanelId: panelId,
+        activeWorkspaceIdByProjectId: nextActiveWorkspaceIdByProjectId,
+        focusedPanelId: projectId === activeProjectId ? panelId : state.focusedPanelId,
         focusedBrowserPanelId:
-          resolveFocusedBrowserPanelId(state.focusedBrowserPanelByWorkspace, state.activePanels),
+          projectId === activeProjectId && activeProjectId
+            ? resolveFocusedBrowserPanelIdForProject(
+                activeProjectId,
+                nextActiveWorkspaceIdByProjectId,
+                state.focusedBrowserPanelByWorkspace,
+                state.activePanels,
+                state.workspaces
+              )
+            : state.focusedBrowserPanelId,
         lastFocusedPanelByWorkspace: {
           ...state.lastFocusedPanelByWorkspace,
           [workspaceId]: panelId
@@ -1248,6 +1541,7 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
     useBrowserUiStore.getState().reconcileSnapshots(panels)
 
     set((state) => {
+      const activeProjectId = useUiStore.getState().activeProjectId
       let nextPanels = state.activePanels.reduce<ActiveWorkspacePanel[]>((acc, panel) => {
         if (panel.panelType !== 'browser') {
           acc.push(panel)
@@ -1318,10 +1612,16 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
       return {
         activePanels: nextPanels,
         focusedBrowserPanelByWorkspace: nextFocusedBrowserPanelByWorkspace,
-        focusedBrowserPanelId: resolveFocusedBrowserPanelId(
-          nextFocusedBrowserPanelByWorkspace,
-          nextPanels
-        )
+        focusedBrowserPanelId:
+          activeProjectId
+            ? resolveFocusedBrowserPanelIdForProject(
+                activeProjectId,
+                state.activeWorkspaceIdByProjectId,
+                nextFocusedBrowserPanelByWorkspace,
+                nextPanels,
+                state.workspaces
+              )
+            : resolveFocusedBrowserPanelId(nextFocusedBrowserPanelByWorkspace, nextPanels)
       }
     })
 
@@ -1339,10 +1639,12 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
     const panelId = nanoid()
 
     set((state) => {
+      const activeProjectId = useUiStore.getState().activeProjectId
       const workspace = state.workspaces.find((entry) => entry.id === normalized.workspaceId)
       const workspacePanels = state.activePanels.filter(
         (panel) => panel.workspaceId === normalized.workspaceId
       )
+      const projectId = workspace?.projectId ?? null
       const projectRoot =
         workspacePanels[0]?.cwd ??
         getProjectRootFromNormalizedPath(normalized.path, normalized.relativePath)
@@ -1383,11 +1685,25 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
       }
 
       syncRuntimePanels(nextPanels)
-      usePanelRuntimeStore.getState().setActiveWorkspaceId(normalized.workspaceId)
+      const nextActiveWorkspaceIdByProjectId = projectId
+        ? {
+            ...state.activeWorkspaceIdByProjectId,
+            [projectId]: normalized.workspaceId
+          }
+        : state.activeWorkspaceIdByProjectId
+
+      if (projectId === activeProjectId) {
+        usePanelRuntimeStore.getState().setActiveWorkspaceId(normalized.workspaceId)
+      }
 
       return {
         activePanels: nextPanels,
-        focusedPanelId: panelId,
+        residentProjectIds:
+          projectId && !state.residentProjectIds.includes(projectId)
+            ? [...state.residentProjectIds, projectId]
+            : state.residentProjectIds,
+        activeWorkspaceIdByProjectId: nextActiveWorkspaceIdByProjectId,
+        focusedPanelId: projectId === activeProjectId ? panelId : state.focusedPanelId,
         lastFocusedPanelByWorkspace: {
           ...state.lastFocusedPanelByWorkspace,
           [normalized.workspaceId]: panelId
@@ -1571,14 +1887,146 @@ export const useWorkspacesStore = create<WorkspacesState>((set, get) => ({
 
   restorePanelsFromWorkspaces: (workspaces, cwd) => {
     const panels = workspaces.flatMap((workspace) => buildPanelsFromWorkspace(workspace, cwd))
-    syncRuntimePanels(panels)
+    const projectId = workspaces[0]?.projectId ?? null
+    const activeProjectId = useUiStore.getState().activeProjectId
 
-    set({
-      activePanels: panels,
-      focusedPanelId: null,
-      focusedBrowserPanelId: null,
-      focusedBrowserPanelByWorkspace: {},
-      lastFocusedPanelByWorkspace: buildInitialLastFocusedPanelMap(panels)
+    set((state) => {
+      const otherPanels = projectId
+        ? state.activePanels.filter(
+            (panel) => getProjectIdForWorkspace(state.workspaces, panel.workspaceId) !== projectId
+          )
+        : state.activePanels
+      const mergedPanels = [...otherPanels, ...panels]
+      syncRuntimePanels(mergedPanels)
+
+      const nextLastFocusedPanelByWorkspace = {
+        ...state.lastFocusedPanelByWorkspace,
+        ...buildInitialLastFocusedPanelMap(panels)
+      }
+      const nextActiveWorkspaceIdByProjectId =
+        projectId && workspaces[0]
+          ? {
+              ...state.activeWorkspaceIdByProjectId,
+              [projectId]: state.activeWorkspaceIdByProjectId[projectId] ?? workspaces[0].id
+            }
+          : state.activeWorkspaceIdByProjectId
+      const currentProjectView =
+        projectId && projectId === activeProjectId
+          ? syncCurrentProjectView(
+              {
+                workspaces: state.workspaces,
+                activePanels: mergedPanels,
+                focusedBrowserPanelByWorkspace: state.focusedBrowserPanelByWorkspace,
+                lastFocusedPanelByWorkspace: nextLastFocusedPanelByWorkspace,
+                activeWorkspaceIdByProjectId: nextActiveWorkspaceIdByProjectId
+              },
+              projectId
+            )
+          : {
+              focusedPanelId: state.focusedPanelId,
+              focusedBrowserPanelId: state.focusedBrowserPanelId
+            }
+
+      return {
+        activePanels: mergedPanels,
+        residentProjectIds:
+          projectId && !state.residentProjectIds.includes(projectId)
+            ? [...state.residentProjectIds, projectId]
+            : state.residentProjectIds,
+        activeWorkspaceIdByProjectId: nextActiveWorkspaceIdByProjectId,
+        focusedPanelId: currentProjectView.focusedPanelId,
+        focusedBrowserPanelId: currentProjectView.focusedBrowserPanelId,
+        lastFocusedPanelByWorkspace: nextLastFocusedPanelByWorkspace
+      }
+    })
+  },
+
+  markProjectVisited: (projectId) => {
+    const visitedAt = new Date().toISOString()
+    set((state) => ({
+      residentProjectIds: state.residentProjectIds.includes(projectId)
+        ? state.residentProjectIds
+        : [...state.residentProjectIds, projectId],
+      lastVisitedAtByProjectId: {
+        ...state.lastVisitedAtByProjectId,
+        [projectId]: visitedAt
+      }
+    }))
+  },
+
+  activateProjectView: (projectId) => {
+    set((state) => {
+      const currentProjectView = syncCurrentProjectView(state, projectId)
+      return {
+        focusedPanelId: currentProjectView.focusedPanelId,
+        focusedBrowserPanelId: currentProjectView.focusedBrowserPanelId
+      }
+    })
+  },
+
+  powerOffProject: async (projectId) => {
+    if (!projectId || useUiStore.getState().activeProjectId === projectId) {
+      return
+    }
+
+    const workspaceIds = get()
+      .workspaces
+      .filter((workspace) => workspace.projectId === projectId)
+      .map((workspace) => workspace.id)
+
+    for (const workspaceId of workspaceIds) {
+      await flushWorkspaceLayout(workspaceId, get)
+    }
+
+    set((state) => {
+      const activeProjectId = useUiStore.getState().activeProjectId
+      const projectWorkspaceIds = new Set(workspaceIds)
+      const nextPanels = state.activePanels.filter(
+        (panel) => !projectWorkspaceIds.has(panel.workspaceId)
+      )
+      const nextFocusedBrowserPanelByWorkspace = pruneFocusedBrowserPanelMap(
+        Object.fromEntries(
+          Object.entries(state.focusedBrowserPanelByWorkspace).filter(
+            ([workspaceId]) => !projectWorkspaceIds.has(workspaceId)
+          )
+        ),
+        nextPanels
+      )
+      syncRuntimePanels(nextPanels)
+
+      return {
+        activePanels: nextPanels,
+        residentProjectIds: state.residentProjectIds.filter((id) => id !== projectId),
+        activeWorkspaceIdByProjectId: Object.fromEntries(
+          Object.entries(state.activeWorkspaceIdByProjectId).filter(([id]) => id !== projectId)
+        ),
+        focusedBrowserPanelByWorkspace: nextFocusedBrowserPanelByWorkspace,
+        focusedBrowserPanelId:
+          activeProjectId
+            ? resolveFocusedBrowserPanelIdForProject(
+                activeProjectId,
+                state.activeWorkspaceIdByProjectId,
+                nextFocusedBrowserPanelByWorkspace,
+                nextPanels,
+                state.workspaces
+              )
+            : resolveFocusedBrowserPanelId(nextFocusedBrowserPanelByWorkspace, nextPanels),
+        lastFocusedPanelByWorkspace: Object.fromEntries(
+          Object.entries(state.lastFocusedPanelByWorkspace).filter(
+            ([workspaceId]) => !projectWorkspaceIds.has(workspaceId)
+          )
+        ),
+        dirtyPanelIds: Object.fromEntries(
+          Object.entries(state.dirtyPanelIds).filter(([panelId]) =>
+            nextPanels.some((panel) => panel.panelId === panelId)
+          )
+        ),
+        closePanelGuardById: Object.fromEntries(
+          Object.entries(state.closePanelGuardById).filter(([panelId]) =>
+            nextPanels.some((panel) => panel.panelId === panelId)
+          )
+        )
+      }
     })
   }
 }))

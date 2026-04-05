@@ -425,8 +425,18 @@ textarea,
 }
 
 .project-theme-description {
-  border: 1px dashed color-mix(in oklab, var(--color-border) 86%, transparent);
-  background: color-mix(in oklab, var(--color-bg) 94%, white 6%);
+  border: 1px solid transparent;
+  background: transparent;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.project-theme-description:hover,
+.project-theme-description:focus {
+  border-color: color-mix(in oklab, var(--project-border) 56%, transparent);
+  background: color-mix(in oklab, var(--color-bg) 28%, transparent);
 }
 
 .project-sidebar-card-active {

@@ -5,6 +5,14 @@ import type { BrowserRuntimeMode } from '@renderer/lib/browser-runtime'
 const MAX_BROWSER_PREVIEWS = 12
 
 export type ThreadNotificationKind = 'requires-input' | 'completed'
+export type T3ActivityState =
+  | 'starting'
+  | 'connecting'
+  | 'running'
+  | 'requires-input'
+  | 'completed'
+  | 'idle'
+  | 'unknown'
 
 export interface PanelFailureState {
   source: 'render' | 'async-init'
@@ -28,6 +36,7 @@ export interface PanelRuntimeState {
   browserLastAgentInteractionAt: number | null
   t3ThreadTitle?: string | null
   t3LastUserMessageAt?: string | null
+  t3ActivityState?: T3ActivityState | null
   t3NotificationKind?: ThreadNotificationKind | null
   t3NotificationUpdatedAt?: string | null
   t3NotificationAcknowledgedAt?: string | null

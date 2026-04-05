@@ -53,11 +53,20 @@ interface ThreadRow {
 }
 
 type ThreadNotificationKind = 'requires-input' | 'completed'
+type T3ActivityState =
+  | 'starting'
+  | 'connecting'
+  | 'running'
+  | 'requires-input'
+  | 'completed'
+  | 'idle'
+  | 'unknown'
 
 interface ThreadMetadata {
   threadTitle: string | null
   lastUserMessageAt: string | null
   providerId: string | null
+  activityState: T3ActivityState
   notificationKind: ThreadNotificationKind | null
 }
 
@@ -74,6 +83,7 @@ export interface T3CodeThreadInfo {
   threadTitle: string | null
   lastUserMessageAt: string | null
   providerId: string | null
+  activityState: T3ActivityState
 }
 
 const GLOBAL_RUNTIME_ID = 'global'
@@ -94,6 +104,7 @@ const pendingPanelThreadEnsures = new Map<
     threadTitle: string | null
     lastUserMessageAt: string | null
     providerId: string | null
+    activityState: T3ActivityState
   }>
 >()
 const watchedThreadsByPanelId = new Map<string, WatchedThreadState>()
@@ -582,16 +593,44 @@ function computeNotificationKind(input: {
   return null
 }
 
+function computeActivityState(input: {
+  sessionStatus: string | null
+  pendingApprovalCount: number
+  hasPendingUserInput: boolean
+  latestTurnCompletedAt: string | null
+}): T3ActivityState {
+  const { sessionStatus, pendingApprovalCount, hasPendingUserInput, latestTurnCompletedAt } = input
+
+  if (sessionStatus === 'starting' || sessionStatus === 'connecting' || sessionStatus === 'running') {
+    return sessionStatus
+  }
+
+  if (pendingApprovalCount > 0 || hasPendingUserInput) {
+    return 'requires-input'
+  }
+
+  if (latestTurnCompletedAt) {
+    return 'completed'
+  }
+
+  if (sessionStatus === 'idle' || sessionStatus === 'stopped' || sessionStatus === 'completed') {
+    return 'idle'
+  }
+
+  return sessionStatus ? 'unknown' : 'idle'
+}
+
 function getThreadMetadata(threadId: string): ThreadMetadata {
   const db = openStateDb({ readonly: true })
-  if (!db) {
-    return {
-      threadTitle: null,
-      lastUserMessageAt: null,
-      providerId: null,
-      notificationKind: null
+    if (!db) {
+      return {
+        threadTitle: null,
+        lastUserMessageAt: null,
+        providerId: null,
+        activityState: 'unknown',
+        notificationKind: null
+      }
     }
-  }
 
   try {
     const threadRow = db
@@ -698,6 +737,12 @@ function getThreadMetadata(threadId: string): ThreadMetadata {
       // Table may not exist
     }
 
+    const activityState = computeActivityState({
+      sessionStatus,
+      pendingApprovalCount,
+      hasPendingUserInput,
+      latestTurnCompletedAt
+    })
     const notificationKind = computeNotificationKind({
       sessionStatus,
       pendingApprovalCount,
@@ -709,6 +754,7 @@ function getThreadMetadata(threadId: string): ThreadMetadata {
       threadTitle: threadRow?.title ?? null,
       lastUserMessageAt: messageRow?.lastUserMessageAt ?? null,
       providerId: getProviderIdFromModelSelection(threadRow?.modelSelectionJson),
+      activityState,
       notificationKind
     }
   } finally {
@@ -729,6 +775,7 @@ function emitThreadInfoChanged(payload: {
   lastUserMessageAt: string | null
   providerId: string | null
   notificationKind: ThreadNotificationKind | null
+  activityState: T3ActivityState
 }): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {
@@ -773,6 +820,7 @@ async function pollWatchedThreads(): Promise<void> {
       watch.lastSnapshot?.threadTitle === snapshot.threadTitle &&
       watch.lastSnapshot?.lastUserMessageAt === snapshot.lastUserMessageAt &&
       watch.lastSnapshot?.providerId === snapshot.providerId &&
+      watch.lastSnapshot?.activityState === snapshot.activityState &&
       watch.lastSnapshot?.notificationKind === snapshot.notificationKind
     ) {
       continue
@@ -785,6 +833,7 @@ async function pollWatchedThreads(): Promise<void> {
       threadTitle: snapshot.threadTitle,
       lastUserMessageAt: snapshot.lastUserMessageAt,
       providerId: snapshot.providerId,
+      activityState: snapshot.activityState,
       notificationKind: snapshot.notificationKind
     })
   }
@@ -1220,6 +1269,7 @@ export async function ensurePanelThread(input: {
   threadTitle: string | null
   lastUserMessageAt: string | null
   providerId: string | null
+  activityState: T3ActivityState
 }> {
   const pending = pendingPanelThreadEnsures.get(input.panelId)
   if (pending) {
@@ -1248,7 +1298,8 @@ export async function ensurePanelThread(input: {
       t3ThreadId: thread.threadId,
       threadTitle: metadata.threadTitle,
       lastUserMessageAt: metadata.lastUserMessageAt,
-      providerId: metadata.providerId
+      providerId: metadata.providerId,
+      activityState: metadata.activityState
     }
   })()
 
@@ -1272,7 +1323,8 @@ export async function getThreadInfo(t3ThreadId: string): Promise<T3CodeThreadInf
         : null,
     threadTitle: metadata.threadTitle,
     lastUserMessageAt: metadata.lastUserMessageAt,
-    providerId: metadata.providerId
+    providerId: metadata.providerId,
+    activityState: metadata.activityState
   }
 }
 

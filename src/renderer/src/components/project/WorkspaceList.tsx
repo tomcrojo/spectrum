@@ -109,6 +109,7 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
     activePanels,
     createWorkspace,
     updateWorkspace,
+    deleteWorkspace,
     unloadWorkspace,
     archiveWorkspace,
     unarchiveWorkspace,
@@ -182,7 +183,7 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
           workspaceId: workspace.id,
           workspaceName: workspace.name,
           status: workspace.status,
-          loaded: workspace.status === 'active',
+          loaded,
           archived: workspace.archived,
           panels,
           notificationCount: notificationKinds.filter(Boolean).length,
@@ -336,6 +337,22 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
     setWorkspaceMenuId(null)
   }
 
+  const handleDelete = async (workspaceId: string, workspaceName: string) => {
+    if (editingWorkspaceId === workspaceId) {
+      cancelRename()
+    }
+
+    const confirmed = window.confirm(`Delete "${workspaceName}" permanently?`)
+    if (!confirmed) {
+      return
+    }
+
+    await deleteWorkspace(workspaceId)
+    setSelectedWorkspaceId(null)
+    setAddPanelMenuWorkspaceId(null)
+    setWorkspaceMenuId(null)
+  }
+
   const handleLoad = async (workspaceId: string) => {
     await reopenWorkspace(workspaceId, repoPath)
     setExpandedWorkspaceIds((current) =>
@@ -453,7 +470,8 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
 
   const renderWorkspaceQuickAction = (
     entry: WorkspaceEntry,
-    action: 'load' | 'unload'
+    action: 'load' | 'unload',
+    className?: string
   ) => {
     const isActive = activeWorkspaceId === entry.workspaceId
     const isSelected = (selectedWorkspaceId ?? activeWorkspaceId) === entry.workspaceId
@@ -472,11 +490,13 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
           void handleUnload(entry.workspaceId)
         }}
         className={cn(
-          'mt-2 opacity-0 transition-all group-hover:opacity-100',
+          'opacity-0 transition-all group-hover:opacity-100',
+          action === 'unload' ? 'mt-2' : '',
           isHighlighted && 'opacity-100',
           isHighlighted
             ? 'text-white/72 hover:bg-white/12 hover:text-white'
-            : action === 'load' && 'text-accent hover:bg-accent hover:text-white'
+            : action === 'load' && 'text-accent hover:bg-accent hover:text-white',
+          className
         )}
       >
         {action === 'unload' ? (
@@ -624,6 +644,13 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
                               className="w-full rounded-lg px-3 py-1.5 text-left text-xs text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary"
                             >
                               Rename
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleDelete(entry.workspaceId, entry.workspaceName)}
+                              className="w-full rounded-lg px-3 py-1.5 text-left text-xs text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200"
+                            >
+                              Delete
                             </button>
                           </div>
                         ) : null}
@@ -781,19 +808,21 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
                 )}
                 onClick={() => setSelectedWorkspaceId(entry.workspaceId)}
               >
-                <div className="flex items-start gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
+                    <div className="min-w-0 shrink-0">
                       {renderWorkspaceTitle(entry)}
-                      {renderPanelPreview(entry.panels)}
                     </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
-                      <span>
+                    {renderPanelPreview(entry.panels)}
+                    <span className="text-[11px] text-text-muted/70">•</span>
+                    <div className="min-w-0 flex-1 text-[11px] text-text-muted">
+                      <span className="block truncate">
                         Last edited {formatWorkspaceLastEditedAt(entry.lastPanelEditedAt, archivedTimestampFormat, timestampNow)}
                       </span>
                     </div>
                   </div>
-                  <div className="relative flex flex-col items-end">
+                  <div className="relative flex items-center gap-1 self-center">
+                    {renderWorkspaceQuickAction(entry, 'load', 'group-hover:opacity-100')}
                     <button
                       type="button"
                       onClick={(event) => {
@@ -829,9 +858,15 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
                         >
                           Archive
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDelete(entry.workspaceId, entry.workspaceName)}
+                          className="w-full rounded px-3 py-1.5 text-left text-xs text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200"
+                        >
+                          Delete
+                        </button>
                       </div>
                     ) : null}
-                    {renderWorkspaceQuickAction(entry, 'load')}
                   </div>
                 </div>
               </div>

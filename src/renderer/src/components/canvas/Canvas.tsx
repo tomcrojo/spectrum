@@ -14,6 +14,7 @@ import {
   recordDevPerformanceTiming,
   setDevPerformanceCounter
 } from '@renderer/lib/dev-performance'
+import { getVisibleBrowserWorkspaceIds } from '@renderer/lib/browser-visibility'
 import { isBrowserRuntimeHostEnabled } from '@renderer/lib/browser-runtime'
 import { WorkspacePanel } from './WorkspacePanel'
 import { Button } from '@renderer/components/ui/button'
@@ -124,12 +125,13 @@ export function Canvas() {
     focusedBrowserPanelId,
     loadWorkspaces,
     createWorkspace,
-    setActivePanels,
     addActivePanel,
     insertPanelAfter,
     prependPanelToWorkspace,
     requestClosePanel,
-    restorePanelsFromWorkspaces
+    restorePanelsFromWorkspaces,
+    markProjectVisited,
+    activateProjectView
   } = useWorkspacesStore()
   const activeWorkspaceId = usePanelRuntimeStore((state) => state.activeWorkspaceId)
   const panelRuntimeById = usePanelRuntimeStore((state) => state.panelRuntimeById)
@@ -202,7 +204,7 @@ export function Canvas() {
   // Load workspaces when project changes and restore saved panel state
   useEffect(() => {
     if (!activeProjectId) {
-      setActivePanels([])
+      activateProjectView(null)
       setActiveWorkspaceId(null)
       didAutoOpenRef.current = null
       return
@@ -210,27 +212,36 @@ export function Canvas() {
 
     let cancelled = false
     const startedAt = performance.now()
+    markProjectVisited(activeProjectId)
 
     loadWorkspaces(activeProjectId, false).then(() => {
       if (cancelled) return
 
-      const { workspaces: loadedWorkspaces } = useWorkspacesStore.getState()
+      const { workspaces: loadedWorkspaces, activePanels: allActivePanels } = useWorkspacesStore.getState()
       const projectWs = loadedWorkspaces.filter(
         (workspace) => workspace.projectId === activeProjectId && workspace.status === 'active'
+      )
+      const projectWorkspaceIds = new Set(projectWs.map((workspace) => workspace.id))
+      const existingProjectPanels = allActivePanels.filter((panel) =>
+        projectWorkspaceIds.has(panel.workspaceId)
       )
       const hasSavedPanels = projectWs.some((w) => w.layoutState.panels.length > 0)
       const initialWorkspaceId = projectWs[0]?.id ?? null
 
-      if (hasSavedPanels && activeProject) {
+      if (existingProjectPanels.length > 0) {
+        didAutoOpenRef.current = activeProjectId
+        activateProjectView(activeProjectId)
+        setActiveWorkspaceId(initialWorkspaceId)
+      } else if (hasSavedPanels && activeProject) {
         didAutoOpenRef.current = activeProjectId
         restorePanelsFromWorkspaces(projectWs, activeProject.repoPath)
-        setActiveWorkspaceId(initialWorkspaceId)
+        activateProjectView(activeProjectId)
       } else if (projectWs.length > 0 && activeProject) {
         didAutoOpenRef.current = activeProjectId
-        setActivePanels([buildActivePanel(projectWs[0], activeProject.repoPath)])
-        setActiveWorkspaceId(projectWs[0].id)
+        addActivePanel(buildActivePanel(projectWs[0], activeProject.repoPath))
+        activateProjectView(activeProjectId)
       } else {
-        setActivePanels([])
+        activateProjectView(activeProjectId)
         setActiveWorkspaceId(null)
         didAutoOpenRef.current = null
       }
@@ -241,23 +252,45 @@ export function Canvas() {
     return () => {
       cancelled = true
     }
-  }, [activeProjectId, activeProject, loadWorkspaces, restorePanelsFromWorkspaces, setActivePanels, setActiveWorkspaceId])
+  }, [
+    activeProjectId,
+    activeProject,
+    activateProjectView,
+    addActivePanel,
+    loadWorkspaces,
+    markProjectVisited,
+    restorePanelsFromWorkspaces,
+    setActiveWorkspaceId
+  ])
 
   useEffect(() => {
-    if (!activeWorkspaceId && activePanels[0]) {
-      setActiveWorkspaceId(activePanels[0].workspaceId)
+    const currentProjectPanels = activeProjectId
+      ? activePanels.filter((panel) =>
+          projectWorkspaces.some((workspace) => workspace.id === panel.workspaceId)
+        )
+      : []
+
+    if (!activeWorkspaceId && currentProjectPanels[0]) {
+      setActiveWorkspaceId(currentProjectPanels[0].workspaceId)
       return
     }
 
-    if (!activePanels[0]) {
+    if (!currentProjectPanels[0]) {
       setActiveWorkspaceId(null)
     }
-  }, [activePanels, activeWorkspaceId, setActiveWorkspaceId])
+  }, [activePanels, activeProjectId, activeWorkspaceId, projectWorkspaces, setActiveWorkspaceId])
 
   useEffect(() => {
     let liveBrowserCount = 0
     let liveT3Count = 0
     const firstPanelIdByWorkspace = new Map<string, string>()
+    const browserPanels = activePanels.filter((panel) => panel.panelType === 'browser')
+    const visibleBrowserWorkspaceIds = getVisibleBrowserWorkspaceIds({
+      browserPanels,
+      workspaces: projectWorkspaces,
+      runtimePowerMode,
+      activeWorkspaceId
+    })
 
     for (const panel of activePanels) {
       if (!firstPanelIdByWorkspace.has(panel.workspaceId)) {
@@ -280,9 +313,13 @@ export function Canvas() {
                 : 'cold'
         } else {
           nextHydrationState =
-            panel.workspaceId === activeWorkspaceId || panel.panelId === focusedBrowserPanelId
-              ? 'live'
-              : 'cold'
+            runtimePowerMode === 'low'
+              ? panel.workspaceId === activeWorkspaceId || panel.panelId === focusedBrowserPanelId
+                ? 'live'
+                : 'cold'
+              : visibleBrowserWorkspaceIds.has(panel.workspaceId)
+                ? 'live'
+                : 'cold'
         }
       } else if (panel.panelType === 't3code') {
         if (runtimePowerMode === 'high') {
@@ -326,6 +363,7 @@ export function Canvas() {
     focusedPanelId,
     browserRuntimeHostEnabled,
     panelRuntimeById,
+    projectWorkspaces,
     runtimePowerMode,
     setPanelHydrationState
   ])

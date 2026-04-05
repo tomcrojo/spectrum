@@ -362,6 +362,10 @@ export function getProjectThemeStyle(color: ProjectColor): Record<`--${string}`,
   }
 }
 
+export function getProjectMeshGradient(color: ProjectColor): string {
+  return getMeshLayers(getProjectColorMeta(color)).join(',\n    ')
+}
+
 function getRelativeLuminance(hex: string): number {
   const normalizedHex = hex.replace('#', '')
   const channels = [0, 2, 4]

@@ -16,6 +16,7 @@ import {
   subscribeBrowserSlots,
   type BrowserRuntimeMode
 } from '@renderer/lib/browser-runtime'
+import { getVisibleBrowserWorkspaceIds } from '@renderer/lib/browser-visibility'
 import { useUiStore } from '@renderer/stores/ui.store'
 import { useWorkspacesStore } from '@renderer/stores/workspaces.store'
 import { usePanelRuntimeStore } from '@renderer/stores/panel-runtime.store'
@@ -41,11 +42,11 @@ function getBackgroundVisibleBudget(runtimePowerMode: 'low' | 'mid' | 'high'): n
     return 3
   }
 
-  if (runtimePowerMode === 'mid') {
-    return 7
-  }
+  return 0
+}
 
-  return Number.POSITIVE_INFINITY
+function getMaxLiveBrowserRuntimes(runtimePowerMode: 'low' | 'mid' | 'high'): number {
+  return runtimePowerMode === 'high' ? Number.POSITIVE_INFINITY : MAX_LIVE_BROWSER_RUNTIMES
 }
 
 function sortByPriority(
@@ -152,6 +153,7 @@ export function BrowserRuntimeHost({ hostEnabled }: BrowserRuntimeHostProps) {
   const activeProjectId = useUiStore((state) => state.activeProjectId)
   const runtimePowerMode = useUiStore((state) => state.runtimePowerMode)
   const activePanels = useWorkspacesStore((state) => state.activePanels)
+  const workspaces = useWorkspacesStore((state) => state.workspaces)
   const focusedBrowserPanelId = useWorkspacesStore((state) => state.focusedBrowserPanelId)
   const activeWorkspaceId = usePanelRuntimeStore((state) => state.activeWorkspaceId)
   const panelRuntimeById = usePanelRuntimeStore((state) => state.panelRuntimeById)
@@ -181,6 +183,18 @@ export function BrowserRuntimeHost({ hostEnabled }: BrowserRuntimeHostProps) {
     const activeWorkspacePanelIds = projectBrowserPanels
       .filter((panel) => panel.workspaceId === activeWorkspaceId)
       .map((panel) => panel.panelId)
+    const visibleWorkspaceIds =
+      runtimePowerMode === 'low'
+        ? null
+        : getVisibleBrowserWorkspaceIds({
+            browserPanels: projectBrowserPanels,
+            workspaces: workspaces.filter(
+              (workspace) =>
+                workspace.projectId === activeProjectId && workspace.status === 'active'
+            ),
+            runtimePowerMode,
+            activeWorkspaceId
+          })
 
     const pinnedPanelIds = new Set<string>()
     for (const panel of projectBrowserPanels) {
@@ -218,6 +232,7 @@ export function BrowserRuntimeHost({ hostEnabled }: BrowserRuntimeHostProps) {
         ? rankedBackgroundPanelIds
         : rankedBackgroundPanelIds.slice(0, visibleBudget)
     )
+    const maxLiveBrowserRuntimes = getMaxLiveBrowserRuntimes(runtimePowerMode)
 
     const livePanelIds = new Set(projectBrowserPanels.map((panel) => panel.panelId))
     const overflowCandidates = sortByPriority(
@@ -228,7 +243,11 @@ export function BrowserRuntimeHost({ hostEnabled }: BrowserRuntimeHostProps) {
       panelIndexById
     ).reverse()
 
-    while (livePanelIds.size > MAX_LIVE_BROWSER_RUNTIMES && overflowCandidates.length > 0) {
+    while (
+      Number.isFinite(maxLiveBrowserRuntimes) &&
+      livePanelIds.size > maxLiveBrowserRuntimes &&
+      overflowCandidates.length > 0
+    ) {
       const nextPanelId = overflowCandidates.shift()
       if (nextPanelId) {
         livePanelIds.delete(nextPanelId)
@@ -236,11 +255,12 @@ export function BrowserRuntimeHost({ hostEnabled }: BrowserRuntimeHostProps) {
     }
 
     if (
-      livePanelIds.size > MAX_LIVE_BROWSER_RUNTIMES &&
+      Number.isFinite(maxLiveBrowserRuntimes) &&
+      livePanelIds.size > maxLiveBrowserRuntimes &&
       Array.from(livePanelIds).every((panelId) => pinnedPanelIds.has(panelId))
     ) {
       console.warn(
-        `[browser] Pinned browser runtime count exceeded ${MAX_LIVE_BROWSER_RUNTIMES}; allowing overflow`
+        `[browser] Pinned browser runtime count exceeded ${maxLiveBrowserRuntimes}; allowing overflow`
       )
     }
 
@@ -252,8 +272,10 @@ export function BrowserRuntimeHost({ hostEnabled }: BrowserRuntimeHostProps) {
       }
 
       if (
-        panel.workspaceId === activeWorkspaceId ||
-        visibleBackgroundPanelIds.has(panel.panelId)
+        (visibleWorkspaceIds
+          ? visibleWorkspaceIds.has(panel.workspaceId)
+          : panel.workspaceId === activeWorkspaceId ||
+            visibleBackgroundPanelIds.has(panel.panelId))
       ) {
         nextModes.set(panel.panelId, 'visible')
         continue
@@ -270,7 +292,8 @@ export function BrowserRuntimeHost({ hostEnabled }: BrowserRuntimeHostProps) {
     focusedBrowserPanelId,
     hostEnabled,
     panelRuntimeById,
-    runtimePowerMode
+    runtimePowerMode,
+    workspaces
   ])
 
   const effectiveRuntimeModes = useMemo(() => {

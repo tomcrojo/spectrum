@@ -1,16 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { T3CODE_CHANNELS } from '@shared/ipc-channels'
 import { t3codeApi } from '@renderer/lib/ipc'
 import { openFileInWorkspace } from '@renderer/lib/open-file'
-import { transport } from '@renderer/lib/transport'
 import { incrementDevMountCount } from '@renderer/lib/dev-performance'
 import { suggestT3CodeTitleFromPrompt } from '@renderer/lib/t3code-auto-title'
 import { usePanelRuntimeStore } from '@renderer/stores/panel-runtime.store'
 import { useUiStore } from '@renderer/stores/ui.store'
 import { useWorkspacesStore } from '@renderer/stores/workspaces.store'
-import { useNotificationsStore } from '@renderer/stores/notifications.store'
-import { playNotificationSound, preloadNotificationSound } from '@renderer/lib/notification-sound'
-import type { ThreadNotificationKind } from '@renderer/stores/panel-runtime.store'
 
 interface T3CodePanelProps {
   panelId: string
@@ -23,7 +18,6 @@ interface T3CodePanelProps {
   theme: 'light' | 'dark'
   autoFocus: boolean
   hydrationState: 'live' | 'cold'
-  watchPriority: 'focused' | 'active' | 'inactive'
 }
 
 interface ThreadBinding {
@@ -37,6 +31,14 @@ interface ThreadInfo {
   threadTitle: string | null
   lastUserMessageAt: string | null
   providerId: string | null
+  activityState:
+    | 'starting'
+    | 'connecting'
+    | 'running'
+    | 'requires-input'
+    | 'completed'
+    | 'idle'
+    | 'unknown'
 }
 
 function isOpenFileMessage(
@@ -123,8 +125,7 @@ export function T3CodePanel({
   t3ThreadId,
   theme,
   autoFocus,
-  hydrationState,
-  watchPriority
+  hydrationState
 }: T3CodePanelProps) {
   const updatePanelLayout = useWorkspacesStore((state) => state.updatePanelLayout)
   const applyAutoTitleToT3CodePanel = useWorkspacesStore((state) => state.applyAutoTitleToT3CodePanel)
@@ -136,7 +137,6 @@ export function T3CodePanel({
   const assistantStreaming = useUiStore((state) => state.assistantStreaming)
   const updatePanelRuntime = usePanelRuntimeStore((state) => state.updatePanelRuntime)
   const setPanelFailure = usePanelRuntimeStore((state) => state.setPanelFailure)
-  const addToast = useNotificationsStore((state) => state.addToast)
   const [binding, setBinding] = useState<ThreadBinding | null>(null)
   const [iframeUrl, setIframeUrl] = useState<string | null>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
@@ -144,11 +144,6 @@ export function T3CodePanel({
   const parkedLastUserMessageAt = usePanelRuntimeStore(
     (state) => state.panelRuntimeById[panelId]?.t3LastUserMessageAt
   )
-
-  // Preload notification sound on mount
-  useEffect(() => {
-    preloadNotificationSound()
-  }, [])
 
   useEffect(() => {
     incrementDevMountCount('T3CodePanel')
@@ -187,9 +182,15 @@ export function T3CodePanel({
       if (threadInfo.lastUserMessageAt) {
         updatePanelRuntime(panelId, {
           t3ThreadTitle: threadInfo.threadTitle,
-          t3LastUserMessageAt: threadInfo.lastUserMessageAt
+          t3LastUserMessageAt: threadInfo.lastUserMessageAt,
+          t3ActivityState: threadInfo.activityState
         })
         void updateWorkspaceLastPanelEditedAt(workspaceId, threadInfo.lastUserMessageAt)
+      } else {
+        updatePanelRuntime(panelId, {
+          t3ThreadTitle: threadInfo.threadTitle,
+          t3ActivityState: threadInfo.activityState
+        })
       }
     }
 
@@ -256,88 +257,6 @@ export function T3CodePanel({
     updateWorkspaceLastPanelEditedAt,
     workspaceId
   ])
-
-  useEffect(() => {
-    const watchedThreadId = binding?.t3ThreadId ?? t3ThreadId
-    if (!watchedThreadId) {
-      return
-    }
-
-    t3codeApi
-      .watchThread({
-        panelId,
-        t3ThreadId: watchedThreadId,
-        priority: watchPriority
-      })
-      .catch(() => {})
-
-    return () => {
-      t3codeApi.unwatchThread(panelId).catch(() => {})
-    }
-  }, [binding?.t3ThreadId, panelId, t3ThreadId, watchPriority])
-
-  useEffect(() => {
-    const remove = transport.on(
-      T3CODE_CHANNELS.THREAD_INFO_CHANGED,
-      (payload: {
-        panelId: string
-        t3ThreadId: string
-        threadTitle: string | null
-        lastUserMessageAt: string | null
-        providerId: string | null
-        notificationKind: ThreadNotificationKind | null
-      }) => {
-        if (payload.panelId !== panelId) {
-          return
-        }
-
-        updatePanelLayout(panelId, { providerId: payload.providerId ?? undefined })
-
-        // Get previous notification kind to detect transitions
-        const prevRuntime = usePanelRuntimeStore.getState().panelRuntimeById[panelId]
-        const prevKind = prevRuntime?.t3NotificationKind ?? null
-
-        updatePanelRuntime(panelId, {
-          t3ThreadTitle: payload.threadTitle,
-          t3LastUserMessageAt: payload.lastUserMessageAt,
-          ...(payload.notificationKind
-            ? {
-                t3NotificationKind: payload.notificationKind,
-                t3NotificationUpdatedAt: new Date().toISOString()
-              }
-            : {
-                t3NotificationKind: null
-              })
-        })
-
-        if (payload.lastUserMessageAt) {
-          void updateWorkspaceLastPanelEditedAt(workspaceId, payload.lastUserMessageAt)
-        }
-
-        // Fire toast + sound when a new notification kind appears
-        // (only on transition from null/different kind to a non-null kind)
-        if (payload.notificationKind && payload.notificationKind !== prevKind) {
-          // Only notify if the panel is not currently focused
-          const currentFocusedPanelId = useWorkspacesStore.getState().focusedPanelId
-          if (currentFocusedPanelId !== panelId) {
-            const currentActivePanels = useWorkspacesStore.getState().activePanels
-            const activePanel = currentActivePanels.find((p) => p.panelId === panelId)
-            const resolvedPanelTitle = activePanel?.panelTitle || payload.threadTitle?.trim() || 'T3Code'
-
-            playNotificationSound()
-            addToast({
-              panelId,
-              workspaceId,
-              panelTitle: resolvedPanelTitle,
-              kind: payload.notificationKind
-            })
-          }
-        }
-      }
-    )
-
-    return remove
-  }, [addToast, panelId, updatePanelLayout, updatePanelRuntime, updateWorkspaceLastPanelEditedAt, workspaceId])
 
   // Acknowledge (clear) notification when panel gets focused
   useEffect(() => {

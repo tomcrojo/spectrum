@@ -359,8 +359,6 @@ function WorkspacePanelImpl({
     updatePanelLayout(panelId, { width: size.width, height: size.height })
   }, [isResizing, panelId, size.height, size.width, updatePanelLayout])
 
-  const watchPriority =
-    isFocused && isActiveWorkspace ? 'focused' : isActiveWorkspace ? 'active' : 'inactive'
   const showBrowserAutomationChrome = panelType === 'browser' && browserAutomationAttached
 
   return (
@@ -489,7 +487,6 @@ function WorkspacePanelImpl({
               theme={resolvedTheme}
               autoFocus={isFocused}
               hydrationState={hydrationState === 'preview' ? 'cold' : hydrationState}
-              watchPriority={watchPriority}
             />
           ) : panelType === 'terminal' ? (
             <TerminalPanel

@@ -137,6 +137,14 @@ export const t3codeApi = {
       threadTitle: string | null
       lastUserMessageAt: string | null
       providerId: string | null
+      activityState:
+        | 'starting'
+        | 'connecting'
+        | 'running'
+        | 'requires-input'
+        | 'completed'
+        | 'idle'
+        | 'unknown'
     }>(T3CODE_CHANNELS.ENSURE_PANEL_THREAD, input),
   getThreadInfo: (t3ThreadId: string) =>
     invoke<{
@@ -144,6 +152,14 @@ export const t3codeApi = {
       threadTitle: string | null
       lastUserMessageAt: string | null
       providerId: string | null
+      activityState:
+        | 'starting'
+        | 'connecting'
+        | 'running'
+        | 'requires-input'
+        | 'completed'
+        | 'idle'
+        | 'unknown'
     }>(T3CODE_CHANNELS.GET_THREAD_INFO, { t3ThreadId }),
   watchThread: (input: {
     panelId: string

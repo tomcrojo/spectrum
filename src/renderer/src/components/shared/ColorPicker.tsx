@@ -1,4 +1,4 @@
-import { PROJECT_COLORS } from '@renderer/lib/project-colors'
+import { PROJECT_COLORS, getProjectMeshGradient } from '@renderer/lib/project-colors'
 import type { ProjectColor } from '@shared/project.types'
 
 interface ColorPickerProps {
@@ -8,15 +8,14 @@ interface ColorPickerProps {
 }
 
 export function ColorPicker({ value, onChange, size = 'md' }: ColorPickerProps) {
-  const swatchSize = size === 'sm' ? 36 : 44
+  const swatchSize = size === 'sm' ? 40 : 48
 
   return (
     <div>
       <div className="flex flex-wrap gap-3">
         {PROJECT_COLORS.map((theme) => {
           const selected = value === theme.id
-          const { blob1, blob2, blob3 } = theme.stops
-          const previewGradient = `linear-gradient(135deg, ${blob1} 0%, ${blob2} 50%, ${blob3} 100%)`
+          const previewGradient = getProjectMeshGradient(theme.id)
 
           return (
             <button
@@ -28,6 +27,8 @@ export function ColorPicker({ value, onChange, size = 'md' }: ColorPickerProps) 
                 width: swatchSize,
                 height: swatchSize,
                 background: previewGradient,
+                backgroundSize: '185% 185%',
+                backgroundPosition: 'center',
                 outline: selected
                   ? `2px solid ${theme.primary}`
                   : '2px solid transparent',

@@ -83,12 +83,12 @@ const runtimePowerModeOptions: Array<{
   {
     value: 'high',
     label: 'High',
-    description: 'Keeps browser and T3 panels live more often for the smoothest switching and best agent access.'
+    description: 'Keeps browser panels rendered across every open workspace for the smoothest switching and broadest agent access.'
   },
   {
     value: 'mid',
     label: 'Mid',
-    description: 'Applies lazy restore and background monitoring, but only parks heavy panels when a workspace goes inactive.'
+    description: 'Keeps browser panels rendered for the 3 most recent workspaces, then parks the rest.'
   },
   {
     value: 'low',
