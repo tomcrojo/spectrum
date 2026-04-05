@@ -878,12 +878,13 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
 
       <section className="pt-5">
         {archivedEntries.length === 0 ? (
-          <>
-            {renderSectionHeader('Archived Workspaces', 'History shelf. Kept out of the main loop, but still recoverable.')}
-            <p className="px-1 py-1 text-xs text-text-muted">
+          renderSectionHeader(
+            'Archived Workspaces',
+            'History shelf. Kept out of the main loop, but still recoverable.',
+            <span className="whitespace-nowrap px-1 text-xs text-text-muted">
               No archived workspaces.
-            </p>
-          </>
+            </span>
+          )
         ) : (
           <Dialog>
             {renderSectionHeader(

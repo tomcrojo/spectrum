@@ -43,6 +43,14 @@ Screenshots above were captured from `npm run dev:browser` with the runtime powe
 - Best suited today for trying ideas, following progress, and contributing
 - Not yet polished enough to promise stability across every workflow
 
+## Repository Notes
+
+- The product source lives under `src/`
+- External dependencies used for development or reference are tracked as submodules under `resources/`
+- Generated packaging/runtime assets are created locally and are not committed
+- `artifacts/`, `dist/`, `out/`, `build/t3code-runtime/`, and `.dev-server.cjs` are local outputs
+- Large implementation-reference snapshots have been removed from source control to keep the public repo focused on the product itself
+
 ## Why It Exists
 
 Most coding tools collapse everything into a single chat or terminal. Spectrum is aimed at the project layer around that work: tasks, workspace layout, repo context, lightweight memory, and multiple execution surfaces inside the same desktop app.
@@ -56,6 +64,15 @@ Most coding tools collapse everything into a single chat or terminal. Spectrum i
 - Customizable panels and better panel creation flows
 - OpenCode as a provider
 - Model selection
+
+## Coming Soon
+
+- App-wide search
+- Getting repo icons working properly
+- UI improvements across the project dashboard, canvas, and navigation surfaces
+- Project variables
+- A CLI for managing the project page as the centralized source for architecture decisions, notes, and other context future agents should read
+- A revamp of the tasks section, potentially making the source of truth the repo's `TODO.md`
 
 ## Stack
 
@@ -88,6 +105,11 @@ If you already cloned it without submodules:
 ```bash
 git submodule update --init --recursive
 ```
+
+Current submodules:
+
+- `resources/t3code`
+- `resources/dev-browser`
 
 Install and start the Electron app:
 
@@ -123,7 +145,7 @@ Important runtime note:
 - `src/preload`: renderer bridge
 - `src/renderer`: React UI and browser-mode assets
 - `src/shared`: cross-process types and IPC channel definitions
-- `resources`: helper projects and runtime assets used during development
+- `resources`: helper projects and runtime helpers used during development
 
 ## Known Limitations
 
@@ -131,11 +153,11 @@ Important runtime note:
 - macOS is the primary supported environment today
 - The embedded T3Code workflow depends on the `resources/t3code` submodule and Bun
 - DMG builds are currently intended for testing and are not notarized yet
-- The repo still contains research/reference dependencies while the product is being shaped in public
+- Some workflows still depend on development-time helper tooling and local packaging steps
 
 ## Third-Party Code
 
-Spectrum currently uses a mix of vendored helpers and git submodules for development-time workflows. See [THIRD_PARTY.md](./THIRD_PARTY.md) for the current inventory and upstream links.
+Spectrum uses a small mix of local helpers and git submodules for development-time workflows. See [THIRD_PARTY.md](./THIRD_PARTY.md) for the current inventory and upstream links.
 
 ## Acknowledgements
 
@@ -157,6 +179,8 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the current workflow.
 ## Release Process
 
 For public alpha drops, use the checklist in [docs/release-checklist.md](./docs/release-checklist.md).
+
+For announcement copy, start from [docs/announcement-draft.md](./docs/announcement-draft.md).
 
 ## License
 

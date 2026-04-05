@@ -1,19 +1,30 @@
 {
   "name": "spectrum",
+  "private": true,
   "version": "0.1.0",
   "description": "Desktop project cockpit for coding work with dashboards, workspaces, terminals, browser panels, and agent flows",
   "license": "MIT",
   "author": "Tomas Campoy",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tomcrojo/spectrum.git"
+  },
+  "homepage": "https://github.com/tomcrojo/spectrum",
+  "bugs": {
+    "url": "https://github.com/tomcrojo/spectrum/issues"
+  },
   "engines": {
     "node": ">=20"
   },
   "keywords": [
     "electron",
     "desktop",
+    "electron-app",
     "developer-tools",
     "project-management",
     "terminal",
-    "workspace"
+    "workspace",
+    "coding-agent"
   ],
   "main": "./out/main/index.js",
   "scripts": {

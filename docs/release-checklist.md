@@ -7,7 +7,8 @@ Use this before cutting a public alpha build.
 - confirm the repo name, app name, and docs all match
 - confirm `.gitmodules` is up to date
 - confirm `README.md`, `CONTRIBUTING.md`, and `THIRD_PARTY.md` reflect the current state
-- confirm no local design exports or machine-specific files are being committed accidentally
+- confirm no local design exports, generated packaging assets, benchmark artifacts, or machine-specific files are being committed accidentally
+- run `git status --short` and make sure only intentional release changes remain
 
 ## Verification
 
@@ -23,3 +24,4 @@ Use this before cutting a public alpha build.
 - attach the DMG to the GitHub release
 - clearly label the release as alpha and note current limitations
 - mention signing/notarization status in the release notes
+- adapt the copy in `docs/announcement-draft.md` for the actual release post

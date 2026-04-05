@@ -1,16 +1,35 @@
+# Dependencies and build output
 node_modules/
 out/
 dist/
+artifacts/
+build/node-bin/
+build/t3code-runtime/
+
+# Local development helpers
+.codex/
+.codex-backups/
+.dev-server.cjs
+@renderer/
+
+# Runtime data
 *.db
 *.db-wal
 *.db-shm
-.DS_Store
+
+# Tooling caches
 *.tsbuildinfo
 *.log
+
+# macOS
+.DS_Store
+
+# Local design and scratch files
 /build/icon.iconset/
-/build/node-bin/
 /Icon-iOS-Default-1024x1024@1x.png
 /icon.icon/
 /icon2.png
 /spectrum.png
+/mockup.html
+/workspace-state-mockup
 /*.af

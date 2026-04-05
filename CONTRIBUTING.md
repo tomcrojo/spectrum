@@ -55,8 +55,8 @@ npm run build
 - SQLite is the source of truth; renderer state should reflect confirmed IPC results
 - IPC channels follow `domain:action`
 - `ELECTRON_RUN_AS_NODE` must be unset when launching Electron directly
-- `resources/t3code`, `resources/dev-browser`, and the reference repos are tracked as submodules; if you update them, explain why and call out the upstream commit
-- Avoid committing local design exports, scratch packaging output, or other machine-specific artifacts from the repo root
+- `resources/t3code` and `resources/dev-browser` are tracked as submodules; if you update them, explain why and call out the upstream commit
+- Avoid committing generated outputs such as `artifacts/`, `build/t3code-runtime/`, `build/node-bin/`, `.dev-server.cjs`, or repo-root scratch/design files
 
 ## Pull Request Guidelines
 
@@ -81,6 +81,7 @@ npm run build
 - Match existing file organization and naming
 - Keep components and stores narrowly scoped
 - Add comments only when the code would otherwise be hard to parse
+- Keep the repo tidy: source under `src/`, docs under `docs/`, and generated output out of git
 
 ## Licensing
 
