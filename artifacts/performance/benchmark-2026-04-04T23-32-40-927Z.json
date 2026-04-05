@@ -1,0 +1,137 @@
+{
+  "generatedAt": "2026-04-04T23:32:19.510Z",
+  "system": {
+    "hostname": "MacBook-Air.home",
+    "platform": "darwin",
+    "arch": "arm64",
+    "osRelease": "25.4.0",
+    "node": "v24.13.0",
+    "totalMemoryGb": 16,
+    "cpuModel": "Apple M4",
+    "cpuCount": 10
+  },
+  "options": {
+    "mode": "electron",
+    "output": "",
+    "headless": true,
+    "runtimePowerMode": "high",
+    "skipBuild": false,
+    "scenario": {
+      "fillerProjectCount": 6,
+      "mediumWorkspaceCount": 4,
+      "largeWorkspaceCount": 8,
+      "panelsPerWorkspace": 3,
+      "mediumTaskCount": 24,
+      "largeTaskCount": 72
+    }
+  },
+  "runs": [
+    {
+      "mode": "electron",
+      "projectOpenRuns": [
+        {
+          "projectName": "Spectrum Benchmark Medium",
+          "projectOpenMs": 334,
+          "panelCount": 12,
+          "xtermCount": 4,
+          "iframeCount": 0,
+          "webviewCount": 1,
+          "counters": {}
+        },
+        {
+          "projectName": "Spectrum Benchmark Large",
+          "projectOpenMs": 275,
+          "panelCount": 24,
+          "xtermCount": 8,
+          "iframeCount": 0,
+          "webviewCount": 1,
+          "counters": {}
+        },
+        {
+          "projectName": "Spectrum Benchmark Medium",
+          "projectOpenMs": 189,
+          "panelCount": 12,
+          "xtermCount": 4,
+          "iframeCount": 0,
+          "webviewCount": 1,
+          "counters": {}
+        },
+        {
+          "projectName": "Spectrum Benchmark Large",
+          "projectOpenMs": 229,
+          "panelCount": 24,
+          "xtermCount": 8,
+          "iframeCount": 0,
+          "webviewCount": 1,
+          "counters": {}
+        }
+      ],
+      "averageProjectOpenMs": 256.75,
+      "medianProjectOpenMs": 252,
+      "largeProjectSnapshot": {
+        "projectName": "Spectrum Benchmark Large",
+        "projectOpenMs": 229,
+        "panelCount": 24,
+        "xtermCount": 8,
+        "iframeCount": 0,
+        "webviewCount": 1,
+        "counters": {}
+      },
+      "rendererMemory": {
+        "jsHeapSizeLimit": 3760000000,
+        "totalJSHeapSize": 131000000,
+        "usedJSHeapSize": 86400000
+      },
+      "issues": {
+        "pageErrors": [],
+        "consoleErrors": [],
+        "consoleWarnings": []
+      },
+      "extraMetrics": {
+        "electronAppMetrics": {
+          "totalWorkingSetMiB": 883.3,
+          "processes": [
+            {
+              "type": "Browser",
+              "serviceName": null,
+              "pid": 36986,
+              "workingSetMiB": 204.7,
+              "privateMiB": null
+            },
+            {
+              "type": "GPU",
+              "serviceName": "GPU",
+              "pid": 37017,
+              "workingSetMiB": 108.9,
+              "privateMiB": null
+            },
+            {
+              "type": "Utility",
+              "serviceName": "network.mojom.NetworkService",
+              "pid": 37018,
+              "workingSetMiB": 49.7,
+              "privateMiB": null
+            },
+            {
+              "type": "Tab",
+              "serviceName": null,
+              "pid": 37026,
+              "workingSetMiB": 442.7,
+              "privateMiB": null
+            },
+            {
+              "type": "Tab",
+              "serviceName": null,
+              "pid": 37388,
+              "workingSetMiB": 77.3,
+              "privateMiB": null
+            }
+          ]
+        }
+      },
+      "coldStartMs": 4705,
+      "tempHome": "/var/folders/bb/4jkzmx8s2g9c6hyl1bp72dtw0000gp/T/spectrum-benchmark-electron-mjCmnC",
+      "dbPath": "/var/folders/bb/4jkzmx8s2g9c6hyl1bp72dtw0000gp/T/spectrum-benchmark-electron-mjCmnC/Library/Application Support/spectrum/spectrum.db"
+    }
+  ]
+}

@@ -257,13 +257,21 @@ export function Canvas() {
   useEffect(() => {
     let liveBrowserCount = 0
     let liveT3Count = 0
+    const firstPanelIdByWorkspace = new Map<string, string>()
 
     for (const panel of activePanels) {
-      let nextHydrationState: PanelHydrationState = panelRuntimeById[panel.panelId]?.hydrationState ?? 'cold'
+      if (!firstPanelIdByWorkspace.has(panel.workspaceId)) {
+        firstPanelIdByWorkspace.set(panel.workspaceId, panel.panelId)
+      }
+    }
+
+    for (const panel of activePanels) {
+      const runtime = panelRuntimeById[panel.panelId]
+      let nextHydrationState: PanelHydrationState = runtime?.hydrationState ?? 'cold'
 
       if (panel.panelType === 'browser') {
         if (browserRuntimeHostEnabled) {
-          const runtimeMode = panelRuntimeById[panel.panelId]?.browserRuntimeMode ?? 'cold'
+          const runtimeMode = runtime?.browserRuntimeMode ?? 'cold'
           nextHydrationState =
             runtimeMode === 'visible'
               ? 'live'
@@ -285,9 +293,9 @@ export function Canvas() {
           } else if (nextHydrationState === 'live') {
             nextHydrationState = 'live'
           } else {
-            const workspacePanels = activePanels.filter((entry) => entry.workspaceId === panel.workspaceId)
             nextHydrationState =
-              panelRuntimeById[panel.panelId]?.lastHydratedAt == null && workspacePanels[0]?.panelId === panel.panelId
+              runtime?.lastHydratedAt == null &&
+              firstPanelIdByWorkspace.get(panel.workspaceId) === panel.panelId
                 ? 'live'
                 : 'cold'
           }
@@ -298,7 +306,9 @@ export function Canvas() {
         nextHydrationState = 'live'
       }
 
-      setPanelHydrationState(panel.panelId, nextHydrationState)
+      if (runtime?.hydrationState !== nextHydrationState) {
+        setPanelHydrationState(panel.panelId, nextHydrationState)
+      }
       if (panel.panelType === 'browser' && nextHydrationState === 'live') {
         liveBrowserCount += 1
       }
