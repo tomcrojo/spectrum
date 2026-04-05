@@ -9,6 +9,7 @@ import { T3CodePanel } from './T3CodePanel'
 import { BrowserPanel } from './BrowserPanel'
 import { FilePanel } from './FilePanel'
 import { PanelPlaceholder } from './PanelPlaceholder'
+import { PanelContentHost } from './PanelContentHost'
 import { PanelGlyph } from '@renderer/components/shared/PanelIcons'
 import type { PanelHydrationState, PanelType } from '@shared/workspace.types'
 
@@ -37,6 +38,7 @@ interface WorkspacePanelProps {
   initialWidth?: number
   initialHeight?: number
   initialUrl?: string
+  browserRuntimeHostEnabled: boolean
 }
 
 interface FilePanelChromeState {
@@ -193,7 +195,8 @@ function WorkspacePanelImpl({
   style,
   initialWidth,
   initialHeight,
-  initialUrl
+  initialUrl,
+  browserRuntimeHostEnabled
 }: WorkspacePanelProps) {
   const resolvedTheme = useResolvedTheme()
   const autoCenterFocusedPanel = useUiStore((state) => state.autoCenterFocusedPanel)
@@ -356,8 +359,6 @@ function WorkspacePanelImpl({
     updatePanelLayout(panelId, { width: size.width, height: size.height })
   }, [isResizing, panelId, size.height, size.width, updatePanelLayout])
 
-  const watchPriority =
-    isFocused && isActiveWorkspace ? 'focused' : isActiveWorkspace ? 'active' : 'inactive'
   const showBrowserAutomationChrome = panelType === 'browser' && browserAutomationAttached
 
   return (
@@ -374,10 +375,10 @@ function WorkspacePanelImpl({
         }
       }}
       className={cn(
-        'relative flex flex-col rounded-lg border',
-        isFocused ? 'border-accent/50' : 'border-border',
+        'relative flex flex-col rounded-xl border',
+        isFocused ? 'border-border/80 shadow-xl shadow-black/25' : 'border-border/50 shadow-md shadow-black/15',
         showBrowserAutomationChrome && 'shadow-[0_0_0_1px_rgba(115,115,115,0.45)]',
-        'bg-bg shadow-lg shadow-black/30',
+        'bg-bg',
         isResizing && 'select-none'
       )}
       style={{
@@ -393,7 +394,7 @@ function WorkspacePanelImpl({
         />
       ) : null}
 
-      <div className="flex h-8 items-center justify-between gap-2 rounded-t-lg border-b border-border-subtle bg-bg-raised px-2.5 flex-shrink-0">
+      <div className="flex h-8 items-center justify-between gap-2 rounded-t-xl border-b border-border/50 bg-bg-raised/80 px-2.5 flex-shrink-0">
         <div className="flex min-w-0 items-center gap-2">
           <PanelGlyph panelType={panelType} providerId={providerId} className="text-text-secondary" />
           <div className="flex min-w-0 items-center gap-2">
@@ -458,7 +459,7 @@ function WorkspacePanelImpl({
               </PanelIconButton>
             </>
           ) : null}
-          <button onClick={onClose} className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary">
+          <button onClick={onClose} className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary">
             <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none">
               <path d="M3 3L9 9M9 3L3 9" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
             </svg>
@@ -473,53 +474,55 @@ function WorkspacePanelImpl({
           setFocusedPanel={setFocusedPanel}
           autoCenterFocusedPanel={autoCenterFocusedPanel}
         />
-        {panelType === 't3code' ? (
-          <T3CodePanel
-            panelId={panelId}
-            workspaceId={workspaceId}
-            projectId={projectId}
-            projectName={projectName}
-            projectPath={cwd}
-            t3ProjectId={t3ProjectId}
-            t3ThreadId={t3ThreadId}
-            theme={resolvedTheme}
-            autoFocus={isFocused}
-            hydrationState={hydrationState === 'preview' ? 'cold' : hydrationState}
-            watchPriority={watchPriority}
-          />
-        ) : panelType === 'terminal' ? (
-          <TerminalPanel
-            terminalId={panelId}
-            cwd={cwd}
-            projectId={projectId}
-            workspaceId={workspaceId}
-            autoFocus={isFocused}
-          />
-        ) : panelType === 'browser' ? (
-          <BrowserPanel
-            panelId={panelId}
-            workspaceId={workspaceId}
-            projectId={projectId}
-            initialUrl={initialUrl}
-            autoFocus={isFocused}
-            isResizing={isResizing}
-            hydrationState={hydrationState}
-          />
-        ) : panelType === 'file' ? (
-          <FilePanel
-            panelId={panelId}
-            workspaceId={workspaceId}
-            projectId={projectId}
-            projectPath={cwd}
-            initialFilePath={filePath}
-            initialCursorLine={cursorLine}
-            initialCursorColumn={cursorColumn}
-            autoFocus={isFocused}
-            onChromeStateChange={setFileChromeState}
-          />
-        ) : (
-          <PanelPlaceholder type={panelType} />
-        )}
+        <PanelContentHost panelId={panelId}>
+          {panelType === 't3code' ? (
+            <T3CodePanel
+              panelId={panelId}
+              workspaceId={workspaceId}
+              projectId={projectId}
+              projectName={projectName}
+              projectPath={cwd}
+              t3ProjectId={t3ProjectId}
+              t3ThreadId={t3ThreadId}
+              theme={resolvedTheme}
+              autoFocus={isFocused}
+              hydrationState={hydrationState === 'preview' ? 'cold' : hydrationState}
+            />
+          ) : panelType === 'terminal' ? (
+            <TerminalPanel
+              terminalId={panelId}
+              cwd={cwd}
+              projectId={projectId}
+              workspaceId={workspaceId}
+              autoFocus={isFocused}
+            />
+          ) : panelType === 'browser' ? (
+            <BrowserPanel
+              panelId={panelId}
+              workspaceId={workspaceId}
+              projectId={projectId}
+              initialUrl={initialUrl}
+              autoFocus={isFocused}
+              isResizing={isResizing}
+              hydrationState={hydrationState}
+              hostEnabled={browserRuntimeHostEnabled}
+            />
+          ) : panelType === 'file' ? (
+            <FilePanel
+              panelId={panelId}
+              workspaceId={workspaceId}
+              projectId={projectId}
+              projectPath={cwd}
+              initialFilePath={filePath}
+              initialCursorLine={cursorLine}
+              initialCursorColumn={cursorColumn}
+              autoFocus={isFocused}
+              onChromeStateChange={setFileChromeState}
+            />
+          ) : (
+            <PanelPlaceholder type={panelType} />
+          )}
+        </PanelContentHost>
       </div>
 
       <div onMouseDown={onResizeStart} className="absolute bottom-0 right-0 z-20 h-6 w-6 cursor-se-resize" style={{ touchAction: 'none' }}>

@@ -1,15 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { T3CODE_CHANNELS } from '@shared/ipc-channels'
 import { t3codeApi } from '@renderer/lib/ipc'
 import { openFileInWorkspace } from '@renderer/lib/open-file'
-import { transport } from '@renderer/lib/transport'
 import { incrementDevMountCount } from '@renderer/lib/dev-performance'
+import { suggestT3CodeTitleFromPrompt } from '@renderer/lib/t3code-auto-title'
 import { usePanelRuntimeStore } from '@renderer/stores/panel-runtime.store'
 import { useUiStore } from '@renderer/stores/ui.store'
 import { useWorkspacesStore } from '@renderer/stores/workspaces.store'
-import { useNotificationsStore } from '@renderer/stores/notifications.store'
-import { playNotificationSound, preloadNotificationSound } from '@renderer/lib/notification-sound'
-import type { ThreadNotificationKind } from '@renderer/stores/panel-runtime.store'
 
 interface T3CodePanelProps {
   panelId: string
@@ -22,7 +18,6 @@ interface T3CodePanelProps {
   theme: 'light' | 'dark'
   autoFocus: boolean
   hydrationState: 'live' | 'cold'
-  watchPriority: 'focused' | 'active' | 'inactive'
 }
 
 interface ThreadBinding {
@@ -36,6 +31,14 @@ interface ThreadInfo {
   threadTitle: string | null
   lastUserMessageAt: string | null
   providerId: string | null
+  activityState:
+    | 'starting'
+    | 'connecting'
+    | 'running'
+    | 'requires-input'
+    | 'completed'
+    | 'idle'
+    | 'unknown'
 }
 
 function isOpenFileMessage(
@@ -63,6 +66,26 @@ function isOpenFileMessage(
     (candidate.payload.line === undefined || typeof candidate.payload.line === 'number') &&
     (candidate.payload.column === undefined || typeof candidate.payload.column === 'number')
   )
+}
+
+function isFirstUserMessageEvent(
+  value: unknown
+): value is {
+  type: 'spectrum:first-user-message'
+  payload: {
+    text: string
+  }
+} {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const candidate = value as {
+    type?: unknown
+    payload?: { text?: unknown }
+  }
+
+  return candidate.type === 'spectrum:first-user-message' && typeof candidate.payload?.text === 'string'
 }
 
 function T3CodeShell({
@@ -102,10 +125,10 @@ export function T3CodePanel({
   t3ThreadId,
   theme,
   autoFocus,
-  hydrationState,
-  watchPriority
+  hydrationState
 }: T3CodePanelProps) {
   const updatePanelLayout = useWorkspacesStore((state) => state.updatePanelLayout)
+  const applyAutoTitleToT3CodePanel = useWorkspacesStore((state) => state.applyAutoTitleToT3CodePanel)
   const updateWorkspaceLastPanelEditedAt = useWorkspacesStore(
     (state) => state.updateWorkspaceLastPanelEditedAt
   )
@@ -113,20 +136,14 @@ export function T3CodePanel({
   const followUpBehavior = useUiStore((state) => state.followUpBehavior)
   const assistantStreaming = useUiStore((state) => state.assistantStreaming)
   const updatePanelRuntime = usePanelRuntimeStore((state) => state.updatePanelRuntime)
-  const addToast = useNotificationsStore((state) => state.addToast)
+  const setPanelFailure = usePanelRuntimeStore((state) => state.setPanelFailure)
   const [binding, setBinding] = useState<ThreadBinding | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [iframeUrl, setIframeUrl] = useState<string | null>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const parkedThreadTitle = usePanelRuntimeStore((state) => state.panelRuntimeById[panelId]?.t3ThreadTitle)
   const parkedLastUserMessageAt = usePanelRuntimeStore(
     (state) => state.panelRuntimeById[panelId]?.t3LastUserMessageAt
   )
-
-  // Preload notification sound on mount
-  useEffect(() => {
-    preloadNotificationSound()
-  }, [])
 
   useEffect(() => {
     incrementDevMountCount('T3CodePanel')
@@ -154,29 +171,33 @@ export function T3CodePanel({
 
     let cancelled = false
 
-    const applyThreadInfo = (threadInfo: ThreadInfo) => {
+    const applyThreadInfo = (threadInfo: Omit<ThreadInfo, 'url'>) => {
       if (cancelled) {
         return
       }
 
-      if (threadInfo.threadTitle?.trim()) {
-        updatePanelLayout(panelId, { panelTitle: threadInfo.threadTitle.trim() })
-      }
       if (threadInfo.providerId) {
         updatePanelLayout(panelId, { providerId: threadInfo.providerId })
       }
       if (threadInfo.lastUserMessageAt) {
         updatePanelRuntime(panelId, {
           t3ThreadTitle: threadInfo.threadTitle,
-          t3LastUserMessageAt: threadInfo.lastUserMessageAt
+          t3LastUserMessageAt: threadInfo.lastUserMessageAt,
+          t3ActivityState: threadInfo.activityState
         })
         void updateWorkspaceLastPanelEditedAt(workspaceId, threadInfo.lastUserMessageAt)
+      } else {
+        updatePanelRuntime(panelId, {
+          t3ThreadTitle: threadInfo.threadTitle,
+          t3ActivityState: threadInfo.activityState
+        })
       }
     }
 
     t3codeApi
       .ensurePanelThread({
         panelId,
+        workspaceId,
         spectrumProjectId: projectId,
         projectPath,
         projectName,
@@ -193,18 +214,15 @@ export function T3CodePanel({
           t3ProjectId: runtime.t3ProjectId,
           t3ThreadId: runtime.t3ThreadId
         })
-        setError(null)
 
         if (
           runtime.t3ProjectId !== t3ProjectId ||
           runtime.t3ThreadId !== t3ThreadId ||
-          runtime.threadTitle?.trim() ||
           runtime.providerId
         ) {
           updatePanelLayout(panelId, {
             t3ProjectId: runtime.t3ProjectId,
             t3ThreadId: runtime.t3ThreadId,
-            panelTitle: runtime.threadTitle?.trim() || undefined,
             providerId: runtime.providerId ?? undefined
           })
         }
@@ -213,7 +231,12 @@ export function T3CodePanel({
       })
       .catch((nextError: Error) => {
         if (!cancelled) {
-          setError(nextError.message)
+          setPanelFailure(panelId, {
+            source: 'async-init',
+            summary: 'The embedded T3Code panel failed to start.',
+            debug: nextError.stack ?? nextError.message,
+            occurredAt: Date.now()
+          })
         }
       })
 
@@ -226,6 +249,7 @@ export function T3CodePanel({
     projectId,
     projectName,
     projectPath,
+    setPanelFailure,
     t3ProjectId,
     t3ThreadId,
     updatePanelLayout,
@@ -233,96 +257,6 @@ export function T3CodePanel({
     updateWorkspaceLastPanelEditedAt,
     workspaceId
   ])
-
-  useEffect(() => {
-    const watchedThreadId = binding?.t3ThreadId ?? t3ThreadId
-    if (!watchedThreadId) {
-      return
-    }
-
-    t3codeApi
-      .watchThread({
-        panelId,
-        t3ThreadId: watchedThreadId,
-        priority: watchPriority
-      })
-      .catch(() => {})
-
-    return () => {
-      t3codeApi.unwatchThread(panelId).catch(() => {})
-    }
-  }, [binding?.t3ThreadId, panelId, t3ThreadId, watchPriority])
-
-  useEffect(() => {
-    const remove = transport.on(
-      T3CODE_CHANNELS.THREAD_INFO_CHANGED,
-      (payload: {
-        panelId: string
-        t3ThreadId: string
-        threadTitle: string | null
-        lastUserMessageAt: string | null
-        providerId: string | null
-        notificationKind: ThreadNotificationKind | null
-      }) => {
-        if (payload.panelId !== panelId) {
-          return
-        }
-
-        updatePanelLayout(
-          panelId,
-          payload.threadTitle?.trim()
-            ? {
-                panelTitle: payload.threadTitle.trim(),
-                providerId: payload.providerId ?? undefined
-              }
-            : { providerId: payload.providerId ?? undefined }
-        )
-
-        // Get previous notification kind to detect transitions
-        const prevRuntime = usePanelRuntimeStore.getState().panelRuntimeById[panelId]
-        const prevKind = prevRuntime?.t3NotificationKind ?? null
-
-        updatePanelRuntime(panelId, {
-          t3ThreadTitle: payload.threadTitle,
-          t3LastUserMessageAt: payload.lastUserMessageAt,
-          ...(payload.notificationKind
-            ? {
-                t3NotificationKind: payload.notificationKind,
-                t3NotificationUpdatedAt: new Date().toISOString()
-              }
-            : {
-                t3NotificationKind: null
-              })
-        })
-
-        if (payload.lastUserMessageAt) {
-          void updateWorkspaceLastPanelEditedAt(workspaceId, payload.lastUserMessageAt)
-        }
-
-        // Fire toast + sound when a new notification kind appears
-        // (only on transition from null/different kind to a non-null kind)
-        if (payload.notificationKind && payload.notificationKind !== prevKind) {
-          // Only notify if the panel is not currently focused
-          const currentFocusedPanelId = useWorkspacesStore.getState().focusedPanelId
-          if (currentFocusedPanelId !== panelId) {
-            const currentActivePanels = useWorkspacesStore.getState().activePanels
-            const activePanel = currentActivePanels.find((p) => p.panelId === panelId)
-            const resolvedPanelTitle = payload.threadTitle?.trim() || activePanel?.panelTitle || 'T3Code'
-
-            playNotificationSound()
-            addToast({
-              panelId,
-              workspaceId,
-              panelTitle: resolvedPanelTitle,
-              kind: payload.notificationKind
-            })
-          }
-        }
-      }
-    )
-
-    return remove
-  }, [addToast, panelId, updatePanelLayout, updatePanelRuntime, updateWorkspaceLastPanelEditedAt, workspaceId])
 
   // Acknowledge (clear) notification when panel gets focused
   useEffect(() => {
@@ -403,7 +337,12 @@ export function T3CodePanel({
       }
 
       if (!cancelled) {
-        setError('Timed out waiting for the embedded T3Code app to become reachable')
+        setPanelFailure(panelId, {
+          source: 'async-init',
+          summary: 'The embedded T3Code app did not become reachable in time.',
+          debug: `Base URL: ${binding.baseUrl}`,
+          occurredAt: Date.now()
+        })
       }
     }
 
@@ -412,7 +351,7 @@ export function T3CodePanel({
     return () => {
       cancelled = true
     }
-  }, [binding?.baseUrl, hydrationState, themedUrl])
+  }, [binding?.baseUrl, hydrationState, panelId, setPanelFailure, themedUrl])
 
   useEffect(() => {
     postTheme()
@@ -438,6 +377,14 @@ export function T3CodePanel({
         return
       }
 
+      if (isFirstUserMessageEvent(event.data)) {
+        const nextTitle = suggestT3CodeTitleFromPrompt(event.data.payload.text)
+        if (nextTitle) {
+          void applyAutoTitleToT3CodePanel(panelId, nextTitle)
+        }
+        return
+      }
+
       if (!isOpenFileMessage(event.data)) {
         return
       }
@@ -456,7 +403,7 @@ export function T3CodePanel({
     return () => {
       window.removeEventListener('message', handleMessage)
     }
-  }, [binding?.baseUrl, projectId, workspaceId])
+  }, [applyAutoTitleToT3CodePanel, binding?.baseUrl, panelId, projectId, workspaceId])
 
   useEffect(() => {
     if (!autoFocus || !iframeUrl || hydrationState !== 'live') {
@@ -467,17 +414,6 @@ export function T3CodePanel({
       iframeRef.current?.focus({ preventScroll: true })
     })
   }, [autoFocus, hydrationState, iframeUrl])
-
-  if (error) {
-    return (
-      <div className="flex h-full items-center justify-center px-6 text-center">
-        <div>
-          <p className="mb-2 text-sm text-red-400">Failed to start T3Code</p>
-          <p className="text-xs text-text-muted">{error}</p>
-        </div>
-      </div>
-    )
-  }
 
   if (hydrationState !== 'live') {
     return (

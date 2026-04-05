@@ -1,6 +1,8 @@
+import { ArrowRight01FreeIcons } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { cn } from '@renderer/lib/cn'
-import { ProgressIcon } from '@renderer/components/shared/ProgressIcon'
-import { PROJECT_COLOR_HEX } from '@renderer/lib/project-colors'
+import { ProjectAvatar } from '@renderer/components/shared/ProjectAvatar'
+import { getProjectThemeStyle } from '@renderer/lib/project-colors'
 import {
   getDominantNotificationKind,
   getThreadNotificationClasses,
@@ -17,15 +19,12 @@ interface ProjectCardProps {
   onClick: () => void
 }
 
-const progressLabels = ['Starting', 'In Progress', 'Almost Done', 'Complete'] as const
-
 export function ProjectCard({ project, active, onClick }: ProjectCardProps) {
   const { showProjectPage, toggleProjectPage } = useUiStore()
   const workspaces = useWorkspacesStore((state) => state.workspaces)
   const activePanels = useWorkspacesStore((state) => state.activePanels)
   const panelRuntimeById = usePanelRuntimeStore((state) => state.panelRuntimeById)
   const isProjectPageOpen = active && showProjectPage
-  const colorHex = PROJECT_COLOR_HEX[project.color]
   const projectWorkspaceIds = new Set(
     workspaces.filter((workspace) => workspace.projectId === project.id).map((workspace) => workspace.id)
   )
@@ -49,18 +48,18 @@ export function ProjectCard({ project, active, onClick }: ProjectCardProps) {
     <button
       onClick={onClick}
       className={cn(
-        'w-full text-left px-3 py-2.5 rounded-lg transition-all duration-150 group',
-        'border border-transparent',
+        'group w-full rounded-xl border px-2.5 py-2 text-left transition-all duration-150',
         active
-          ? 'bg-bg-active border-border'
-          : 'hover:bg-bg-hover'
+          ? 'project-sidebar-card-active'
+          : 'border-transparent hover:bg-bg-hover/80'
       )}
+      style={active ? getProjectThemeStyle(project.color) : undefined}
     >
-      <div className="flex items-start gap-2 min-w-0">
-        <ProgressIcon progress={project.progress} />
+      <div className="flex min-w-0 items-center gap-2.5">
+        <ProjectAvatar icon={project.icon} name={project.name} color={project.color} size={20} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <div className="text-sm font-medium text-text-primary truncate flex-1">
+            <div className="flex-1 truncate text-[13px] font-medium tracking-tight text-text-primary">
               {project.name}
             </div>
             {hasUnreadNotification ? (
@@ -74,40 +73,34 @@ export function ProjectCard({ project, active, onClick }: ProjectCardProps) {
         <div
           onClick={handleArrowClick}
           className={cn(
-            'no-drag flex items-center justify-center rounded-md transition-all duration-150',
-            'w-5 h-8',
+            'no-drag flex h-7 w-7 items-center justify-center rounded-full transition-all duration-150',
             active
               ? 'opacity-100'
-              : 'opacity-0 group-hover:opacity-50'
+              : 'opacity-0 group-hover:opacity-60'
           )}
           style={
             active
               ? isProjectPageOpen
-                ? { background: '#e5e5e5' }
-                : { background: colorHex }
+                ? { background: 'rgba(255, 255, 255, 0.72)' }
+                : { background: 'var(--project-accent)' }
               : undefined
           }
         >
-          <svg
+          <HugeiconsIcon
+            icon={ArrowRight01FreeIcons}
+            size={14}
+            strokeWidth={1.8}
             className={cn(
-              'w-3 h-3 transition-transform duration-200',
-              isProjectPageOpen ? 'rotate-180' : '',
+              'transition-transform duration-200',
+              isProjectPageOpen ? 'rotate-90' : '',
               active
                 ? isProjectPageOpen
                   ? 'text-neutral-700'
                   : 'text-white'
                 : 'text-text-muted'
             )}
-            viewBox="0 0 12 12"
-            fill="none"
-          >
-            <path d="M4.5 3L7.5 6L4.5 9" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          />
         </div>
-      </div>
-      <div className="mt-1 ml-5 text-xs text-text-muted truncate">
-        {progressLabels[project.progress]}
-        {project.description && ` · ${project.description}`}
       </div>
     </button>
   )

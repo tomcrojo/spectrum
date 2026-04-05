@@ -7,6 +7,13 @@ export const PROJECT_CHANNELS = {
   DELETE: 'project:delete'
 } as const
 
+export const APP_CHANNELS = {
+  ZOOM_IN: 'app:zoom-in',
+  ZOOM_OUT: 'app:zoom-out',
+  RESET_ZOOM: 'app:reset-zoom',
+  SET_TRAFFIC_LIGHTS_VISIBLE: 'app:set-traffic-lights-visible'
+} as const
+
 // Task channels
 export const TASK_CHANNELS = {
   LIST: 'task:list',
@@ -53,6 +60,7 @@ export const BROWSER_CHANNELS = {
   OPEN: 'browser:open',
   OPEN_TEMPORARY: 'browser:open-temporary',
   CLOSE: 'browser:close',
+  SNAPSHOT: 'browser:snapshot',
   RESIZE: 'browser:resize',
   ACTIVATE: 'browser:activate',
   LIST: 'browser:list',

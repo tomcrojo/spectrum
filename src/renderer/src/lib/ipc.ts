@@ -1,4 +1,5 @@
 import {
+  APP_CHANNELS,
   PROJECT_CHANNELS,
   TASK_CHANNELS,
   WORKSPACE_CHANNELS,
@@ -38,6 +39,14 @@ import { transport } from './transport'
 
 function invoke<T>(channel: string, ...args: any[]): Promise<T> {
   return transport.invoke(channel, ...args)
+}
+
+export const appApi = {
+  zoomIn: () => invoke<number>(APP_CHANNELS.ZOOM_IN),
+  zoomOut: () => invoke<number>(APP_CHANNELS.ZOOM_OUT),
+  resetZoom: () => invoke<number>(APP_CHANNELS.RESET_ZOOM),
+  setTrafficLightsVisible: (visible: boolean) =>
+    invoke<void>(APP_CHANNELS.SET_TRAFFIC_LIGHTS_VISIBLE, visible)
 }
 
 // Projects
@@ -114,6 +123,7 @@ export const t3codeApi = {
     }>(T3CODE_CHANNELS.ENSURE_PROJECT, input),
   ensurePanelThread: (input: {
     panelId: string
+    workspaceId: string
     spectrumProjectId: string
     projectPath: string
     projectName: string
@@ -127,6 +137,14 @@ export const t3codeApi = {
       threadTitle: string | null
       lastUserMessageAt: string | null
       providerId: string | null
+      activityState:
+        | 'starting'
+        | 'connecting'
+        | 'running'
+        | 'requires-input'
+        | 'completed'
+        | 'idle'
+        | 'unknown'
     }>(T3CODE_CHANNELS.ENSURE_PANEL_THREAD, input),
   getThreadInfo: (t3ThreadId: string) =>
     invoke<{
@@ -134,6 +152,14 @@ export const t3codeApi = {
       threadTitle: string | null
       lastUserMessageAt: string | null
       providerId: string | null
+      activityState:
+        | 'starting'
+        | 'connecting'
+        | 'running'
+        | 'requires-input'
+        | 'completed'
+        | 'idle'
+        | 'unknown'
     }>(T3CODE_CHANNELS.GET_THREAD_INFO, { t3ThreadId }),
   watchThread: (input: {
     panelId: string
@@ -146,6 +172,31 @@ export const t3codeApi = {
 export const browserApi = {
   activate: (input: { workspaceId: string; panelId: string }) =>
     invoke<boolean>(BROWSER_CHANNELS.ACTIVATE, input),
+  close: (input: { workspaceId: string; panelId: string }) =>
+    invoke<boolean>(BROWSER_CHANNELS.CLOSE, input),
+  snapshot: (input: {
+    projectId: string | null
+    activeWorkspaceId?: string | null
+  }) =>
+    invoke<{
+      panels: Array<{
+        panelId: string
+        workspaceId: string
+        projectId: string
+        url: string
+        panelTitle: string
+        isTemporary?: boolean
+        parentPanelId?: string
+        returnToPanelId?: string
+        openedBy?: 'user' | 'agent' | 'popup'
+        afterPanelId?: string
+        width?: number
+        height?: number
+      }>
+      focusedBrowserPanelId: string | null
+      focusedByWorkspace: Record<string, string | null>
+      automationAttachedPanelIds: string[]
+    }>(BROWSER_CHANNELS.SNAPSHOT, input),
   openTemporary: (input: {
     workspaceId: string
     projectId: string
@@ -162,7 +213,6 @@ export const browserApi = {
   sessionSync: (input: {
     activeProjectId: string | null
     activeWorkspaceId: string | null
-    focusedBrowserPanelId: string | null
     userFocusedPanelId?: string | null
   }) => invoke<boolean>(BROWSER_CHANNELS.SESSION_SYNC, input),
   webviewReady: (input: {

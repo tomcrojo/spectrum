@@ -5,11 +5,36 @@ import type {
   Workspace,
   CreateWorkspaceInput,
   ListWorkspacesInput,
+  WorkspaceStatus,
+  WorkspaceNameSource,
   WorkspaceLayoutState,
   UpdateWorkspaceInput,
   UpdateWorkspaceLayoutInput,
   UpdateWorkspaceLastPanelEditedAtInput
 } from '@shared/workspace.types'
+
+function normalizeWorkspaceStatus(
+  status: unknown,
+  archived: unknown
+): WorkspaceStatus {
+  if (status === 'active' || status === 'saved' || status === 'archived') {
+    return status
+  }
+
+  return archived ? 'archived' : 'active'
+}
+
+function normalizeWorkspaceNameSource(nameSource: unknown, name: unknown): WorkspaceNameSource {
+  if (nameSource === 'default' || nameSource === 'auto' || nameSource === 'user') {
+    return nameSource
+  }
+
+  if (typeof name === 'string' && /^Workspace \d+$/.test(name.trim())) {
+    return 'default'
+  }
+
+  return 'user'
+}
 
 function sanitizeLayoutStateForNewWorkspace(
   layoutState: WorkspaceLayoutState
@@ -58,16 +83,36 @@ function getLatestT3CodePanelActivityAt(
 }
 
 function rowToWorkspace(row: any): Workspace {
+  const status = normalizeWorkspaceStatus(row.status, row.archived)
+  const nameSource = normalizeWorkspaceNameSource(row.name_source, row.name)
+
   return {
     id: row.id,
     projectId: row.project_id,
     name: row.name,
+    nameSource,
+    hasAutoRenamed: Boolean(row.has_auto_renamed),
     layoutState: JSON.parse(row.layout_state) as WorkspaceLayoutState,
-    archived: Boolean(row.archived),
+    status,
+    archived: status === 'archived',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastPanelEditedAt: row.last_panel_edited_at ?? null
   }
+}
+
+interface WorkspaceRow {
+  id: string
+  project_id: string
+  name: string
+  name_source: WorkspaceNameSource
+  has_auto_renamed: number
+  layout_state: string
+  status: WorkspaceStatus
+  archived: number
+  created_at: string
+  updated_at: string
+  last_panel_edited_at: string | null
 }
 
 export function listWorkspaces(input: string | ListWorkspacesInput): Workspace[] {
@@ -82,11 +127,15 @@ export function listWorkspaces(input: string | ListWorkspacesInput): Workspace[]
            FROM workspaces w
            INNER JOIN projects p ON p.id = w.project_id
            WHERE w.project_id = ?
-           ORDER BY w.archived ASC, w.created_at ASC`
+           ORDER BY CASE w.status
+             WHEN 'active' THEN 0
+             WHEN 'saved' THEN 1
+             ELSE 2
+           END ASC, w.created_at ASC`
         : `SELECT w.*, p.repo_path
            FROM workspaces w
            INNER JOIN projects p ON p.id = w.project_id
-           WHERE w.project_id = ? AND w.archived = 0
+           WHERE w.project_id = ? AND w.status != 'archived'
            ORDER BY w.created_at ASC`
     )
     .all(projectId)
@@ -151,17 +200,23 @@ export function createWorkspace(input: CreateWorkspaceInput): Workspace {
       id,
       project_id,
       name,
+      name_source,
+      has_auto_renamed,
       layout_state,
+      status,
       created_at,
       updated_at,
       last_panel_edited_at
     )
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     input.projectId,
     input.name,
+    'default',
+    0,
     JSON.stringify(defaultLayout),
+    'active',
     now,
     now,
     lastPanelEditedAt
@@ -176,7 +231,7 @@ export function archiveWorkspace(id: string): boolean {
   const db = getDb()
   const now = new Date().toISOString()
   const result = db
-    .prepare('UPDATE workspaces SET archived = 1, updated_at = ? WHERE id = ?')
+    .prepare("UPDATE workspaces SET status = 'archived', archived = 1, updated_at = ? WHERE id = ?")
     .run(now, id)
   return result.changes > 0
 }
@@ -189,7 +244,9 @@ export function deleteWorkspace(id: string): boolean {
 
 export function updateWorkspace(input: UpdateWorkspaceInput): Workspace | null {
   const db = getDb()
-  const existing = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(input.id)
+  const existing = db
+    .prepare('SELECT * FROM workspaces WHERE id = ?')
+    .get(input.id) as WorkspaceRow | undefined
   if (!existing) {
     return null
   }
@@ -203,9 +260,28 @@ export function updateWorkspace(input: UpdateWorkspaceInput): Workspace | null {
     values.push(input.name)
   }
 
+  if (input.nameSource !== undefined) {
+    updates.push('name_source = ?')
+    values.push(input.nameSource)
+  }
+
+  if (input.hasAutoRenamed !== undefined) {
+    updates.push('has_auto_renamed = ?')
+    values.push(input.hasAutoRenamed ? 1 : 0)
+  }
+
+  if (input.status !== undefined) {
+    updates.push('status = ?')
+    values.push(input.status)
+    updates.push('archived = ?')
+    values.push(input.status === 'archived' ? 1 : 0)
+  }
+
   if (input.archived !== undefined) {
     updates.push('archived = ?')
     values.push(input.archived ? 1 : 0)
+    updates.push('status = ?')
+    values.push(input.archived ? 'archived' : 'active')
   }
 
   if (updates.length === 1) {
@@ -248,7 +324,9 @@ export function updateWorkspaceLastPanelEditedAt(
   input: UpdateWorkspaceLastPanelEditedAtInput
 ): Workspace | null {
   const db = getDb()
-  const existing = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(input.id)
+  const existing = db
+    .prepare('SELECT * FROM workspaces WHERE id = ?')
+    .get(input.id) as WorkspaceRow | undefined
   if (!existing) {
     return null
   }
@@ -287,7 +365,7 @@ export function unarchiveWorkspace(id: string): boolean {
   const db = getDb()
   const now = new Date().toISOString()
   const result = db
-    .prepare('UPDATE workspaces SET archived = 0, updated_at = ? WHERE id = ?')
+    .prepare("UPDATE workspaces SET status = 'saved', archived = 0, updated_at = ? WHERE id = ?")
     .run(now, id)
   return result.changes > 0
 }

@@ -1,6 +1,6 @@
 import { loader } from '@monaco-editor/react'
 import type * as Monaco from 'monaco-editor'
-import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FileTreeNode, ReadFileResult } from '@shared/file.types'
 import { Button } from '@renderer/components/shared/Button'
 import { Modal } from '@renderer/components/shared/Modal'
@@ -9,6 +9,7 @@ import { filesApi } from '@renderer/lib/ipc'
 import { configureMonacoEnvironment } from '@renderer/lib/monaco-environment'
 import { ensureSpectrumMonacoTheme } from '@renderer/lib/monaco-theme'
 import { useResolvedTheme } from '@renderer/lib/theme'
+import { usePanelRuntimeStore } from '@renderer/stores/panel-runtime.store'
 import { useWorkspacesStore } from '@renderer/stores/workspaces.store'
 
 interface FilePanelProps {
@@ -40,10 +41,6 @@ interface FileLoadErrorState {
 interface CloseDialogState {
   isSaving: boolean
   resolve: (shouldClose: boolean) => void
-}
-
-interface FilePanelBoundaryState {
-  error: Error | null
 }
 
 interface FilePanelChromeState {
@@ -216,46 +213,7 @@ function FileTreeItem({
   )
 }
 
-class FilePanelBoundary extends Component<
-  { children: ReactNode },
-  FilePanelBoundaryState
-> {
-  state: FilePanelBoundaryState = {
-    error: null
-  }
-
-  static getDerivedStateFromError(error: Error): FilePanelBoundaryState {
-    return { error }
-  }
-
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('[FilePanel] render failure', error, errorInfo)
-  }
-
-  render() {
-    if (!this.state.error) {
-      return this.props.children
-    }
-
-    return (
-      <div className="flex h-full items-center justify-center px-6 text-center">
-        <div className="max-w-lg">
-          <p className="text-sm font-semibold text-danger">File panel crashed</p>
-          <p className="mt-2 text-xs leading-5 text-text-muted">
-            {this.state.error.message || 'Unknown renderer error.'}
-          </p>
-          {this.state.error.stack ? (
-            <pre className="mt-4 max-h-64 overflow-auto rounded-md border border-border-subtle bg-bg-raised p-3 text-left text-[11px] leading-5 text-text-secondary whitespace-pre-wrap">
-              {this.state.error.stack}
-            </pre>
-          ) : null}
-        </div>
-      </div>
-    )
-  }
-}
-
-function FilePanelContent({
+export function FilePanel({
   panelId,
   workspaceId,
   projectId,
@@ -270,6 +228,7 @@ function FilePanelContent({
   const updatePanelLayout = useWorkspacesStore((state) => state.updatePanelLayout)
   const setPanelDirty = useWorkspacesStore((state) => state.setPanelDirty)
   const registerPanelCloseGuard = useWorkspacesStore((state) => state.registerPanelCloseGuard)
+  const setPanelFailure = usePanelRuntimeStore((state) => state.setPanelFailure)
   const [tree, setTree] = useState<FileTreeNode | null>(null)
   const [treeError, setTreeError] = useState<string | null>(null)
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
@@ -291,7 +250,7 @@ function FilePanelContent({
   const monacoRef = useRef<typeof Monaco | null>(null)
   const fallbackEditorRef = useRef<HTMLTextAreaElement | null>(null)
   const cursorTimerRef = useRef<number | null>(null)
-  const pendingSelectionRef = useRef<{ line: number; column: number } | null>(null)
+  const pendingSelectionRef = useRef<{ lineNumber: number; column: number } | null>(null)
   const activeFileRef = useRef<ActiveFileState | null>(null)
   const applyingProgrammaticValueRef = useRef(false)
   const dirty = activeFile !== null && currentContent !== activeFile.lastSavedContent
@@ -319,14 +278,19 @@ function FilePanelContent({
       })
       .catch((error) => {
         if (!cancelled) {
-          setEditorError(error instanceof Error ? error.message : 'Failed to initialize Monaco.')
+          setPanelFailure(panelId, {
+            source: 'async-init',
+            summary: 'The file editor failed to initialize.',
+            debug: error instanceof Error ? error.stack ?? error.message : 'Failed to initialize Monaco.',
+            occurredAt: Date.now()
+          })
         }
       })
 
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [panelId, setPanelFailure])
 
   useEffect(() => {
     getTreeForProject(projectId)
@@ -336,9 +300,17 @@ function FilePanelContent({
         setExpandedPaths(new Set([nextTree.path]))
       })
       .catch((error) => {
+        const debug =
+          error instanceof Error ? error.stack ?? error.message : 'Unable to load project files.'
         setTreeError(error instanceof Error ? error.message : 'Unable to load project files.')
+        setPanelFailure(panelId, {
+          source: 'async-init',
+          summary: 'The project file tree failed to load.',
+          debug,
+          occurredAt: Date.now()
+        })
       })
-  }, [projectId])
+  }, [panelId, projectId, setPanelFailure])
 
   const handleCursorChange = useCallback(() => {
     const position = editorRef.current?.getPosition()
@@ -526,7 +498,7 @@ function FilePanelContent({
         return next
       })
       pendingSelectionRef.current = {
-        line: Math.max(1, line ?? 1),
+        lineNumber: Math.max(1, line ?? 1),
         column: Math.max(1, column ?? 1)
       }
       updatePanelLayout(panelId, {
@@ -656,9 +628,15 @@ function FilePanelContent({
 
       setEditorModelForFile(activeFile)
     } catch (error) {
-      setEditorError(error instanceof Error ? error.message : 'The editor failed to initialize.')
+      setPanelFailure(panelId, {
+        source: 'async-init',
+        summary: 'The file editor failed to initialize.',
+        debug:
+          error instanceof Error ? error.stack ?? error.message : 'The editor failed to initialize.',
+        occurredAt: Date.now()
+      })
     }
-  }, [activeFile, editorError, ensureEditor, monacoReady, setEditorModelForFile])
+  }, [activeFile, editorError, ensureEditor, monacoReady, panelId, setEditorModelForFile, setPanelFailure])
 
   useEffect(() => {
     const monaco = monacoRef.current
@@ -934,13 +912,5 @@ function FilePanelContent({
         </div>
       </Modal>
     </div>
-  )
-}
-
-export function FilePanel(props: FilePanelProps) {
-  return (
-    <FilePanelBoundary>
-      <FilePanelContent {...props} />
-    </FilePanelBoundary>
   )
 }

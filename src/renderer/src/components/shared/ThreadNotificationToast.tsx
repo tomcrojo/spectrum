@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { cn } from '@renderer/lib/cn'
 import { useNotificationsStore, type ThreadNotification } from '@renderer/stores/notifications.store'
 import { useWorkspacesStore } from '@renderer/stores/workspaces.store'
+import { useUiStore } from '@renderer/stores/ui.store'
 
 const TOAST_AUTO_DISMISS_MS = 6000
 
@@ -84,12 +85,18 @@ export function ThreadNotificationToasts() {
   const dismissToast = useNotificationsStore((state) => state.dismissToast)
   const setFocusedPanel = useWorkspacesStore((state) => state.setFocusedPanel)
   const focusWorkspace = useWorkspacesStore((state) => state.focusWorkspace)
+  const workspaces = useWorkspacesStore((state) => state.workspaces)
+  const setActiveProject = useUiStore((state) => state.setActiveProject)
 
   if (toasts.length === 0) {
     return null
   }
 
   const handleFocus = (toast: ThreadNotification) => {
+    const workspace = workspaces.find((entry) => entry.id === toast.workspaceId)
+    if (workspace) {
+      setActiveProject(workspace.projectId)
+    }
     focusWorkspace(toast.workspaceId)
     setFocusedPanel(toast.panelId)
     dismissToast(toast.id)

@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { terminalsApi } from '@renderer/lib/ipc'
 import { useResolvedTheme } from '@renderer/lib/theme'
+import { usePanelRuntimeStore } from '@renderer/stores/panel-runtime.store'
 import { useWorkspacesStore } from '@renderer/stores/workspaces.store'
 import { nanoid } from 'nanoid'
 
@@ -77,6 +78,7 @@ export function TerminalPanel({
 }: TerminalPanelProps) {
   const resolvedTheme = useResolvedTheme()
   const updatePanelLayout = useWorkspacesStore((state) => state.updatePanelLayout)
+  const setPanelFailure = usePanelRuntimeStore((state) => state.setPanelFailure)
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -87,34 +89,49 @@ export function TerminalPanel({
   useEffect(() => {
     if (!containerRef.current || mountedRef.current) return
     mountedRef.current = true
+    let ptyId = ''
+    let term: Terminal | null = null
+    let fitAddon: FitAddon | null = null
 
-    // Generate a unique PTY id per mount to avoid StrictMode conflicts
-    const ptyId = nanoid()
-    ptyIdRef.current = ptyId
+    try {
+      // Generate a unique PTY id per mount to avoid StrictMode conflicts
+      ptyId = nanoid()
+      ptyIdRef.current = ptyId
 
-    const term = new Terminal({
-      cursorBlink: true,
-      cursorStyle: 'bar',
-      fontSize: 13,
-      fontFamily: "'SF Mono', 'Menlo', 'Monaco', 'Cascadia Code', 'Consolas', monospace",
-      lineHeight: 1.4,
-      theme: getTerminalTheme(resolvedTheme),
-      allowProposedApi: true,
-      scrollback: 5000
-    })
+      term = new Terminal({
+        cursorBlink: true,
+        cursorStyle: 'bar',
+        fontSize: 13,
+        fontFamily: "'SF Mono', 'Menlo', 'Monaco', 'Cascadia Code', 'Consolas', monospace",
+        lineHeight: 1.4,
+        theme: getTerminalTheme(resolvedTheme),
+        allowProposedApi: true,
+        scrollback: 5000
+      })
 
-    const fitAddon = new FitAddon()
-    term.loadAddon(fitAddon)
-    term.open(containerRef.current)
+      fitAddon = new FitAddon()
+      term.loadAddon(fitAddon)
+      term.open(containerRef.current)
 
-    termRef.current = term
-    fitAddonRef.current = fitAddon
+      termRef.current = term
+      fitAddonRef.current = fitAddon
+    } catch (error) {
+      mountedRef.current = false
+      setPanelFailure(terminalId, {
+        source: 'async-init',
+        summary: 'The terminal failed to initialize.',
+        debug:
+          error instanceof Error ? error.stack ?? error.message : 'The terminal failed to initialize.',
+        occurredAt: Date.now()
+      })
+      return
+    }
 
     // Fit after opening
     requestAnimationFrame(() => {
-      fitAddon.fit()
+      fitAddon?.fit()
       if (autoFocus) {
-        term.focus()
+        term?.focus()
       }
     })
 
@@ -127,6 +144,10 @@ export function TerminalPanel({
     terminalsApi
       .create({ id: ptyId, cwd, projectId, workspaceId })
       .then(() => {
+        if (!term) {
+          return
+        }
+
         // Send user input to PTY
         inputDisposable = term.onData((data) => {
           terminalsApi.write(ptyId, data)
@@ -156,7 +177,12 @@ export function TerminalPanel({
         )
       })
       .catch((err) => {
-        term.write(`\x1b[31mFailed to create terminal: ${err.message}\x1b[0m\r\n`)
+        setPanelFailure(terminalId, {
+          source: 'async-init',
+          summary: 'The terminal process could not be started.',
+          debug: err instanceof Error ? err.stack ?? err.message : 'Failed to create terminal.',
+          occurredAt: Date.now()
+        })
       })
 
     return () => {
@@ -165,13 +191,13 @@ export function TerminalPanel({
       removeDataListener?.()
       removeExitListener?.()
       terminalsApi.close(ptyId).catch(() => {})
-      term.dispose()
+      term?.dispose()
       termRef.current = null
       fitAddonRef.current = null
       ptyIdRef.current = null
       mountedRef.current = false
     }
-  }, [cwd, projectId, terminalId, updatePanelLayout, workspaceId])
+  }, [cwd, projectId, resolvedTheme, setPanelFailure, terminalId, updatePanelLayout, workspaceId])
 
   useEffect(() => {
     if (!autoFocus) {

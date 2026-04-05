@@ -24,6 +24,13 @@ export function getSessionFilePath() {
   );
 }
 
+export function getThreadBindingsFilePath() {
+  return (
+    process.env.SPECTRUM_BROWSER_THREAD_BINDINGS_FILE ??
+    path.join(getDefaultUserDataDir(), "browser-cli", "thread-bindings.json")
+  );
+}
+
 export function getBrowserCliTmpDir() {
   return path.join(getDefaultUserDataDir(), "browser-cli", "tmp");
 }

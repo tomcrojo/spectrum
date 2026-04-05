@@ -3,10 +3,13 @@ import { BROWSER_CHANNELS } from '@shared/ipc-channels'
 import {
   activateBrowserPanel,
   bindBrowserPanelWebContents,
+  closeBrowserPanel,
   ensureBrowserPanelState,
+  getBrowserSnapshot,
   getBrowserPanel,
+  getFocusedBrowserPanelId,
+  listBrowserPanels,
   openTemporaryBrowserPanel,
-  setFocusedBrowserPanel,
   unbindBrowserPanelByWebContentsId,
   updateBrowserPanelFromRenderer
 } from '../browser/BrowserPanelManager'
@@ -18,6 +21,7 @@ import {
 } from '../cdp/CdpProxyManager'
 import { isKnownWebviewId } from '../webview/WebviewSessionManager'
 import {
+  getBrowserCliSessionSnapshot,
   touchBrowserCliSession,
   updateBrowserCliSessionScope
 } from '../browser-cli/BrowserCliSessionManager'
@@ -43,13 +47,15 @@ interface UrlChangedPayload {
 interface SessionSyncPayload {
   activeProjectId: string | null
   activeWorkspaceId: string | null
-  focusedBrowserPanelId: string | null
   userFocusedPanelId?: string | null
 }
 
 export function registerBrowserHandlers(): void {
   setCdpAutomationStateListener((payload) => {
-    _eventSender(payload)
+    _eventSender({
+      channel: BROWSER_CHANNELS.AUTOMATION_STATE_CHANGED,
+      payload
+    })
   })
 
   ipcMain.handle(BROWSER_CHANNELS.WEBVIEW_READY, async (_event, payload: WebviewReadyPayload) => {
@@ -137,11 +143,37 @@ export function registerBrowserHandlers(): void {
   ipcMain.handle(BROWSER_CHANNELS.SESSION_SYNC, (_event, payload: SessionSyncPayload) => {
     updateBrowserCliSessionScope(payload)
 
-    if (payload.activeWorkspaceId) {
-      setFocusedBrowserPanel(payload.activeWorkspaceId, payload.focusedBrowserPanelId)
-    }
-
     return true
+  })
+
+  ipcMain.handle(
+    BROWSER_CHANNELS.SNAPSHOT,
+    (
+      _event,
+      payload: {
+        projectId: string | null
+        activeWorkspaceId?: string | null
+      }
+    ) => getBrowserSnapshot(payload)
+  )
+
+  ipcMain.handle(
+    BROWSER_CHANNELS.LIST,
+    (_event, payload: { workspaceId: string }) => {
+      const focusedBrowserPanelId = getFocusedBrowserPanelId(payload.workspaceId)
+      return {
+        focusedBrowserPanelId,
+        panels: listBrowserPanels(payload.workspaceId)
+      }
+    }
+  )
+
+  ipcMain.handle(BROWSER_CHANNELS.GET, (_event, payload: { panelId: string }) => {
+    return getBrowserPanel(payload.panelId)
+  })
+
+  ipcMain.handle(BROWSER_CHANNELS.SESSION, () => {
+    return getBrowserCliSessionSnapshot()
   })
 
   ipcMain.handle(
@@ -184,6 +216,17 @@ export function registerBrowserHandlers(): void {
     }
   )
 
+  ipcMain.handle(
+    BROWSER_CHANNELS.CLOSE,
+    (_event, payload: { workspaceId: string; panelId: string }) => {
+      const panel = closeBrowserPanel(payload.workspaceId, payload.panelId)
+      if (panel) {
+        touchBrowserCliSession()
+      }
+      return Boolean(panel)
+    }
+  )
+
   ipcMain.handle(BROWSER_CHANNELS.CAPTURE_PREVIEW, async (_event, payload: { panelId: string }) => {
     const panel = getBrowserPanel(payload.panelId)
     if (!panel || typeof panel.webContentsId !== 'number') {
@@ -208,10 +251,10 @@ export function registerBrowserHandlers(): void {
   })
 }
 
-function _eventSender(payload: { panelId: string; automationAttached: boolean }): void {
+function _eventSender(input: { channel: string; payload: unknown }): void {
   for (const window of webContents.getAllWebContents()) {
     if (window.getType() === 'window') {
-      window.send(BROWSER_CHANNELS.AUTOMATION_STATE_CHANGED, payload)
+      window.send(input.channel, input.payload)
     }
   }
 }

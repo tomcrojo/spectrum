@@ -8,6 +8,7 @@ import { getApiPort } from '../api/BrowserApiServer'
 import { registerToken, revokeToken } from '../api/TokenRegistry'
 import { getCdpProxyPort } from '../cdp/CdpProxyManager'
 import { getBrowserCliSessionFilePath } from './BrowserCliPathManager'
+import { getFocusedBrowserPanelId } from '../browser/BrowserPanelManager'
 
 interface BrowserCliSessionRecord {
   appInstanceId: string
@@ -28,7 +29,6 @@ interface BrowserCliSessionRecord {
 interface RendererSessionState {
   activeProjectId: string | null
   activeWorkspaceId: string | null
-  focusedBrowserPanelId: string | null
   userFocusedPanelId?: string | null
 }
 
@@ -40,11 +40,10 @@ interface BrowserCliCapabilities {
 }
 
 const appInstanceId = randomUUID()
-const SESSION_STALE_MS = 15_000
+const SESSION_STALE_MS = 60_000
 let currentScope: RendererSessionState = {
   activeProjectId: null,
-  activeWorkspaceId: null,
-  focusedBrowserPanelId: null
+  activeWorkspaceId: null
 }
 let currentToken: string | null = null
 let currentTokenScope: { projectId: string; workspaceId: string } | null = null
@@ -110,6 +109,7 @@ function buildSessionRecord(): BrowserCliSessionRecord | null {
 
   const browserApiBaseUrl = `http://127.0.0.1:${getApiPort()}`
   const cdpPort = getCdpProxyPort(currentScope.activeWorkspaceId)
+  const focusedBrowserPanelId = getFocusedBrowserPanelId(currentScope.activeWorkspaceId)
 
   return {
     appInstanceId,
@@ -121,7 +121,7 @@ function buildSessionRecord(): BrowserCliSessionRecord | null {
     browserApiBaseUrl,
     browserApiToken: currentToken,
     cdpEndpoint: cdpPort ? `http://127.0.0.1:${cdpPort}` : null,
-    focusedBrowserPanelId: currentScope.focusedBrowserPanelId,
+    focusedBrowserPanelId,
     userFocusedPanelId: currentScope.userFocusedPanelId ?? null,
     focused: BrowserWindow.getAllWindows().some((window) => window.isVisible() && window.isFocused()),
     lastHeartbeatAt: new Date().toISOString()

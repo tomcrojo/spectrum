@@ -4,83 +4,36 @@
 
 It controls browser panels inside a running Spectrum workspace. It does not open or manage external Chrome windows.
 
-## Mental model
+## Start here
 
-- a Spectrum workspace session is the browser session
-- a browser panel is a page
-- browser-cli focus is internal agent focus, not user-visible UI focus
-- `browser search <query>` opens search results in a new browser panel
-- `browser open <url>` or `browser.openPanel(...)` creates a new browser panel inside that workspace
-- `browser.newPage(...)` prefers a temporary helper panel so automation can attach without stealing the user's focus
-- `browser.listPages()` only lists mounted browser panels in the connected workspace
-- `--connect` attaches to the active Spectrum workspace session, not to arbitrary Chrome or a random DevTools endpoint
-
-## Preconditions
-
-Before using `browser-cli`:
-
-- Spectrum must already be running
-- a project/workspace must be active
-- if you want CDP-backed page control, the workspace must have a mounted browser panel
-- Spectrum may mount an agent-targeted helper panel in the background while leaving the user's visible focus untouched
-- inside Spectrum-managed shells, prefer `$SPECTRUM_BROWSER` if `browser` is not on `PATH`
-
-If you are trying to open a standalone Chrome window, this is the wrong tool.
-
-## Quick start
+Use the CLI help surface as the canonical guide:
 
 ```bash
 browser --help
-"$SPECTRUM_BROWSER" --help
-browser search "folagor" --engine youtube --focus
-browser open "https://www.youtube.com/results?search_query=folagor" --name "YouTube: folagor" --focus
-
-browser --connect <<'EOF'
-const pages = await browser.listPages();
-console.log(JSON.stringify(pages, null, 2));
-EOF
-
-browser --connect <<'EOF'
-const page = await browser.newPage({ name: 'docs', url: 'https://example.com' });
-console.log(JSON.stringify({
-  id: page.id(),
-  url: page.url(),
-  title: await page.title()
-}, null, 2));
-EOF
+browser guide
 ```
 
-## Recommended agent patterns
+`browser guide` is the full AI-oriented usage guide. It covers:
+- the Spectrum workspace/panel mental model
+- the script environment
+- the recommended workflow
+- forbidden raw-CDP patterns
+- the cleanup model for `browser.newPage(...)`
 
-Create a new browser panel:
+## Quick reference
+
+Create a durable panel:
 
 ```bash
 browser open "https://example.com" --name "docs" --focus
-```
-
-Search directly:
-
-```bash
-browser search "edm music" --engine youtube --focus
-browser search "best espresso madrid" --engine google --focus
-```
-
-List mounted browser panels:
-
-```bash
-browser list --json
+browser search "release notes" --focus
 ```
 
 Inspect the current workspace session:
 
 ```bash
 browser status --json
-```
-
-Run a saved script:
-
-```bash
-browser run script.js
+browser list --json
 ```
 
 Use advanced DOM automation only when you need a Playwright page:
@@ -88,28 +41,29 @@ Use advanced DOM automation only when you need a Playwright page:
 ```bash
 browser --connect <<'EOF'
 const page = await browser.getPage("docs");
+console.log(JSON.stringify({
+  url: page.url(),
+  title: await page.title()
+}, null, 2));
+EOF
+```
+
+Create an ephemeral automation page:
+
+```bash
+browser --connect <<'EOF'
+const page = await browser.newPage({ url: "https://example.com" });
 console.log(await page.title());
 EOF
 ```
 
+By default, `browser.newPage(...)` is temporary and auto-closes at the end of the script. Use `browser.newPage({ persistent: true })` or `browser open` / `browser search` when you want durable workspace state.
+
 ## Common mistakes
 
-- `browser-cli open`
-  Prefer `browser open <url>`.
-- `browser-cli search`
-  Use `browser search <query> --engine youtube` or omit `--engine` to default to Google.
 - `browser-cli connect`
   `connect` is a flag, not a subcommand. Use `browser --connect <<'EOF' ... EOF`.
+- raw `/devtools/page/...` sockets in scripts
+  Use `browser.getPage(...)` or `browser.newPage(...)` instead.
 - expecting external Chrome control
   `browser-cli` only controls Spectrum browser panels.
-
-## Available globals
-
-- `browser`
-- `console`
-- `saveScreenshot(buffer, name)`
-- `writeFile(name, data)`
-- `readFile(name)`
-- `setTimeout`, `clearTimeout`
-
-Scripts run in Node, not in the browser context. Use `page.evaluate(...)` for DOM-side JavaScript.

@@ -3,7 +3,10 @@ import {
   CANVAS_ZOOM_STEPS,
   useUiStore
 } from '@renderer/stores/ui.store'
-import { useWorkspacesStore, type ActiveWorkspacePanel } from '@renderer/stores/workspaces.store'
+import {
+  useWorkspacesStore,
+  type ActiveWorkspacePanel
+} from '@renderer/stores/workspaces.store'
 import { usePanelRuntimeStore } from '@renderer/stores/panel-runtime.store'
 import { useProjectsStore } from '@renderer/stores/projects.store'
 import {
@@ -11,13 +14,27 @@ import {
   recordDevPerformanceTiming,
   setDevPerformanceCounter
 } from '@renderer/lib/dev-performance'
+import { getVisibleBrowserWorkspaceIds } from '@renderer/lib/browser-visibility'
+import { isBrowserRuntimeHostEnabled } from '@renderer/lib/browser-runtime'
 import { WorkspacePanel } from './WorkspacePanel'
+import { Button } from '@renderer/components/ui/button'
+import { DropdownMenu, DropdownMenuTrigger } from '@renderer/components/ui/dropdown-menu'
 import { NewCanvasItemMenu } from './NewCanvasItemMenu'
 import { CanvasToolbar } from './CanvasToolbar'
 import { EdgeButton } from './EdgeButton'
 import { cn } from '@renderer/lib/cn'
 import { nanoid } from 'nanoid'
+import { HugeiconsIcon } from '@hugeicons/react'
+import {
+  Add01FreeIcons,
+  AiProgrammingIcon,
+  BrowserIcon,
+  ComputerTerminal01Icon,
+  FileEditIcon,
+  LayoutGridIcon
+} from '@hugeicons/core-free-icons'
 import type { PanelType, PanelHydrationState, Workspace } from '@shared/workspace.types'
+import { BrowserRuntimeHost } from './BrowserRuntimeHost'
 
 const VIRTUAL_PADDING = 5000
 const STRUCTURED_SCROLL_ALLOWANCE = 288
@@ -28,6 +45,12 @@ const FIT_ZOOM_TOLERANCE = 0.02
 const FIT_SCROLL_TOLERANCE = 24
 const FIT_MOVE_DURATION_MS = 180
 const FIT_ZOOM_DURATION_MS = 140
+const DEFAULT_T3CODE_PANEL = {
+  title: 'T3Code',
+  titleSource: 'default' as const,
+  hasAutoRenamed: false
+}
+
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
     return false
@@ -72,6 +95,8 @@ function buildActivePanel(workspace: Workspace, cwd: string): ActiveWorkspacePan
     cwd,
     panelType: panel.type,
     panelTitle: panel.title,
+    titleSource: panel.titleSource,
+    hasAutoRenamed: panel.hasAutoRenamed,
     providerId: panel.providerId,
     filePath: panel.filePath,
     cursorLine: panel.cursorLine,
@@ -100,25 +125,26 @@ export function Canvas() {
     focusedBrowserPanelId,
     loadWorkspaces,
     createWorkspace,
-    setActivePanels,
     addActivePanel,
     insertPanelAfter,
     prependPanelToWorkspace,
     requestClosePanel,
-    restorePanelsFromWorkspaces
+    restorePanelsFromWorkspaces,
+    markProjectVisited,
+    activateProjectView
   } = useWorkspacesStore()
   const activeWorkspaceId = usePanelRuntimeStore((state) => state.activeWorkspaceId)
   const panelRuntimeById = usePanelRuntimeStore((state) => state.panelRuntimeById)
   const setActiveWorkspaceId = usePanelRuntimeStore((state) => state.setActiveWorkspaceId)
   const setPanelHydrationState = usePanelRuntimeStore((state) => state.setPanelHydrationState)
   const { projects } = useProjectsStore()
+  const [browserRuntimeHostEnabled] = useState(() => isBrowserRuntimeHostEnabled())
   const didAutoOpenRef = useRef<string | null>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
   const canvasWheelCleanupRef = useRef<(() => void) | null>(null)
   const contentMeasureRef = useRef<HTMLDivElement>(null)
   const previousZoomRef = useRef(canvasZoom)
   const fitAnimationFrameRef = useRef<number | null>(null)
-  const [showCreateMenu, setShowCreateMenu] = useState(false)
   const [isPanning, setIsPanning] = useState(false)
   const [contentSize, setContentSize] = useState({ width: 0, height: 0 })
   const [canvasInsets, setCanvasInsets] = useState({
@@ -131,7 +157,7 @@ export function Canvas() {
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null
   const projectWorkspaces = activeProjectId
     ? workspaces.filter(
-        (workspace) => workspace.projectId === activeProjectId && !workspace.archived
+        (workspace) => workspace.projectId === activeProjectId && workspace.status === 'active'
       )
     : []
   const panelsByWorkspace = useMemo(() => {
@@ -163,7 +189,7 @@ export function Canvas() {
   const paddedInsets = useMemo(
     () => ({
       top: canvasInsets.top + (isFreeCanvas ? VIRTUAL_PADDING : STRUCTURED_SCROLL_ALLOWANCE),
-      right: canvasInsets.right + (isFreeCanvas ? VIRTUAL_PADDING : 0),
+      right: canvasInsets.right + (isFreeCanvas ? VIRTUAL_PADDING : STRUCTURED_SCROLL_ALLOWANCE),
       bottom: canvasInsets.bottom + (isFreeCanvas ? VIRTUAL_PADDING : 0),
       left: canvasInsets.left + (isFreeCanvas ? VIRTUAL_PADDING : STRUCTURED_SCROLL_ALLOWANCE)
     }),
@@ -178,7 +204,7 @@ export function Canvas() {
   // Load workspaces when project changes and restore saved panel state
   useEffect(() => {
     if (!activeProjectId) {
-      setActivePanels([])
+      activateProjectView(null)
       setActiveWorkspaceId(null)
       didAutoOpenRef.current = null
       return
@@ -186,28 +212,36 @@ export function Canvas() {
 
     let cancelled = false
     const startedAt = performance.now()
+    markProjectVisited(activeProjectId)
 
     loadWorkspaces(activeProjectId, false).then(() => {
       if (cancelled) return
 
-      const { workspaces: loadedWorkspaces } = useWorkspacesStore.getState()
+      const { workspaces: loadedWorkspaces, activePanels: allActivePanels } = useWorkspacesStore.getState()
       const projectWs = loadedWorkspaces.filter(
-        (workspace) => workspace.projectId === activeProjectId && !workspace.archived
+        (workspace) => workspace.projectId === activeProjectId && workspace.status === 'active'
       )
-
+      const projectWorkspaceIds = new Set(projectWs.map((workspace) => workspace.id))
+      const existingProjectPanels = allActivePanels.filter((panel) =>
+        projectWorkspaceIds.has(panel.workspaceId)
+      )
       const hasSavedPanels = projectWs.some((w) => w.layoutState.panels.length > 0)
       const initialWorkspaceId = projectWs[0]?.id ?? null
 
-      if (hasSavedPanels && activeProject) {
+      if (existingProjectPanels.length > 0) {
+        didAutoOpenRef.current = activeProjectId
+        activateProjectView(activeProjectId)
+        setActiveWorkspaceId(initialWorkspaceId)
+      } else if (hasSavedPanels && activeProject) {
         didAutoOpenRef.current = activeProjectId
         restorePanelsFromWorkspaces(projectWs, activeProject.repoPath)
-        setActiveWorkspaceId(initialWorkspaceId)
+        activateProjectView(activeProjectId)
       } else if (projectWs.length > 0 && activeProject) {
         didAutoOpenRef.current = activeProjectId
-        setActivePanels([buildActivePanel(projectWs[0], activeProject.repoPath)])
-        setActiveWorkspaceId(projectWs[0].id)
+        addActivePanel(buildActivePanel(projectWs[0], activeProject.repoPath))
+        activateProjectView(activeProjectId)
       } else {
-        setActivePanels([])
+        activateProjectView(activeProjectId)
         setActiveWorkspaceId(null)
         didAutoOpenRef.current = null
       }
@@ -218,26 +252,75 @@ export function Canvas() {
     return () => {
       cancelled = true
     }
-  }, [activeProjectId, activeProject, loadWorkspaces, restorePanelsFromWorkspaces, setActivePanels, setActiveWorkspaceId])
+  }, [
+    activeProjectId,
+    activeProject,
+    activateProjectView,
+    addActivePanel,
+    loadWorkspaces,
+    markProjectVisited,
+    restorePanelsFromWorkspaces,
+    setActiveWorkspaceId
+  ])
 
   useEffect(() => {
-    if (!activeWorkspaceId && projectWorkspaces[0]) {
-      setActiveWorkspaceId(projectWorkspaces[0].id)
+    const currentProjectPanels = activeProjectId
+      ? activePanels.filter((panel) =>
+          projectWorkspaces.some((workspace) => workspace.id === panel.workspaceId)
+        )
+      : []
+
+    if (!activeWorkspaceId && currentProjectPanels[0]) {
+      setActiveWorkspaceId(currentProjectPanels[0].workspaceId)
+      return
     }
-  }, [activeWorkspaceId, projectWorkspaces, setActiveWorkspaceId])
+
+    if (!currentProjectPanels[0]) {
+      setActiveWorkspaceId(null)
+    }
+  }, [activePanels, activeProjectId, activeWorkspaceId, projectWorkspaces, setActiveWorkspaceId])
 
   useEffect(() => {
     let liveBrowserCount = 0
     let liveT3Count = 0
+    const firstPanelIdByWorkspace = new Map<string, string>()
+    const browserPanels = activePanels.filter((panel) => panel.panelType === 'browser')
+    const visibleBrowserWorkspaceIds = getVisibleBrowserWorkspaceIds({
+      browserPanels,
+      workspaces: projectWorkspaces,
+      runtimePowerMode,
+      activeWorkspaceId
+    })
 
     for (const panel of activePanels) {
-      let nextHydrationState: PanelHydrationState = panelRuntimeById[panel.panelId]?.hydrationState ?? 'cold'
+      if (!firstPanelIdByWorkspace.has(panel.workspaceId)) {
+        firstPanelIdByWorkspace.set(panel.workspaceId, panel.panelId)
+      }
+    }
+
+    for (const panel of activePanels) {
+      const runtime = panelRuntimeById[panel.panelId]
+      let nextHydrationState: PanelHydrationState = runtime?.hydrationState ?? 'cold'
 
       if (panel.panelType === 'browser') {
-        nextHydrationState =
-          panel.workspaceId === activeWorkspaceId || panel.panelId === focusedBrowserPanelId
-            ? 'live'
-            : 'cold'
+        if (browserRuntimeHostEnabled) {
+          const runtimeMode = runtime?.browserRuntimeMode ?? 'cold'
+          nextHydrationState =
+            runtimeMode === 'visible'
+              ? 'live'
+              : runtimeMode === 'headless'
+                ? 'preview'
+                : 'cold'
+        } else {
+          nextHydrationState =
+            runtimePowerMode === 'low'
+              ? panel.workspaceId === activeWorkspaceId || panel.panelId === focusedBrowserPanelId
+                ? 'live'
+                : 'cold'
+              : visibleBrowserWorkspaceIds.has(panel.workspaceId)
+                ? 'live'
+                : 'cold'
+        }
       } else if (panel.panelType === 't3code') {
         if (runtimePowerMode === 'high') {
           nextHydrationState = 'live'
@@ -247,9 +330,9 @@ export function Canvas() {
           } else if (nextHydrationState === 'live') {
             nextHydrationState = 'live'
           } else {
-            const workspacePanels = activePanels.filter((entry) => entry.workspaceId === panel.workspaceId)
             nextHydrationState =
-              panelRuntimeById[panel.panelId]?.lastHydratedAt == null && workspacePanels[0]?.panelId === panel.panelId
+              runtime?.lastHydratedAt == null &&
+              firstPanelIdByWorkspace.get(panel.workspaceId) === panel.panelId
                 ? 'live'
                 : 'cold'
           }
@@ -260,7 +343,9 @@ export function Canvas() {
         nextHydrationState = 'live'
       }
 
-      setPanelHydrationState(panel.panelId, nextHydrationState)
+      if (runtime?.hydrationState !== nextHydrationState) {
+        setPanelHydrationState(panel.panelId, nextHydrationState)
+      }
       if (panel.panelType === 'browser' && nextHydrationState === 'live') {
         liveBrowserCount += 1
       }
@@ -276,7 +361,9 @@ export function Canvas() {
     activeWorkspaceId,
     focusedBrowserPanelId,
     focusedPanelId,
+    browserRuntimeHostEnabled,
     panelRuntimeById,
+    projectWorkspaces,
     runtimePowerMode,
     setPanelHydrationState
   ])
@@ -528,7 +615,7 @@ export function Canvas() {
       projectId: activeProjectId,
       name: `Workspace ${nextWorkspaceNumber}`,
       layoutState: {
-        panels: [{ id: nanoid(), type: 't3code', title: 'T3Code' }],
+        panels: [{ id: nanoid(), type: 't3code', ...DEFAULT_T3CODE_PANEL }],
         sizes: [100]
       }
     })
@@ -556,7 +643,7 @@ export function Canvas() {
         projectId: activeProjectId,
         name: `Workspace ${nextWorkspaceNumber}`,
         layoutState: {
-          panels: [{ id: nanoid(), type: 't3code', title: 'T3Code' }],
+          panels: [{ id: nanoid(), type: 't3code', ...DEFAULT_T3CODE_PANEL }],
           sizes: [100]
         }
       })
@@ -580,7 +667,10 @@ export function Canvas() {
       workspaceName: targetWorkspace.name,
       cwd: activeProject.repoPath,
       panelType,
-      panelTitle
+      panelTitle,
+      ...(panelType === 't3code'
+        ? { titleSource: 'default' as const, hasAutoRenamed: false }
+        : {})
     }
 
     // Insert right after the focused panel, or append if no focus
@@ -614,7 +704,10 @@ export function Canvas() {
       workspaceName: workspace.name,
       cwd: activeProject.repoPath,
       panelType,
-      panelTitle
+      panelTitle,
+      ...(panelType === 't3code'
+        ? { titleSource: 'default' as const, hasAutoRenamed: false }
+        : {})
     }
 
     prependPanelToWorkspace(newPanel)
@@ -643,7 +736,10 @@ export function Canvas() {
       workspaceName: workspace.name,
       cwd: activeProject.repoPath,
       panelType,
-      panelTitle
+      panelTitle,
+      ...(panelType === 't3code'
+        ? { titleSource: 'default' as const, hasAutoRenamed: false }
+        : {})
     }
 
     const workspacePanels = activePanels.filter((p) => p.workspaceId === workspaceId)
@@ -669,6 +765,8 @@ export function Canvas() {
     ) {
       return
     }
+
+    event.currentTarget.focus({ preventScroll: true })
 
     const canvas = canvasRef.current
     if (!canvas) return
@@ -698,36 +796,28 @@ export function Canvas() {
   const panelOptions = useMemo(
     () => [
       {
+        icon: AiProgrammingIcon,
         label: 'T3Code',
         description: 'Open a T3Code panel in the current workspace.',
-        onSelect: () => {
-          setShowCreateMenu(false)
-          void handleAddPanel('t3code')
-        }
+        onSelect: () => void handleAddPanel('t3code')
       },
       {
+        icon: ComputerTerminal01Icon,
         label: 'Terminal',
         description: 'Open a terminal panel in the current workspace.',
-        onSelect: () => {
-          setShowCreateMenu(false)
-          void handleAddPanel('terminal')
-        }
+        onSelect: () => void handleAddPanel('terminal')
       },
       {
+        icon: BrowserIcon,
         label: 'Browser',
         description: 'Open a browser panel in the current workspace.',
-        onSelect: () => {
-          setShowCreateMenu(false)
-          void handleAddPanel('browser')
-        }
+        onSelect: () => void handleAddPanel('browser')
       },
       {
+        icon: FileEditIcon,
         label: 'File Editor',
         description: 'Browse project files and edit code inside the workspace.',
-        onSelect: () => {
-          setShowCreateMenu(false)
-          void handleAddPanel('file')
-        }
+        onSelect: () => void handleAddPanel('file')
       }
     ],
     [handleAddPanel]
@@ -735,12 +825,10 @@ export function Canvas() {
 
   const workspaceOption = useMemo(
     () => ({
+      icon: LayoutGridIcon,
       label: 'Workspace',
       description: 'Create a new vertical workspace that starts with a T3Code panel.',
-      onSelect: () => {
-        setShowCreateMenu(false)
-        void handleNewWorkspace()
-      }
+      onSelect: () => void handleNewWorkspace()
     }),
     [handleNewWorkspace]
   )
@@ -748,21 +836,25 @@ export function Canvas() {
   const buildEdgePanelOptions = useCallback(
     (workspaceId: string) => [
       {
+        icon: AiProgrammingIcon,
         label: 'T3Code',
         description: 'Open a T3Code panel in this workspace.',
         onSelect: () => void handleAppendPanelToWorkspace('t3code', workspaceId)
       },
       {
+        icon: ComputerTerminal01Icon,
         label: 'Terminal',
         description: 'Open a terminal panel in this workspace.',
         onSelect: () => void handleAppendPanelToWorkspace('terminal', workspaceId)
       },
       {
+        icon: BrowserIcon,
         label: 'Browser',
         description: 'Open a browser panel in this workspace.',
         onSelect: () => void handleAppendPanelToWorkspace('browser', workspaceId)
       },
       {
+        icon: FileEditIcon,
         label: 'File Editor',
         description: 'Browse project files and edit code inside the workspace.',
         onSelect: () => void handleAppendPanelToWorkspace('file', workspaceId)
@@ -944,33 +1036,27 @@ export function Canvas() {
   return (
     <div className="relative flex-1">
       <div className="absolute left-3 top-3 z-20 w-fit">
-        <button
-          onClick={() => setShowCreateMenu((open) => !open)}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-bg-raised border border-border text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors"
-        >
-          <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none">
-            <path
-              d="M6 2V10M2 6H10"
-              stroke="currentColor"
-              strokeWidth={1.5}
-              strokeLinecap="round"
-            />
-          </svg>
-          New
-        </button>
-        <NewCanvasItemMenu
-          open={showCreateMenu}
-          onClose={() => setShowCreateMenu(false)}
-          panelOptions={panelOptions}
-          workspaceOption={workspaceOption}
-        />
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-9.5 rounded-full border border-border/45 bg-popover/76 px-3.5 text-[0.95rem] text-foreground/88 shadow-[0_16px_38px_-26px_rgba(0,0,0,0.72)] backdrop-blur-2xl hover:bg-popover/84"
+            >
+              <HugeiconsIcon icon={Add01FreeIcons} size={15} strokeWidth={2} />
+              New
+            </Button>
+          </DropdownMenuTrigger>
+          <NewCanvasItemMenu panelOptions={panelOptions} workspaceOption={workspaceOption} />
+        </DropdownMenu>
       </div>
       <div
         ref={setCanvasNode}
         data-canvas-scroll-root="true"
+        tabIndex={-1}
         onMouseDown={handleCanvasPointerDown}
         className={cn(
-          'canvas-grid absolute inset-0 overflow-auto',
+          'canvas-grid absolute inset-0 overflow-auto focus:outline-none',
           isFreeCanvas
             ? isPanning
               ? 'cursor-grabbing select-none'
@@ -1051,6 +1137,7 @@ export function Canvas() {
                             initialWidth={panel.width}
                             initialHeight={panel.height}
                             initialUrl={panel.url}
+                            browserRuntimeHostEnabled={browserRuntimeHostEnabled}
                           />
 
                           {showBottomButton && (
@@ -1085,16 +1172,15 @@ export function Canvas() {
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="text-center">
               <p className="mb-3 text-xs text-text-muted opacity-50">No open workspaces</p>
-              <button
-                onClick={() => setShowCreateMenu(true)}
-                className="pointer-events-auto text-xs text-accent hover:text-accent-hover transition-colors"
-              >
-                Open the create menu
-              </button>
+              <p className="text-xs text-accent/85">
+                Use the New menu to create panels and workspaces
+              </p>
             </div>
           </div>
         )}
       </div>
+
+      <BrowserRuntimeHost hostEnabled={browserRuntimeHostEnabled} />
 
       {isFreeCanvas && (
         <div className="pointer-events-none absolute bottom-3 left-3 z-20">

@@ -36,7 +36,7 @@ export function CanvasToolbar({
   const percentage = `${Math.round(canvasZoom * 100)}%`
 
   return (
-    <div className="pointer-events-auto flex items-center gap-1 rounded-md border border-border bg-bg-raised p-1 shadow-lg shadow-black/20">
+    <div className="pointer-events-auto flex items-center gap-1 rounded-xl border border-border/60 bg-bg-raised/90 p-1 shadow-lg shadow-black/20 backdrop-blur-sm">
       <ToolbarButton aria-label="Zoom out" onClick={onZoomOut}>
         <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
           <path d="M2.5 6H9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />

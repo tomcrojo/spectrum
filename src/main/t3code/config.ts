@@ -12,6 +12,11 @@ interface SpectrumConfigFile {
   t3code?: Partial<T3CodeConfig>
 }
 
+const T3CODE_ENTRYPOINT_CANDIDATES = [
+  'apps/server/dist/bin.mjs',
+  'apps/server/dist/index.mjs'
+] as const
+
 function findProjectRoot(): string {
   const candidates = [
     process.cwd(),
@@ -87,11 +92,33 @@ function findExistingT3CodeSourcePath(preferredPath?: string): string {
   return resolve(preferredPath ?? join(projectRoot, 'resources', 't3code'))
 }
 
+function resolveT3CodeEntrypoint(
+  sourcePath: string,
+  preferredEntrypoint?: string
+): string {
+  const candidates = [
+    preferredEntrypoint,
+    ...T3CODE_ENTRYPOINT_CANDIDATES
+  ].filter((value): value is string => Boolean(value))
+
+  for (const candidate of candidates) {
+    if (existsSync(join(sourcePath, candidate))) {
+      return candidate
+    }
+  }
+
+  return preferredEntrypoint ?? T3CODE_ENTRYPOINT_CANDIDATES[0]
+}
+
+const defaultSourcePath = findExistingT3CodeSourcePath(
+  join(projectRoot, 'resources', 't3code')
+)
+
 const defaultConfig: T3CodeConfig = {
-  sourcePath: findExistingT3CodeSourcePath(join(projectRoot, 'resources', 't3code')),
+  sourcePath: defaultSourcePath,
   installCommand: 'bun install --frozen-lockfile',
   buildCommand: 'bun run --cwd apps/web build && bun run --cwd apps/server build',
-  entrypoint: 'apps/server/dist/index.mjs'
+  entrypoint: resolveT3CodeEntrypoint(defaultSourcePath)
 }
 
 let cachedConfig: T3CodeConfig | null = null
@@ -110,15 +137,20 @@ export function getT3CodeConfig(): T3CodeConfig {
       readFileSync(configPath, 'utf8')
     ) as SpectrumConfigFile
 
+    const sourcePath = findExistingT3CodeSourcePath(
+      parsed.t3code?.sourcePath
+        ? resolve(projectRoot, parsed.t3code.sourcePath)
+        : defaultConfig.sourcePath
+    )
+
     cachedConfig = {
-      sourcePath: findExistingT3CodeSourcePath(
-        parsed.t3code?.sourcePath
-          ? resolve(projectRoot, parsed.t3code.sourcePath)
-          : defaultConfig.sourcePath
-      ),
+      sourcePath,
       installCommand: parsed.t3code?.installCommand || defaultConfig.installCommand,
       buildCommand: parsed.t3code?.buildCommand || defaultConfig.buildCommand,
-      entrypoint: parsed.t3code?.entrypoint || defaultConfig.entrypoint
+      entrypoint: resolveT3CodeEntrypoint(
+        sourcePath,
+        parsed.t3code?.entrypoint || defaultConfig.entrypoint
+      )
     }
   } catch {
     cachedConfig = defaultConfig

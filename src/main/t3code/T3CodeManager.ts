@@ -4,13 +4,13 @@ import {
   copyFileSync,
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   openSync,
   readFileSync,
   readdirSync,
   rmSync,
   statSync,
-  symlinkSync,
   writeFileSync
 } from 'fs'
 import { homedir } from 'os'
@@ -25,6 +25,7 @@ import {
   getBrowserCliCommandPath,
   getBrowserCommandPath,
   getBrowserCliSessionFilePath,
+  getBrowserCliThreadBindingsFilePath,
   prependBrowserCliToPath
 } from '../browser-cli/BrowserCliPathManager'
 
@@ -52,11 +53,20 @@ interface ThreadRow {
 }
 
 type ThreadNotificationKind = 'requires-input' | 'completed'
+type T3ActivityState =
+  | 'starting'
+  | 'connecting'
+  | 'running'
+  | 'requires-input'
+  | 'completed'
+  | 'idle'
+  | 'unknown'
 
 interface ThreadMetadata {
   threadTitle: string | null
   lastUserMessageAt: string | null
   providerId: string | null
+  activityState: T3ActivityState
   notificationKind: ThreadNotificationKind | null
 }
 
@@ -73,6 +83,7 @@ export interface T3CodeThreadInfo {
   threadTitle: string | null
   lastUserMessageAt: string | null
   providerId: string | null
+  activityState: T3ActivityState
 }
 
 const GLOBAL_RUNTIME_ID = 'global'
@@ -93,6 +104,7 @@ const pendingPanelThreadEnsures = new Map<
     threadTitle: string | null
     lastUserMessageAt: string | null
     providerId: string | null
+    activityState: T3ActivityState
   }>
 >()
 const watchedThreadsByPanelId = new Map<string, WatchedThreadState>()
@@ -136,6 +148,10 @@ function getPackagedT3CodeShadowRoot(): string {
   return join(homedir(), '.spectrum-dev', 'embedded', 't3code-runtime')
 }
 
+function getT3CodeAppShellPath(sourcePath: string): string {
+  return join(sourcePath, 'apps', 'server', 'dist', 'client', 'index.html')
+}
+
 function writeRuntimePackageManifest(targetPath: string, name: string): void {
   writeFileSync(
     targetPath,
@@ -151,23 +167,52 @@ function writeRuntimePackageManifest(targetPath: string, name: string): void {
   )
 }
 
+function readLogExcerpt(logPath: string, lineCount = 40): string | null {
+  if (!existsSync(logPath)) {
+    return null
+  }
+
+  try {
+    const lines = readFileSync(logPath, 'utf8').trim().split('\n')
+    const excerpt = lines.slice(-lineCount).join('\n').trim()
+    return excerpt.length > 0 ? excerpt : null
+  } catch {
+    return null
+  }
+}
+
+function buildStartupErrorMessage(message: string, logPath: string): string {
+  const excerpt = readLogExcerpt(logPath)
+  if (!excerpt) {
+    return `${message}. See log: ${logPath}`
+  }
+
+  return `${message}. See log: ${logPath}\n\nRecent log output:\n${excerpt}`
+}
+
 function ensurePackagedT3CodeRuntimeReady(): string {
+  const config = getT3CodeConfig()
   const packagedRoot = getPackagedT3CodeRoot()
   const shadowRoot = getPackagedT3CodeShadowRoot()
   const versionFile = join(shadowRoot, '.version')
   const markerFile = join(shadowRoot, '.spectrum-packaged-t3code-runtime')
   const currentVersion = app.getVersion()
+  const shadowEntrypointPath = join(shadowRoot, config.entrypoint)
+  const shadowAppShellPath = getT3CodeAppShellPath(shadowRoot)
+  const shadowNodeModulesPath = join(shadowRoot, 'node_modules')
 
   if (
-    existsSync(join(shadowRoot, 'apps', 'server', 'dist', 'index.mjs')) &&
-    existsSync(join(shadowRoot, 'node_modules')) &&
+    existsSync(shadowEntrypointPath) &&
+    existsSync(shadowAppShellPath) &&
+    existsSync(shadowNodeModulesPath) &&
     existsSync(markerFile) &&
     existsSync(versionFile) &&
     statSync(versionFile).isFile()
   ) {
     try {
       const version = readFileSync(versionFile, 'utf8').trim()
-      if (version === currentVersion) {
+      const nodeModulesStats = lstatSync(shadowNodeModulesPath)
+      if (version === currentVersion && !nodeModulesStats.isSymbolicLink()) {
         return shadowRoot
       }
     } catch {
@@ -201,7 +246,10 @@ function ensurePackagedT3CodeRuntimeReady(): string {
     join(shadowRoot, 'apps', 'server', 'dist'),
     { recursive: true }
   )
-  symlinkSync(join(packagedRoot, 'runtime-node-modules'), join(shadowRoot, 'node_modules'), 'dir')
+  cpSync(join(packagedRoot, 'runtime-node-modules'), join(shadowRoot, 'node_modules'), {
+    recursive: true,
+    dereference: true
+  })
   writeFileSync(markerFile, '')
   writeFileSync(versionFile, currentVersion)
 
@@ -545,16 +593,44 @@ function computeNotificationKind(input: {
   return null
 }
 
+function computeActivityState(input: {
+  sessionStatus: string | null
+  pendingApprovalCount: number
+  hasPendingUserInput: boolean
+  latestTurnCompletedAt: string | null
+}): T3ActivityState {
+  const { sessionStatus, pendingApprovalCount, hasPendingUserInput, latestTurnCompletedAt } = input
+
+  if (sessionStatus === 'starting' || sessionStatus === 'connecting' || sessionStatus === 'running') {
+    return sessionStatus
+  }
+
+  if (pendingApprovalCount > 0 || hasPendingUserInput) {
+    return 'requires-input'
+  }
+
+  if (latestTurnCompletedAt) {
+    return 'completed'
+  }
+
+  if (sessionStatus === 'idle' || sessionStatus === 'stopped' || sessionStatus === 'completed') {
+    return 'idle'
+  }
+
+  return sessionStatus ? 'unknown' : 'idle'
+}
+
 function getThreadMetadata(threadId: string): ThreadMetadata {
   const db = openStateDb({ readonly: true })
-  if (!db) {
-    return {
-      threadTitle: null,
-      lastUserMessageAt: null,
-      providerId: null,
-      notificationKind: null
+    if (!db) {
+      return {
+        threadTitle: null,
+        lastUserMessageAt: null,
+        providerId: null,
+        activityState: 'unknown',
+        notificationKind: null
+      }
     }
-  }
 
   try {
     const threadRow = db
@@ -661,6 +737,12 @@ function getThreadMetadata(threadId: string): ThreadMetadata {
       // Table may not exist
     }
 
+    const activityState = computeActivityState({
+      sessionStatus,
+      pendingApprovalCount,
+      hasPendingUserInput,
+      latestTurnCompletedAt
+    })
     const notificationKind = computeNotificationKind({
       sessionStatus,
       pendingApprovalCount,
@@ -672,6 +754,7 @@ function getThreadMetadata(threadId: string): ThreadMetadata {
       threadTitle: threadRow?.title ?? null,
       lastUserMessageAt: messageRow?.lastUserMessageAt ?? null,
       providerId: getProviderIdFromModelSelection(threadRow?.modelSelectionJson),
+      activityState,
       notificationKind
     }
   } finally {
@@ -692,6 +775,7 @@ function emitThreadInfoChanged(payload: {
   lastUserMessageAt: string | null
   providerId: string | null
   notificationKind: ThreadNotificationKind | null
+  activityState: T3ActivityState
 }): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {
@@ -736,6 +820,7 @@ async function pollWatchedThreads(): Promise<void> {
       watch.lastSnapshot?.threadTitle === snapshot.threadTitle &&
       watch.lastSnapshot?.lastUserMessageAt === snapshot.lastUserMessageAt &&
       watch.lastSnapshot?.providerId === snapshot.providerId &&
+      watch.lastSnapshot?.activityState === snapshot.activityState &&
       watch.lastSnapshot?.notificationKind === snapshot.notificationKind
     ) {
       continue
@@ -748,6 +833,7 @@ async function pollWatchedThreads(): Promise<void> {
       threadTitle: snapshot.threadTitle,
       lastUserMessageAt: snapshot.lastUserMessageAt,
       providerId: snapshot.providerId,
+      activityState: snapshot.activityState,
       notificationKind: snapshot.notificationKind
     })
   }
@@ -856,8 +942,9 @@ async function sendWsRequest<T>(baseUrl: string, body: Record<string, unknown>):
             return
           }
 
-          if (parsed.error?.message) {
-            finish(() => reject(new Error(parsed.error.message)))
+          const errorMessage = parsed.error?.message
+          if (errorMessage) {
+            finish(() => reject(new Error(errorMessage)))
             return
           }
 
@@ -924,7 +1011,8 @@ export async function ensureRuntime(): Promise<{ baseUrl: string; logPath: strin
     return pendingRuntimeStart
   }
 
-  const startPromise = (async () => {
+  let startPromise: Promise<{ baseUrl: string; logPath: string }> | null = null
+  startPromise = (async () => {
     if (needsRebuild) {
       ensureBuilt(sourcePath, config.installCommand, config.buildCommand)
     }
@@ -959,6 +1047,7 @@ export async function ensureRuntime(): Promise<{ baseUrl: string; logPath: strin
     env.SPECTRUM_BROWSER = getBrowserCommandPath()
     env.SPECTRUM_BROWSER_CLI = getBrowserCliCommandPath()
     env.SPECTRUM_BROWSER_SESSION_FILE = getBrowserCliSessionFilePath()
+    env.SPECTRUM_BROWSER_THREAD_BINDINGS_FILE = getBrowserCliThreadBindingsFilePath()
     env.T3CODE_MODE = 'web'
     env.T3CODE_HOST = '127.0.0.1'
     env.T3CODE_PORT = String(port)
@@ -1007,6 +1096,20 @@ export async function ensureRuntime(): Promise<{ baseUrl: string; logPath: strin
           didChildError = true
           reject(error)
         })
+      }),
+      new Promise<never>((_, reject) => {
+        child.once('exit', (code, signal) => {
+          reject(
+            new Error(
+              buildStartupErrorMessage(
+                signal
+                  ? `T3Code exited before becoming ready (signal ${signal})`
+                  : `T3Code exited before becoming ready (code ${code ?? 'unknown'})`,
+                logPath
+              )
+            )
+          )
+        })
       })
     ])
 
@@ -1038,6 +1141,9 @@ export async function ensureRuntime(): Promise<{ baseUrl: string; logPath: strin
       closeFileDescriptor(logFd)
       if (runtime?.process === child) {
         runtime = null
+      }
+      if (error instanceof Error && !error.message.includes(logPath)) {
+        throw new Error(buildStartupErrorMessage(error.message, logPath))
       }
       throw error
     } finally {
@@ -1163,6 +1269,7 @@ export async function ensurePanelThread(input: {
   threadTitle: string | null
   lastUserMessageAt: string | null
   providerId: string | null
+  activityState: T3ActivityState
 }> {
   const pending = pendingPanelThreadEnsures.get(input.panelId)
   if (pending) {
@@ -1191,7 +1298,8 @@ export async function ensurePanelThread(input: {
       t3ThreadId: thread.threadId,
       threadTitle: metadata.threadTitle,
       lastUserMessageAt: metadata.lastUserMessageAt,
-      providerId: metadata.providerId
+      providerId: metadata.providerId,
+      activityState: metadata.activityState
     }
   })()
 
@@ -1215,7 +1323,8 @@ export async function getThreadInfo(t3ThreadId: string): Promise<T3CodeThreadInf
         : null,
     threadTitle: metadata.threadTitle,
     lastUserMessageAt: metadata.lastUserMessageAt,
-    providerId: metadata.providerId
+    providerId: metadata.providerId,
+    activityState: metadata.activityState
   }
 }
 

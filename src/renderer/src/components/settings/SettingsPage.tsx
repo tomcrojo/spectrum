@@ -1,3 +1,10 @@
+import {
+  Cancel01FreeIcons,
+  DashboardSquare02FreeIcons,
+  FolderCodeFreeIcons,
+  SparklesFreeIcons
+} from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { Button } from '@renderer/components/shared/Button'
 import {
   useUiStore,
@@ -76,12 +83,12 @@ const runtimePowerModeOptions: Array<{
   {
     value: 'high',
     label: 'High',
-    description: 'Keeps browser and T3 panels live more often for the smoothest switching and best agent access.'
+    description: 'Keeps browser panels rendered across every open workspace for the smoothest switching and broadest agent access.'
   },
   {
     value: 'mid',
     label: 'Mid',
-    description: 'Applies lazy restore and background monitoring, but only parks heavy panels when a workspace goes inactive.'
+    description: 'Keeps browser panels rendered for the 3 most recent workspaces, then parks the rest.'
   },
   {
     value: 'low',
@@ -119,6 +126,92 @@ const assistantStreamingOptions = [
     description: 'Only show assistant text after each response completes.'
   }
 ] as const
+
+function SettingsIcon({
+  icon
+}: {
+  icon: Parameters<typeof HugeiconsIcon>[0]['icon']
+}) {
+  return <HugeiconsIcon icon={icon} size={16} strokeWidth={1.8} />
+}
+
+function SettingsSection({
+  icon,
+  title,
+  description,
+  status,
+  children
+}: {
+  icon: Parameters<typeof HugeiconsIcon>[0]['icon']
+  title: string
+  description: string
+  status?: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="app-settings-card rounded-[1.4rem] p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 rounded-full bg-accent/8 p-2 text-accent">
+            <SettingsIcon icon={icon} />
+          </span>
+          <div>
+            <h3 className="text-sm font-medium tracking-tight text-text-primary">{title}</h3>
+            <p className="mt-1 text-xs leading-5 text-text-muted">{description}</p>
+          </div>
+        </div>
+        {status ? (
+          <div className="app-settings-pill rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.16em]">
+            {status}
+          </div>
+        ) : null}
+      </div>
+      <div className="mt-4 grid gap-2">{children}</div>
+    </section>
+  )
+}
+
+function SettingsOption({
+  selected,
+  label,
+  description,
+  warning,
+  onClick
+}: {
+  selected: boolean
+  label: string
+  description: string
+  warning?: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        'app-settings-option rounded-[1.1rem] px-3.5 py-3 text-left',
+        selected && 'app-settings-option-active'
+      )}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-medium text-text-primary">{label}</span>
+        <span
+          className={cn(
+            'h-2.5 w-2.5 rounded-full border',
+            selected
+              ? 'border-accent bg-accent'
+              : 'border-border bg-transparent'
+          )}
+        />
+      </div>
+      <p className="mt-1 text-xs leading-5 text-text-muted">{description}</p>
+      {warning ? (
+        <p className="mt-2 rounded-[0.9rem] border border-warning/30 bg-warning/8 px-2.5 py-2 text-[11px] leading-5 text-text-secondary">
+          Warning: {warning}
+        </p>
+      ) : null}
+    </button>
+  )
+}
 
 export function SettingsPage() {
   const {
@@ -164,476 +257,215 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="w-[420px] flex-shrink-0 bg-bg-surface border-r border-border-subtle flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 pt-4 pb-2">
-        <div>
-          <h2 className="text-xs font-semibold text-text-muted uppercase tracking-wider">
-            Settings
-          </h2>
-          <p className="mt-1 text-xs text-text-muted">
-            Appearance and app-level behavior.
-          </p>
+    <div className="app-glass-panel app-settings-shell ml-2 mr-2 flex h-[calc(100%-16px)] w-[460px] flex-shrink-0 self-center overflow-hidden rounded-[1.7rem]">
+      <div className="relative flex h-full w-full flex-col">
+        <div className="flex items-center justify-between px-5 pt-4 pb-3">
+          <div>
+            <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+              Settings
+            </h2>
+            <p className="mt-1 text-xs text-text-muted">
+              Appearance and app-level behavior.
+            </p>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="h-8 w-8 rounded-full p-0"
+            onClick={() => setShowSettingsPage(false)}
+          >
+            <SettingsIcon icon={Cancel01FreeIcons} />
+          </Button>
         </div>
-        <button
-          onClick={() => setShowSettingsPage(false)}
-          className="text-text-muted hover:text-text-primary transition-colors p-1 rounded hover:bg-bg-hover"
-        >
-          <svg className="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none">
-            <path d="M3 3L11 11M11 3L3 11" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
-          </svg>
-        </button>
-      </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4">
-        <section className="rounded-xl border border-border bg-bg-raised p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-semibold text-text-primary">Theme</h3>
-              <p className="mt-1 text-xs text-text-muted">
-                Controls Spectrum and the embedded T3Code panel from one setting.
-              </p>
-            </div>
-            <div className="rounded-full border border-border-subtle bg-bg px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-text-muted">
-              Active {resolvedTheme}
-            </div>
-          </div>
-
-          <div className="mt-4 grid gap-2">
-            {themeOptions.map((option) => {
-              const selected = theme === option.value
-
-              return (
-                <button
+        <div className="flex-1 overflow-y-auto px-5 pb-5">
+          <div className="space-y-4">
+            <SettingsSection
+              icon={SparklesFreeIcons}
+              title="Theme"
+              description="Controls Spectrum and the embedded T3Code panel from one setting."
+              status={`Active ${resolvedTheme}`}
+            >
+              {themeOptions.map((option) => (
+                <SettingsOption
                   key={option.value}
+                  selected={theme === option.value}
+                  label={option.label}
+                  description={option.description}
                   onClick={() => setTheme(option.value)}
-                  className={cn(
-                    'rounded-lg border px-3 py-3 text-left transition-colors',
-                    selected
-                      ? 'border-accent bg-accent/10'
-                      : 'border-border bg-bg hover:bg-bg-hover'
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-medium text-text-primary">
-                      {option.label}
-                    </span>
-                    <span
-                      className={cn(
-                        'h-2.5 w-2.5 rounded-full border',
-                        selected
-                          ? 'border-accent bg-accent'
-                          : 'border-border bg-transparent'
-                      )}
-                    />
-                  </div>
+                />
+              ))}
+
+              <div className="flex items-center justify-between rounded-[1.1rem] border border-border/80 bg-bg-surface/62 px-3.5 py-3">
+                <div>
+                  <p className="text-xs font-medium text-text-primary">Current output</p>
                   <p className="mt-1 text-xs text-text-muted">
-                    {option.description}
+                    Resolved to {resolvedTheme} mode.
                   </p>
-                </button>
-              )
-            })}
-          </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setTheme('system')}
+                  disabled={theme === 'system'}
+                >
+                  Reset
+                </Button>
+              </div>
+            </SettingsSection>
 
-          <div className="mt-4 flex items-center justify-between rounded-lg border border-border-subtle bg-bg px-3 py-2">
-            <div>
-              <p className="text-xs font-medium text-text-primary">Current output</p>
-              <p className="text-xs text-text-muted">
-                Resolved to {resolvedTheme} mode.
-              </p>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setTheme('system')}
-              disabled={theme === 'system'}
+            <SettingsSection
+              icon={DashboardSquare02FreeIcons}
+              title="Follow-up Behavior"
+              description="Queue follow-ups while Codex runs or steer the current run. Press ⇧⌘Enter to do the opposite for one message."
+              status={followUpBehavior}
             >
-              Reset
-            </Button>
-          </div>
-        </section>
-
-        <section className="mt-4 rounded-xl border border-border bg-bg-raised p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-semibold text-text-primary">
-                Follow-up Behavior
-              </h3>
-              <p className="mt-1 text-xs text-text-muted">
-                Queue follow-ups while Codex runs or steer the current run. Press ⇧⌘Enter to do the opposite for one message.
-              </p>
-            </div>
-            <div className="rounded-full border border-border-subtle bg-bg px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-text-muted">
-              {followUpBehavior}
-            </div>
-          </div>
-
-          <div className="mt-4 grid gap-2">
-            {followUpBehaviorOptions.map((option) => {
-              const selected = followUpBehavior === option.value
-
-              return (
-                <button
+              {followUpBehaviorOptions.map((option) => (
+                <SettingsOption
                   key={option.value}
+                  selected={followUpBehavior === option.value}
+                  label={option.label}
+                  description={option.description}
                   onClick={() => setFollowUpBehavior(option.value)}
-                  className={cn(
-                    'rounded-lg border px-3 py-3 text-left transition-colors',
-                    selected
-                      ? 'border-accent bg-accent/10'
-                      : 'border-border bg-bg hover:bg-bg-hover'
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-medium text-text-primary">
-                      {option.label}
-                    </span>
-                    <span
-                      className={cn(
-                        'h-2.5 w-2.5 rounded-full border',
-                        selected
-                          ? 'border-accent bg-accent'
-                          : 'border-border bg-transparent'
-                      )}
-                    />
-                  </div>
-                  <p className="mt-1 text-xs text-text-muted">
-                    {option.description}
-                  </p>
-                </button>
-              )
-            })}
-          </div>
-        </section>
+                />
+              ))}
+            </SettingsSection>
 
-        <section className="mt-4 rounded-xl border border-border bg-bg-raised p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-semibold text-text-primary">
-                Assistant Output
-              </h3>
-              <p className="mt-1 text-xs text-text-muted">
-                Controls whether the embedded T3Code panel renders assistant text live or waits for the full reply.
-              </p>
-            </div>
-            <div className="rounded-full border border-border-subtle bg-bg px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-text-muted">
-              {assistantStreaming ? 'Live' : 'Buffered'}
-            </div>
-          </div>
-
-          <div className="mt-4 grid gap-2">
-            {assistantStreamingOptions.map((option) => {
-              const selected = assistantStreaming === option.value
-
-              return (
-                <button
+            <SettingsSection
+              icon={SparklesFreeIcons}
+              title="Assistant Output"
+              description="Controls whether the embedded T3Code panel renders assistant text live or waits for the full reply."
+              status={assistantStreaming ? 'Live' : 'Buffered'}
+            >
+              {assistantStreamingOptions.map((option) => (
+                <SettingsOption
                   key={option.label}
+                  selected={assistantStreaming === option.value}
+                  label={option.label}
+                  description={option.description}
                   onClick={() => setAssistantStreaming(option.value)}
-                  className={cn(
-                    'rounded-lg border px-3 py-3 text-left transition-colors',
-                    selected
-                      ? 'border-accent bg-accent/10'
-                      : 'border-border bg-bg hover:bg-bg-hover'
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-medium text-text-primary">
-                      {option.label}
-                    </span>
-                    <span
-                      className={cn(
-                        'h-2.5 w-2.5 rounded-full border',
-                        selected
-                          ? 'border-accent bg-accent'
-                          : 'border-border bg-transparent'
-                      )}
-                    />
-                  </div>
-                  <p className="mt-1 text-xs text-text-muted">
-                    {option.description}
-                  </p>
-                </button>
-              )
-            })}
-          </div>
-        </section>
+                />
+              ))}
+            </SettingsSection>
 
-        <section className="mt-4 rounded-xl border border-border bg-bg-raised p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-semibold text-text-primary">
-                Runtime Lifecycle
-              </h3>
-              <p className="mt-1 text-xs text-text-muted">
-                Controls how aggressively inactive heavy panels are parked to save resources.
-              </p>
-            </div>
-            <div className="rounded-full border border-border-subtle bg-bg px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-text-muted">
-              {runtimePowerMode}
-            </div>
-          </div>
-
-          <div className="mt-4 grid gap-2">
-            {runtimePowerModeOptions.map((option) => {
-              const selected = runtimePowerMode === option.value
-
-              return (
-                <button
+            <SettingsSection
+              icon={FolderCodeFreeIcons}
+              title="Runtime Lifecycle"
+              description="Controls how aggressively inactive heavy panels are parked to save resources."
+              status={runtimePowerMode}
+            >
+              {runtimePowerModeOptions.map((option) => (
+                <SettingsOption
                   key={option.value}
+                  selected={runtimePowerMode === option.value}
+                  label={option.label}
+                  description={option.description}
                   onClick={() => setRuntimePowerMode(option.value)}
-                  className={cn(
-                    'rounded-lg border px-3 py-3 text-left transition-colors',
-                    selected
-                      ? 'border-accent bg-accent/10'
-                      : 'border-border bg-bg hover:bg-bg-hover'
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-medium text-text-primary">
-                      {option.label}
-                    </span>
-                    <span
-                      className={cn(
-                        'h-2.5 w-2.5 rounded-full border',
-                        selected
-                          ? 'border-accent bg-accent'
-                          : 'border-border bg-transparent'
-                      )}
-                    />
-                  </div>
-                  <p className="mt-1 text-xs text-text-muted">
-                    {option.description}
-                  </p>
-                </button>
-              )
-            })}
-          </div>
-        </section>
+                />
+              ))}
+            </SettingsSection>
 
-        <section className="mt-4 rounded-xl border border-border bg-bg-raised p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-semibold text-text-primary">
-                Workspace View
-              </h3>
-              <p className="mt-1 text-xs text-text-muted">
-                Structured view is the default. Free canvas is available as an opt-in.
-              </p>
-            </div>
-            <div className="rounded-full border border-border-subtle bg-bg px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-text-muted">
-              {canvasInteractionMode === 'structured' ? 'Default' : 'Opt-in'}
-            </div>
-          </div>
-
-          <div className="mt-4 grid gap-2">
-            {canvasInteractionModeOptions.map((option) => {
-              const selected = canvasInteractionMode === option.value
-
-              return (
-                <button
+            <SettingsSection
+              icon={DashboardSquare02FreeIcons}
+              title="Workspace View"
+              description="Structured view is the default. Free canvas is available as an opt-in."
+              status={canvasInteractionMode === 'structured' ? 'Default' : 'Opt-in'}
+            >
+              {canvasInteractionModeOptions.map((option) => (
+                <SettingsOption
                   key={option.value}
+                  selected={canvasInteractionMode === option.value}
+                  label={option.label}
+                  description={option.description}
+                  warning={option.warning}
                   onClick={() => handleCanvasInteractionModeChange(option.value)}
-                  className={cn(
-                    'rounded-lg border px-3 py-3 text-left transition-colors',
-                    selected
-                      ? 'border-accent bg-accent/10'
-                      : 'border-border bg-bg hover:bg-bg-hover'
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-medium text-text-primary">
-                      {option.label}
-                    </span>
-                    <span
-                      className={cn(
-                        'h-2.5 w-2.5 rounded-full border',
-                        selected
-                          ? 'border-accent bg-accent'
-                          : 'border-border bg-transparent'
-                      )}
-                    />
-                  </div>
-                  <p className="mt-1 text-xs text-text-muted">
-                    {option.description}
-                  </p>
-                  {option.warning && (
-                    <p className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-200">
-                      Warning: {option.warning}
-                    </p>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        </section>
-
-        <section className="mt-4 rounded-xl border border-border bg-bg-raised p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-semibold text-text-primary">
-                Focus Camera
-              </h3>
-              <p className="mt-1 text-xs text-text-muted">
-                Choose whether focusing a panel recenters the canvas or keeps your current overview.
-              </p>
-            </div>
-            <div className="rounded-full border border-border-subtle bg-bg px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-text-muted">
-              {autoCenterFocusedPanel ? 'Auto-center' : 'Bird’s-eye'}
-            </div>
-          </div>
-
-          <div className="mt-4 grid gap-2">
-            <button
-              onClick={() => setAutoCenterFocusedPanel(true)}
-              className={cn(
-                'rounded-lg border px-3 py-3 text-left transition-colors',
-                autoCenterFocusedPanel
-                  ? 'border-accent bg-accent/10'
-                  : 'border-border bg-bg hover:bg-bg-hover'
-              )}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm font-medium text-text-primary">
-                  Auto-center focused panel
-                </span>
-                <span
-                  className={cn(
-                    'h-2.5 w-2.5 rounded-full border',
-                    autoCenterFocusedPanel
-                      ? 'border-accent bg-accent'
-                      : 'border-border bg-transparent'
-                  )}
                 />
-              </div>
-              <p className="mt-1 text-xs text-text-muted">
-                Keeps the active panel centered, including with blank space around the canvas edges.
-              </p>
-            </button>
+              ))}
+            </SettingsSection>
 
-            <button
-              onClick={() => setAutoCenterFocusedPanel(false)}
-              className={cn(
-                'rounded-lg border px-3 py-3 text-left transition-colors',
-                !autoCenterFocusedPanel
-                  ? 'border-accent bg-accent/10'
-                  : 'border-border bg-bg hover:bg-bg-hover'
-              )}
+            <SettingsSection
+              icon={SparklesFreeIcons}
+              title="Focus Camera"
+              description="Choose whether focusing a panel recenters the canvas or keeps your current overview."
+              status={autoCenterFocusedPanel ? 'Auto-center' : "Bird's-eye"}
             >
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm font-medium text-text-primary">
-                  Keep bird’s-eye view
-                </span>
-                <span
-                  className={cn(
-                    'h-2.5 w-2.5 rounded-full border',
-                    !autoCenterFocusedPanel
-                      ? 'border-accent bg-accent'
-                      : 'border-border bg-transparent'
-                  )}
-                />
-              </div>
-              <p className="mt-1 text-xs text-text-muted">
-                Focus changes stay local so you can watch several panels without the camera moving.
-              </p>
-            </button>
-          </div>
-        </section>
+              <SettingsOption
+                selected={autoCenterFocusedPanel}
+                label="Auto-center focused panel"
+                description="Keeps the active panel centered, including with blank space around the canvas edges."
+                onClick={() => setAutoCenterFocusedPanel(true)}
+              />
+              <SettingsOption
+                selected={!autoCenterFocusedPanel}
+                label="Keep bird's-eye view"
+                description="Focus changes stay local so you can watch several panels without the camera moving."
+                onClick={() => setAutoCenterFocusedPanel(false)}
+              />
+            </SettingsSection>
 
-        <section className="mt-4 rounded-xl border border-border bg-bg-raised p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-semibold text-text-primary">
-                Archived Panel Timestamps
-              </h3>
-              <p className="mt-1 text-xs text-text-muted">
-                Controls how archived workspaces describe the most recent panel edit.
-              </p>
-            </div>
-            <div className="rounded-full border border-border-subtle bg-bg px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-text-muted">
-              {archivedTimestampFormat === 'relative' ? 'Relative' : 'Full date'}
-            </div>
-          </div>
-
-          <div className="mt-4 grid gap-2">
-            {archivedTimestampOptions.map((option) => {
-              const selected = archivedTimestampFormat === option.value
-
-              return (
-                <button
+            <SettingsSection
+              icon={FolderCodeFreeIcons}
+              title="Archived Panel Timestamps"
+              description="Controls how archived workspaces describe the most recent panel edit."
+              status={archivedTimestampFormat === 'relative' ? 'Relative' : 'Full date'}
+            >
+              {archivedTimestampOptions.map((option) => (
+                <SettingsOption
                   key={option.value}
+                  selected={archivedTimestampFormat === option.value}
+                  label={option.label}
+                  description={option.description}
                   onClick={() => setArchivedTimestampFormat(option.value)}
-                  className={cn(
-                    'rounded-lg border px-3 py-3 text-left transition-colors',
-                    selected
-                      ? 'border-accent bg-accent/10'
-                      : 'border-border bg-bg hover:bg-bg-hover'
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-medium text-text-primary">
-                      {option.label}
-                    </span>
-                    <span
-                      className={cn(
-                        'h-2.5 w-2.5 rounded-full border',
-                        selected
-                          ? 'border-accent bg-accent'
-                          : 'border-border bg-transparent'
-                      )}
-                    />
-                  </div>
-                  <p className="mt-1 text-xs text-text-muted">
-                    {option.description}
-                  </p>
-                </button>
-              )
-            })}
-          </div>
-        </section>
+                />
+              ))}
+            </SettingsSection>
 
-        <section className="mt-6 mb-2 px-1">
-          <h3 className="text-[10px] font-semibold text-text-muted uppercase tracking-[0.16em] mb-3">
-            Acknowledgements
-          </h3>
-          <p className="text-xs text-text-muted leading-relaxed">
-            Spectrum stands on the shoulders of projects that shaped its
-            direction. Huge thanks to{' '}
-            <a
-              href="https://github.com/pingdotgg/t3code"
-              target="_blank"
-              rel="noreferrer"
-              className="text-text-secondary hover:text-text-primary transition-colors underline underline-offset-2"
-            >
-              T3Code
-            </a>
-            ,{' '}
-            <a
-              href="https://github.com/SawyerHood/dev-browser"
-              target="_blank"
-              rel="noreferrer"
-              className="text-text-secondary hover:text-text-primary transition-colors underline underline-offset-2"
-            >
-              dev-browser CLI
-            </a>
-            , and{' '}
-            <a
-              href="https://github.com/galz10/IDX0"
-              target="_blank"
-              rel="noreferrer"
-              className="text-text-secondary hover:text-text-primary transition-colors underline underline-offset-2"
-            >
-              idx0
-            </a>
-            , and{' '}
-            <a
-              href="https://github.com/manaflow-ai/cmux"
-              target="_blank"
-              rel="noreferrer"
-              className="text-text-secondary hover:text-text-primary transition-colors underline underline-offset-2"
-            >
-              cmux
-            </a>{' '}
-            for their ideas and inspiration.
-          </p>
-        </section>
+            <section className="app-settings-card rounded-[1.4rem] p-4">
+              <h3 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                Acknowledgements
+              </h3>
+              <p className="mt-3 text-xs leading-6 text-text-muted">
+                Spectrum stands on the shoulders of projects that shaped its direction. Huge thanks to{' '}
+                <a
+                  href="https://github.com/pingdotgg/t3code"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-text-secondary underline underline-offset-2 transition-colors hover:text-text-primary"
+                >
+                  T3Code
+                </a>
+                ,{' '}
+                <a
+                  href="https://github.com/SawyerHood/dev-browser"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-text-secondary underline underline-offset-2 transition-colors hover:text-text-primary"
+                >
+                  dev-browser CLI
+                </a>
+                ,{' '}
+                <a
+                  href="https://github.com/galz10/IDX0"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-text-secondary underline underline-offset-2 transition-colors hover:text-text-primary"
+                >
+                  idx0
+                </a>
+                , and{' '}
+                <a
+                  href="https://github.com/manaflow-ai/cmux"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-text-secondary underline underline-offset-2 transition-colors hover:text-text-primary"
+                >
+                  cmux
+                </a>{' '}
+                for their ideas and inspiration.
+              </p>
+            </section>
+          </div>
+        </div>
       </div>
     </div>
   )

@@ -38,7 +38,7 @@ export function createPty(
   // Validate cwd exists, fallback to home directory
   const safeCwd = existsSync(cwd) ? cwd : homedir()
 
-  const env = {
+  const env: Record<string, string | undefined> = {
     ...process.env,
     TERM: 'xterm-256color',
     COLORTERM: 'truecolor'
@@ -62,7 +62,9 @@ export function createPty(
     cols: 80,
     rows: 24,
     cwd: safeCwd,
-    env: env as Record<string, string>
+    env: Object.fromEntries(
+      Object.entries(env).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+    )
   })
 
   // Stream data from PTY to renderer

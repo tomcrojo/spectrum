@@ -1,49 +1,126 @@
 @import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+@import '@fontsource-variable/geist';
+
+@custom-variant dark (&:is(.dark *));
 
 :root {
   color-scheme: light;
-  --app-color-bg: #fafaf9;
-  --app-color-bg-raised: #f2f2f1;
+  --style-lab-font-sans: 'Geist Variable', sans-serif;
+  --style-lab-font-heading: 'Geist Variable', sans-serif;
+  --app-color-bg: #f7f7f5;
+  --app-color-bg-raised: #efefec;
   --app-color-bg-surface: #ffffff;
-  --app-color-bg-hover: #ececeb;
-  --app-color-bg-active: #e4e4e3;
-  --app-color-border: #d4d4d4;
-  --app-color-border-subtle: #e7e5e4;
-  --app-color-text-primary: #171717;
-  --app-color-text-secondary: #525252;
-  --app-color-text-muted: #737373;
-  --app-color-accent: #2563eb;
-  --app-color-accent-hover: #1d4ed8;
-  --app-color-success: #16a34a;
-  --app-color-warning: #ca8a04;
+  --app-color-bg-hover: #e7e7e3;
+  --app-color-bg-active: #ddddda;
+  --app-color-border: #d7d7d3;
+  --app-color-border-subtle: #e6e5e1;
+  --app-color-text-primary: #161616;
+  --app-color-text-secondary: #4e4e4e;
+  --app-color-text-muted: #767676;
+  --app-color-accent: #171717;
+  --app-color-accent-hover: #060606;
+  --app-color-success: #2f7a59;
+  --app-color-warning: #9f7412;
   --app-color-danger: #dc2626;
   --app-color-progress-0: #a3a3a3;
-  --app-color-progress-1: #2563eb;
-  --app-color-progress-2: #7c3aed;
-  --app-color-progress-3: #16a34a;
+  --app-color-progress-1: #525252;
+  --app-color-progress-2: #232323;
+  --app-color-progress-3: #2f7a59;
+
+  /* shadcn variable aliases — bridge to app color system */
+  --background: var(--app-color-bg);
+  --foreground: var(--app-color-text-primary);
+  --card: var(--app-color-bg-surface);
+  --card-foreground: var(--app-color-text-primary);
+  --popover: var(--app-color-bg-surface);
+  --popover-foreground: var(--app-color-text-primary);
+  --primary: var(--app-color-text-primary);
+  --primary-foreground: var(--app-color-bg);
+  --secondary: var(--app-color-bg-raised);
+  --secondary-foreground: var(--app-color-text-primary);
+  --muted: var(--app-color-bg-raised);
+  --muted-foreground: var(--app-color-text-muted);
+  --accent: var(--app-color-bg-hover);
+  --accent-foreground: var(--app-color-text-primary);
+  --destructive: var(--app-color-danger);
+  --border: var(--app-color-border);
+  --input: var(--app-color-border);
+  --ring: var(--app-color-accent);
+  --radius: 0.75rem;
+  --sidebar: var(--app-color-bg-raised);
+  --sidebar-foreground: var(--app-color-text-primary);
+  --sidebar-primary: var(--app-color-accent);
+  --sidebar-primary-foreground: var(--app-color-bg);
+  --sidebar-accent: var(--app-color-bg-hover);
+  --sidebar-accent-foreground: var(--app-color-text-primary);
+  --sidebar-border: var(--app-color-border);
+  --sidebar-ring: var(--app-color-accent);
+  --chart-1: oklch(0.845 0.143 164.978);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.596 0.145 163.225);
+  --chart-4: oklch(0.508 0.118 165.612);
+  --chart-5: oklch(0.432 0.095 166.913);
 }
 
 :root.dark {
   color-scheme: dark;
-  --app-color-bg: #0a0a0a;
-  --app-color-bg-raised: #141414;
-  --app-color-bg-surface: #1a1a1a;
-  --app-color-bg-hover: #222222;
-  --app-color-bg-active: #2a2a2a;
-  --app-color-border: #2a2a2a;
-  --app-color-border-subtle: #1e1e1e;
-  --app-color-text-primary: #e5e5e5;
-  --app-color-text-secondary: #a3a3a3;
-  --app-color-text-muted: #737373;
-  --app-color-accent: #3b82f6;
-  --app-color-accent-hover: #2563eb;
-  --app-color-success: #22c55e;
-  --app-color-warning: #eab308;
+  --style-lab-font-sans: 'Geist Variable', sans-serif;
+  --style-lab-font-heading: 'Geist Variable', sans-serif;
+  --app-color-bg: #10100f;
+  --app-color-bg-raised: #161615;
+  --app-color-bg-surface: #1c1c1a;
+  --app-color-bg-hover: #242422;
+  --app-color-bg-active: #2c2c29;
+  --app-color-border: #2b2b29;
+  --app-color-border-subtle: #20201e;
+  --app-color-text-primary: #ecece8;
+  --app-color-text-secondary: #b3b3ad;
+  --app-color-text-muted: #7e7e79;
+  --app-color-accent: #f0f0eb;
+  --app-color-accent-hover: #ffffff;
+  --app-color-success: #4aa07b;
+  --app-color-warning: #d1a842;
   --app-color-danger: #ef4444;
   --app-color-progress-0: #525252;
-  --app-color-progress-1: #3b82f6;
-  --app-color-progress-2: #8b5cf6;
-  --app-color-progress-3: #22c55e;
+  --app-color-progress-1: #9c9c97;
+  --app-color-progress-2: #f0f0eb;
+  --app-color-progress-3: #4aa07b;
+
+  /* shadcn variable aliases — bridge to app color system */
+  --background: var(--app-color-bg);
+  --foreground: var(--app-color-text-primary);
+  --card: var(--app-color-bg-surface);
+  --card-foreground: var(--app-color-text-primary);
+  --popover: var(--app-color-bg-surface);
+  --popover-foreground: var(--app-color-text-primary);
+  --primary: var(--app-color-text-primary);
+  --primary-foreground: var(--app-color-bg);
+  --secondary: var(--app-color-bg-raised);
+  --secondary-foreground: var(--app-color-text-primary);
+  --muted: var(--app-color-bg-raised);
+  --muted-foreground: var(--app-color-text-muted);
+  --accent: var(--app-color-bg-hover);
+  --accent-foreground: var(--app-color-text-primary);
+  --destructive: var(--app-color-danger);
+  --border: var(--app-color-border);
+  --input: var(--app-color-border);
+  --ring: var(--app-color-accent);
+  --radius: 0.75rem;
+  --sidebar: var(--app-color-bg-raised);
+  --sidebar-foreground: var(--app-color-text-primary);
+  --sidebar-primary: var(--app-color-accent);
+  --sidebar-primary-foreground: var(--app-color-bg);
+  --sidebar-accent: var(--app-color-bg-hover);
+  --sidebar-accent-foreground: var(--app-color-text-primary);
+  --sidebar-border: var(--app-color-border);
+  --sidebar-ring: var(--app-color-accent);
+  --chart-1: oklch(0.845 0.143 164.978);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.596 0.145 163.225);
+  --chart-4: oklch(0.508 0.118 165.612);
+  --chart-5: oklch(0.432 0.095 166.913);
 }
 
 @theme {
@@ -68,15 +145,58 @@
   --color-progress-3: var(--app-color-progress-3);
 }
 
+@theme inline {
+  --font-sans: var(--style-lab-font-sans);
+  --font-heading: var(--style-lab-font-heading);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  /* Use the app's bold accent, not shadcn's hover-bg --accent */
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--app-color-accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--color-border) transparent;
 }
 
 body {
-  font-family:
-    'SF Mono', 'Menlo', 'Monaco', 'Cascadia Code', 'Consolas', monospace;
-  font-size: 13px;
+  font-family: 'Geist Variable', 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
   line-height: 1.5;
   overflow: hidden;
   user-select: none;
@@ -115,4 +235,546 @@ textarea,
 .monaco-editor .margin,
 .monaco-editor .monaco-editor-background {
   background: var(--app-color-bg) !important;
+}
+
+.app-shell-backdrop {
+  background:
+    radial-gradient(circle at top right, color-mix(in oklab, white 14%, transparent) 0%, transparent 28%),
+    radial-gradient(circle at top left, color-mix(in oklab, var(--color-chart-2) 8%, transparent) 0%, transparent 24%),
+    linear-gradient(180deg, color-mix(in oklab, var(--color-bg) 96%, white 4%), var(--color-bg));
+}
+
+.dark .app-shell-backdrop {
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.06) 0%, transparent 26%),
+    radial-gradient(circle at top left, color-mix(in oklab, var(--color-chart-2) 8%, transparent) 0%, transparent 24%),
+    linear-gradient(180deg, color-mix(in oklab, var(--color-bg) 96%, white 4%), var(--color-bg));
+}
+
+.app-glass-panel {
+  border: 1px solid color-mix(in oklab, var(--color-border) 86%, transparent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 34%),
+    color-mix(in oklab, var(--color-bg-surface) 86%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 22px 56px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(22px);
+}
+
+.dark .app-glass-panel {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 34%),
+    color-mix(in oklab, var(--color-bg-surface) 90%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 28px 72px rgba(0, 0, 0, 0.38);
+}
+
+.app-sidebar-shell {
+  position: relative;
+  overflow: hidden;
+}
+
+.app-sidebar-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto auto 10px;
+  height: 72px;
+  width: 140px;
+  background: linear-gradient(
+    110deg,
+    color-mix(in oklab, var(--color-chart-1) 24%, transparent),
+    color-mix(in oklab, white 14%, transparent) 56%,
+    transparent
+  );
+  filter: blur(24px);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.app-settings-shell {
+  position: relative;
+  overflow: hidden;
+}
+
+.app-settings-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at top right, color-mix(in oklab, white 10%, transparent) 0%, transparent 24%);
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.app-settings-card {
+  border: 1px solid color-mix(in oklab, var(--color-border) 82%, transparent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 34%),
+    color-mix(in oklab, var(--color-bg-raised) 92%, white 8%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 16px 44px rgba(0, 0, 0, 0.1);
+}
+
+.dark .app-settings-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 34%),
+    color-mix(in oklab, var(--color-bg-raised) 96%, white 4%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 24px 56px rgba(0, 0, 0, 0.28);
+}
+
+.app-settings-option {
+  border: 1px solid color-mix(in oklab, var(--color-border) 80%, transparent);
+  background: color-mix(in oklab, var(--color-bg) 90%, white 10%);
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.app-settings-option:hover {
+  background: color-mix(in oklab, var(--color-bg-hover) 92%, white 8%);
+}
+
+.app-settings-option-active {
+  border-color: color-mix(in oklab, var(--color-accent) 24%, var(--color-border));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 54%),
+    color-mix(in oklab, var(--color-bg-active) 84%, white 16%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 16px 36px rgba(0, 0, 0, 0.12);
+}
+
+.app-settings-pill {
+  border: 1px solid color-mix(in oklab, var(--color-border) 80%, transparent);
+  background: color-mix(in oklab, var(--color-bg) 90%, white 10%);
+  color: var(--color-text-muted);
+}
+
+.project-theme-shell {
+  position: relative;
+  border: 1px solid color-mix(in oklab, var(--color-border) 84%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--color-bg) 88%, white 12%), color-mix(in oklab, var(--color-bg) 95%, black 5%));
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
+}
+
+.dark .project-theme-shell {
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--color-bg) 93%, white 7%), color-mix(in oklab, var(--color-bg) 97%, black 3%));
+  box-shadow: 0 28px 72px rgba(0, 0, 0, 0.5);
+}
+
+.project-theme-scroll {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.035) 0%, transparent 32%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 18%);
+}
+
+.project-theme-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--color-border) 84%, transparent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 34%),
+    color-mix(in oklab, var(--color-bg-raised) 93%, white 7%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 10px 24px rgba(0, 0, 0, 0.12);
+}
+
+.dark .project-theme-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 32%),
+    color-mix(in oklab, var(--color-bg-raised) 94%, white 6%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 16px 40px rgba(0, 0, 0, 0.26);
+}
+
+.project-theme-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.03) 0%, transparent 26%);
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.project-theme-avatar-button {
+  position: relative;
+  border-radius: 1rem;
+  padding: 2px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-border) 72%, white 28%),
+    color-mix(in oklab, var(--color-border) 88%, black 12%)
+  );
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+}
+
+.project-theme-avatar-button > span,
+.project-theme-avatar-button > div {
+  display: flex;
+}
+
+.project-theme-description {
+  border: 1px solid transparent;
+  background: transparent;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.project-theme-description:hover,
+.project-theme-description:focus {
+  border-color: color-mix(in oklab, var(--project-border) 56%, transparent);
+  background: color-mix(in oklab, var(--color-bg) 28%, transparent);
+}
+
+.project-sidebar-card-active {
+  position: relative;
+  border-color: color-mix(in oklab, var(--project-accent) 18%, var(--color-border));
+  background:
+    linear-gradient(90deg, var(--project-tint-strong) 0%, transparent 64%),
+    color-mix(in oklab, var(--color-bg-active) 88%, white 12%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 10px 20px rgba(0, 0, 0, 0.14);
+}
+
+.dark .project-sidebar-card-active {
+  background:
+    linear-gradient(90deg, var(--project-tint-strong) 0%, transparent 64%),
+    color-mix(in oklab, var(--color-bg-active) 92%, white 8%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 12px 24px rgba(0, 0, 0, 0.28);
+}
+
+.project-sidebar-card-active::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(90deg, color-mix(in oklab, var(--project-accent) 16%, white 8%) 0%, transparent 55%);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.project-workspace-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 28%),
+    color-mix(in oklab, var(--color-bg-raised) 94%, white 6%);
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease;
+}
+
+.dark .project-workspace-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 28%),
+    color-mix(in oklab, var(--color-bg-raised) 96%, white 4%);
+}
+
+.project-workspace-card:hover {
+  border-color: color-mix(in oklab, var(--color-border) 94%, white 6%);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.16);
+  transform: translateY(-1px);
+}
+
+.project-workspace-card.project-workspace-card-selected {
+  border-color: color-mix(in oklab, var(--project-accent) 28%, var(--color-border));
+  background: var(--project-mesh);
+  box-shadow: 0 22px 44px rgba(0, 0, 0, 0.34);
+}
+
+.project-workspace-card.project-workspace-card-selected::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid color-mix(in oklab, rgba(255, 255, 255, 0.12) 45%, transparent);
+  pointer-events: none;
+}
+
+.project-workspace-card.project-workspace-card-selected::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), transparent 46%);
+  pointer-events: none;
+}
+
+.project-theme-section {
+  padding: 0.75rem 0.25rem;
+  border-top: 1px solid color-mix(in oklab, var(--color-border) 72%, transparent);
+}
+
+.project-theme-section:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.legacy-preview-theme.light {
+  color-scheme: light;
+  --app-color-bg: #fafaf9;
+  --app-color-bg-raised: #f2f2f1;
+  --app-color-bg-surface: #ffffff;
+  --app-color-bg-hover: #ececeb;
+  --app-color-bg-active: #e4e4e3;
+  --app-color-border: #d4d4d4;
+  --app-color-border-subtle: #e7e5e4;
+  --app-color-text-primary: #171717;
+  --app-color-text-secondary: #525252;
+  --app-color-text-muted: #737373;
+  --app-color-accent: #2563eb;
+  --app-color-accent-hover: #1d4ed8;
+  --app-color-success: #16a34a;
+  --app-color-warning: #ca8a04;
+  --app-color-danger: #dc2626;
+  --app-color-progress-0: #a3a3a3;
+  --app-color-progress-1: #2563eb;
+  --app-color-progress-2: #7c3aed;
+  --app-color-progress-3: #16a34a;
+}
+
+.legacy-preview-theme.dark {
+  color-scheme: dark;
+  --app-color-bg: #0a0a0a;
+  --app-color-bg-raised: #141414;
+  --app-color-bg-surface: #1a1a1a;
+  --app-color-bg-hover: #222222;
+  --app-color-bg-active: #2a2a2a;
+  --app-color-border: #2a2a2a;
+  --app-color-border-subtle: #1e1e1e;
+  --app-color-text-primary: #e5e5e5;
+  --app-color-text-secondary: #a3a3a3;
+  --app-color-text-muted: #737373;
+  --app-color-accent: #3b82f6;
+  --app-color-accent-hover: #2563eb;
+  --app-color-success: #22c55e;
+  --app-color-warning: #eab308;
+  --app-color-danger: #ef4444;
+  --app-color-progress-0: #525252;
+  --app-color-progress-1: #3b82f6;
+  --app-color-progress-2: #8b5cf6;
+  --app-color-progress-3: #22c55e;
+}
+
+.style-lab-theme {
+  color-scheme: light;
+  --style-lab-font-sans: 'Geist Variable', sans-serif;
+  --style-lab-font-heading: 'Geist Variable', sans-serif;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0 / 0.84);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0 / 0.92);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.967 0.001 286.375 / 0.82);
+  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.97 0 0 / 0.85);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0 / 0.88);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0 / 0.8);
+  --input: oklch(0.922 0 0 / 0.55);
+  --ring: oklch(0.708 0 0 / 0.38);
+  --chart-1: oklch(0.845 0.143 164.978);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.596 0.145 163.225);
+  --chart-4: oklch(0.508 0.118 165.612);
+  --chart-5: oklch(0.432 0.095 166.913);
+  --radius: 0.9rem;
+  --sidebar: oklch(0.985 0 0 / 0.8);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0 / 0.72);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0 / 0.82);
+  --sidebar-ring: oklch(0.708 0 0 / 0.38);
+}
+
+.style-lab-theme.dark {
+  color-scheme: dark;
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0 / 0.76);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0 / 0.9);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.274 0.006 286.033 / 0.84);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0 / 0.82);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0 / 0.86);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 0.1);
+  --input: oklch(1 0 0 / 0.12);
+  --ring: oklch(0.556 0 0 / 0.34);
+  --chart-1: oklch(0.845 0.143 164.978);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.596 0.145 163.225);
+  --chart-4: oklch(0.508 0.118 165.612);
+  --chart-5: oklch(0.432 0.095 166.913);
+  --sidebar: oklch(0.205 0 0 / 0.74);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.922 0 0);
+  --sidebar-primary-foreground: oklch(0.205 0 0);
+  --sidebar-accent: oklch(0.269 0 0 / 0.84);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 0.1);
+  --sidebar-ring: oklch(0.556 0 0 / 0.34);
+}
+
+.style-lab-theme,
+.style-lab-theme * {
+  font-family: var(--style-lab-font-sans);
+}
+
+.style-lab-frost {
+  backdrop-filter: blur(30px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.style-lab-hero {
+  background:
+    radial-gradient(circle at top left, oklch(0.845 0.143 164.978 / 0.18), transparent 28%),
+    radial-gradient(circle at top right, oklch(0.82 0 0 / 0.22), transparent 34%),
+    linear-gradient(180deg, oklch(1 0 0 / 0.08), transparent 42%);
+}
+
+.style-lab-theme.dark .style-lab-hero {
+  background:
+    radial-gradient(circle at top left, oklch(0.845 0.143 164.978 / 0.14), transparent 26%),
+    radial-gradient(circle at top right, oklch(0.84 0 0 / 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 40%);
+}
+
+.style-lab-beam {
+  background:
+    linear-gradient(90deg, transparent 8%, oklch(0.845 0.143 164.978 / 0.18) 28%, oklch(0.9 0 0 / 0.18) 58%, transparent 86%);
+  filter: blur(18px);
+  opacity: 0.72;
+}
+
+.style-lab-orb {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(80px);
+  opacity: 0.22;
+}
+
+.style-lab-orb-neutral {
+  top: 48px;
+  right: 48px;
+  height: 240px;
+  width: 240px;
+  background: oklch(0.86 0 0);
+}
+
+.style-lab-orb-prism {
+  left: 56px;
+  top: 120px;
+  height: 200px;
+  width: 200px;
+  background: linear-gradient(
+    135deg,
+    oklch(0.845 0.143 164.978),
+    oklch(0.715 0.143 215.221),
+    oklch(0.833 0.145 321.434)
+  );
+}
+
+.style-lab-panel {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 34%),
+    var(--color-card);
+  border: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 20px 60px -42px rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(24px);
+}
+
+.style-lab-native-button {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), transparent 46%),
+    color-mix(in srgb, var(--color-background) 86%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 16px 40px -28px rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(18px);
+}
+
+.style-lab-nav-row {
+  border: 1px solid transparent;
+  background: transparent;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.style-lab-nav-row:hover {
+  background: color-mix(in srgb, var(--color-sidebar-accent) 78%, transparent);
+  border-color: color-mix(in srgb, var(--color-sidebar-border) 76%, transparent);
+}
+
+.style-lab-nav-row-active {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 48%),
+    color-mix(in srgb, var(--color-primary) 14%, var(--color-sidebar));
+  border-color: color-mix(in srgb, var(--color-primary) 26%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 20px 40px -34px rgba(15, 23, 42, 0.5);
+}
+
+.style-lab-prism-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2rem;
+  width: 2rem;
+  border-radius: 999px;
+  background:
+    linear-gradient(135deg, oklch(0.845 0.143 164.978), oklch(0.715 0.143 215.221) 58%, oklch(0.833 0.145 321.434));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 12px 28px -16px rgba(255, 255, 255, 0.25);
+}
+
+.style-lab-prism-dot {
+  display: block;
+  height: 0.56rem;
+  width: 0.56rem;
+  border-radius: 999px;
+  background: white;
+  opacity: 0.92;
 }

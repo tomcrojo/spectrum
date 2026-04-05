@@ -4,6 +4,7 @@ export class BrowserCliError extends Error {
     this.name = "BrowserCliError";
     this.code = options.code ?? "BROWSER_CLI_ERROR";
     this.hints = Array.isArray(options.hints) ? options.hints : [];
+    this.status = Number.isInteger(options.status) ? options.status : undefined;
   }
 }
 

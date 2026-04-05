@@ -1,0 +1,3134 @@
+{
+  "generatedAt": "2026-04-04T23:48:04.767Z",
+  "system": {
+    "hostname": "MacBook-Air.home",
+    "platform": "darwin",
+    "arch": "arm64",
+    "osRelease": "25.4.0",
+    "node": "v24.13.0",
+    "totalMemoryGb": 16,
+    "cpuModel": "Apple M4",
+    "cpuCount": 10
+  },
+  "options": {
+    "mode": "electron",
+    "output": "",
+    "headless": true,
+    "runtimePowerMode": "high",
+    "skipBuild": false,
+    "scenario": {
+      "fillerProjectCount": 6,
+      "mediumWorkspaceCount": 4,
+      "largeWorkspaceCount": 8,
+      "panelsPerWorkspace": 3,
+      "mediumTaskCount": 24,
+      "largeTaskCount": 72
+    }
+  },
+  "runs": [
+    {
+      "mode": "electron",
+      "projectOpenRuns": [
+        {
+          "projectName": "Spectrum Benchmark Medium",
+          "projectOpenMs": 192,
+          "panelCount": 12,
+          "xtermCount": 4,
+          "iframeCount": 0,
+          "webviewCount": 1,
+          "counters": {}
+        },
+        {
+          "projectName": "Spectrum Benchmark Large",
+          "projectOpenMs": 258,
+          "panelCount": 24,
+          "xtermCount": 8,
+          "iframeCount": 0,
+          "webviewCount": 1,
+          "counters": {}
+        },
+        {
+          "projectName": "Spectrum Benchmark Medium",
+          "projectOpenMs": 209,
+          "panelCount": 12,
+          "xtermCount": 4,
+          "iframeCount": 0,
+          "webviewCount": 1,
+          "counters": {}
+        },
+        {
+          "projectName": "Spectrum Benchmark Large",
+          "projectOpenMs": 277,
+          "panelCount": 24,
+          "xtermCount": 8,
+          "iframeCount": 0,
+          "webviewCount": 1,
+          "counters": {}
+        }
+      ],
+      "averageProjectOpenMs": 234,
+      "medianProjectOpenMs": 233.5,
+      "largeProjectSnapshot": {
+        "projectName": "Spectrum Benchmark Large",
+        "projectOpenMs": 277,
+        "panelCount": 24,
+        "xtermCount": 8,
+        "iframeCount": 0,
+        "webviewCount": 1,
+        "counters": {}
+      },
+      "rendererMemory": {
+        "jsHeapSizeLimit": 3760000000,
+        "totalJSHeapSize": 131000000,
+        "usedJSHeapSize": 91700000
+      },
+      "issues": {
+        "pageErrors": [],
+        "consoleErrors": [],
+        "consoleWarnings": [
+          "Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}."
+        ]
+      },
+      "scenario": {
+        "interactionSummary": {
+          "timeline": [
+            {
+              "step": "open-large-start",
+              "at": 1775346502586
+            },
+            {
+              "step": "open-dashboard",
+              "at": 1775346504160
+            },
+            {
+              "step": "create-workspaces",
+              "at": 1775346504282
+            },
+            {
+              "step": "add-panels",
+              "at": 1775346507790
+            },
+            {
+              "step": "change-icon",
+              "at": 1775346523147
+            },
+            {
+              "step": "scroll-large",
+              "at": 1775346523359
+            },
+            {
+              "step": "create-project",
+              "at": 1775346537030
+            }
+          ],
+          "scrollSnapshots": {
+            "large": {
+              "left": 3997,
+              "top": 2388,
+              "maxLeft": 4357,
+              "maxTop": 6875
+            }
+          }
+        },
+        "probeSummary": {
+          "observerStatus": {
+            "eventTiming": "active",
+            "longTask": "active"
+          },
+          "frames": {
+            "frameCount": 2952,
+            "estimatedRefreshHz": 59.9,
+            "averageFps": 59.2,
+            "p95FrameTimeMs": 18.2,
+            "p99FrameTimeMs": 18.6,
+            "p99Fps": 53.8,
+            "longFramesOver50Ms": 10,
+            "droppedFramesOver2xRefresh": 12
+          },
+          "input": {
+            "observedEventCount": 143,
+            "inputDelayP95Ms": 1.6,
+            "inputDelayP99Ms": 2.06,
+            "keydownInputDelayP95Ms": 0.2,
+            "keydownInputDelayP99Ms": 0.47,
+            "inputToNextPaintP95Ms": 16,
+            "inputToNextPaintP99Ms": 16.85,
+            "keydownToNextPaintP95Ms": 16.3,
+            "keydownToNextPaintP99Ms": 16.89
+          },
+          "longTasks": {
+            "count": 2,
+            "totalDurationMs": 241,
+            "p95DurationMs": 127.25,
+            "p99DurationMs": 127.85,
+            "maxDurationMs": 128
+          }
+        },
+        "powerSummary": {
+          "sampleCount": 29,
+          "totalPower": {
+            "average": 13.36,
+            "p95": 38.32,
+            "max": 59.7
+          },
+          "totalCpu": {
+            "average": 11.06,
+            "p95": 37.29,
+            "max": 59.7
+          },
+          "totalIdleWakeupsPerSecond": {
+            "average": 74051379.52,
+            "p95": 353.2,
+            "max": 2147483817
+          },
+          "gpuProcess": {
+            "cpuAverage": 2.03,
+            "cpuMax": 11.3,
+            "powerAverage": 2.87,
+            "powerMax": 12.4
+          },
+          "samples": [
+            {
+              "capturedAt": "2026-04-04T23:48:24.100Z",
+              "totalPower": 59.7,
+              "totalCpu": 59.7,
+              "totalIdleWakeupsPerSecond": 0,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 27.3,
+                  "power": 27.3,
+                  "memory": "84M+",
+                  "command": "Electron",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 199
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 6.8,
+                  "power": 6.8,
+                  "memory": "403M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 109.2
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 1.4,
+                  "power": 1.4,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 49.3
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 24.2,
+                  "power": 24.2,
+                  "memory": "338M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 447.6
+                },
+                {
+                  "pid": 93683,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": null,
+                  "command": null,
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 80.8
+                },
+                {
+                  "pid": 93685,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": null,
+                  "command": null,
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 63.5
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:48:25.841Z",
+              "totalPower": 22.6,
+              "totalCpu": 22.1,
+              "totalIdleWakeupsPerSecond": 163,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 6.5,
+                  "power": 6.5,
+                  "memory": "85M+",
+                  "command": "Electron",
+                  "cpuPercent": 3.53,
+                  "idleWakeupsPerSecond": 43,
+                  "workingSetMiB": 199.4
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 1.1,
+                  "power": 1.3,
+                  "memory": "526M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 1.25,
+                  "idleWakeupsPerSecond": 93,
+                  "workingSetMiB": 115.6
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0.1,
+                  "power": 0.1,
+                  "memory": "14M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.18,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 49.3
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 14.2,
+                  "power": 14.3,
+                  "memory": "350M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 4.19,
+                  "idleWakeupsPerSecond": 27,
+                  "workingSetMiB": 471.9
+                },
+                {
+                  "pid": 93863,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": null,
+                  "command": null,
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 71.4
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0.2,
+                  "power": 0.4,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 0
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:48:27.567Z",
+              "totalPower": 17.3,
+              "totalCpu": 15.24,
+              "totalIdleWakeupsPerSecond": 2147483817,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 1,
+                  "power": 1.7,
+                  "memory": "86M",
+                  "command": "Electron",
+                  "cpuPercent": 0.77,
+                  "idleWakeupsPerSecond": 30,
+                  "workingSetMiB": 210.2
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 1.4,
+                  "power": 2.3,
+                  "memory": "694M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.96,
+                  "idleWakeupsPerSecond": 103,
+                  "workingSetMiB": 136.1
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0.04,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.04,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 49.8
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 12,
+                  "power": 12.4,
+                  "memory": "350M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 1.88,
+                  "idleWakeupsPerSecond": 37,
+                  "workingSetMiB": 478.6
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0.3,
+                  "power": 0.4,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 2147483647,
+                  "workingSetMiB": 44.7
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.5,
+                  "power": 0.5,
+                  "memory": "34M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 117.8
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:48:29.292Z",
+              "totalPower": 18.4,
+              "totalCpu": 15.91,
+              "totalIdleWakeupsPerSecond": 226,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 1.2,
+                  "power": 2.2,
+                  "memory": "86M-",
+                  "command": "Electron",
+                  "cpuPercent": 0.28,
+                  "idleWakeupsPerSecond": 84,
+                  "workingSetMiB": 210.3
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 1.2,
+                  "power": 2.2,
+                  "memory": "378M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.5,
+                  "idleWakeupsPerSecond": 95,
+                  "workingSetMiB": 138.6
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 49.9
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 12.7,
+                  "power": 12.9,
+                  "memory": "350M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 1.53,
+                  "idleWakeupsPerSecond": 31,
+                  "workingSetMiB": 478.6
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0.3,
+                  "power": 0.6,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.05,
+                  "idleWakeupsPerSecond": 15,
+                  "workingSetMiB": 44.7
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.5,
+                  "power": 0.5,
+                  "memory": "34M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.06,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 118
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:48:30.982Z",
+              "totalPower": 47.2,
+              "totalCpu": 45.4,
+              "totalIdleWakeupsPerSecond": 207,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 1.3,
+                  "power": 1.3,
+                  "memory": "84M-",
+                  "command": "Electron",
+                  "cpuPercent": 0.15,
+                  "idleWakeupsPerSecond": 77,
+                  "workingSetMiB": 210.2
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 11.3,
+                  "power": 12.4,
+                  "memory": "676M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.37,
+                  "idleWakeupsPerSecond": 77,
+                  "workingSetMiB": 136.2
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0.6,
+                  "power": 0.6,
+                  "memory": "14M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 49.9
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 8.6,
+                  "power": 8.9,
+                  "memory": "349M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 2.08,
+                  "idleWakeupsPerSecond": 21,
+                  "workingSetMiB": 478.4
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0.3,
+                  "power": 0.5,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.04,
+                  "idleWakeupsPerSecond": 16,
+                  "workingSetMiB": 44.7
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 23.3,
+                  "power": 23.5,
+                  "memory": "77M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.05,
+                  "idleWakeupsPerSecond": 16,
+                  "workingSetMiB": 118.2
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:48:32.782Z",
+              "totalPower": 7.7,
+              "totalCpu": 5.36,
+              "totalIdleWakeupsPerSecond": 210,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.3,
+                  "power": 0.4,
+                  "memory": "85M",
+                  "command": "Electron",
+                  "cpuPercent": 0.32,
+                  "idleWakeupsPerSecond": 23,
+                  "workingSetMiB": 200.3
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 1.6,
+                  "power": 2.8,
+                  "memory": "711M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 1.52,
+                  "idleWakeupsPerSecond": 117,
+                  "workingSetMiB": 147.2
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0.06,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.06,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 50.4
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 3,
+                  "power": 3.4,
+                  "memory": "353M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 2.32,
+                  "idleWakeupsPerSecond": 26,
+                  "workingSetMiB": 455.5
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0.3,
+                  "power": 0.6,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.04,
+                  "idleWakeupsPerSecond": 15,
+                  "workingSetMiB": 34.2
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.1,
+                  "power": 0.4,
+                  "memory": "78M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 2.19,
+                  "idleWakeupsPerSecond": 28,
+                  "workingSetMiB": 177.1
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0,
+                  "power": 0.1,
+                  "memory": "21M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 79
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:48:34.509Z",
+              "totalPower": 7.9,
+              "totalCpu": 5.93,
+              "totalIdleWakeupsPerSecond": 184,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.1,
+                  "power": 0.1,
+                  "memory": "85M+",
+                  "command": "Electron",
+                  "cpuPercent": 0.07,
+                  "idleWakeupsPerSecond": 6,
+                  "workingSetMiB": 195.4
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 1.7,
+                  "power": 2.9,
+                  "memory": "717M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.57,
+                  "idleWakeupsPerSecond": 110,
+                  "workingSetMiB": 141.6
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 50.3
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 3.8,
+                  "power": 4.3,
+                  "memory": "352M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.78,
+                  "idleWakeupsPerSecond": 41,
+                  "workingSetMiB": 454.7
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0.3,
+                  "power": 0.5,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.04,
+                  "idleWakeupsPerSecond": 14,
+                  "workingSetMiB": 34.1
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.02,
+                  "power": 0.1,
+                  "memory": "77M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.02,
+                  "idleWakeupsPerSecond": 13,
+                  "workingSetMiB": 167.3
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 79.2
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:48:36.224Z",
+              "totalPower": 7.6,
+              "totalCpu": 5.81,
+              "totalIdleWakeupsPerSecond": 177,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.4,
+                  "power": 0.4,
+                  "memory": "85M",
+                  "command": "Electron",
+                  "cpuPercent": 0.17,
+                  "idleWakeupsPerSecond": 8,
+                  "workingSetMiB": 195.9
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 2.3,
+                  "power": 3,
+                  "memory": "638M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.42,
+                  "idleWakeupsPerSecond": 118,
+                  "workingSetMiB": 134.2
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 50.5
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 2.4,
+                  "power": 2.9,
+                  "memory": "353M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 1.72,
+                  "idleWakeupsPerSecond": 34,
+                  "workingSetMiB": 456
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0.3,
+                  "power": 0.6,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.04,
+                  "idleWakeupsPerSecond": 14,
+                  "workingSetMiB": 34.1
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.4,
+                  "power": 0.6,
+                  "memory": "70M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.02,
+                  "idleWakeupsPerSecond": 3,
+                  "workingSetMiB": 167.3
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 79.2
+                },
+                {
+                  "pid": 94938,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0,
+                  "power": 0.1,
+                  "memory": "21M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 78.9
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:48:37.968Z",
+              "totalPower": 5.5,
+              "totalCpu": 3.43,
+              "totalIdleWakeupsPerSecond": 148,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.07,
+                  "power": 0,
+                  "memory": "85M",
+                  "command": "Electron",
+                  "cpuPercent": 0.07,
+                  "idleWakeupsPerSecond": 5,
+                  "workingSetMiB": 196.1
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 0.8,
+                  "power": 1.8,
+                  "memory": "513M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.46,
+                  "idleWakeupsPerSecond": 85,
+                  "workingSetMiB": 135.5
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 50.5
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 2.2,
+                  "power": 3,
+                  "memory": "353M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.61,
+                  "idleWakeupsPerSecond": 32,
+                  "workingSetMiB": 455.3
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0.3,
+                  "power": 0.7,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.04,
+                  "idleWakeupsPerSecond": 15,
+                  "workingSetMiB": 34.1
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.04,
+                  "power": 0,
+                  "memory": "70M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.04,
+                  "idleWakeupsPerSecond": 9,
+                  "workingSetMiB": 164.2
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 2,
+                  "workingSetMiB": 79.2
+                },
+                {
+                  "pid": 94938,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 79
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:48:39.693Z",
+              "totalPower": 5.8,
+              "totalCpu": 4.12,
+              "totalIdleWakeupsPerSecond": 129,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.3,
+                  "power": 0.3,
+                  "memory": "85M",
+                  "command": "Electron",
+                  "cpuPercent": 0.12,
+                  "idleWakeupsPerSecond": 3,
+                  "workingSetMiB": 196.2
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 1,
+                  "power": 1.6,
+                  "memory": "510M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.4,
+                  "idleWakeupsPerSecond": 81,
+                  "workingSetMiB": 133.8
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 50.5
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 2.5,
+                  "power": 3.2,
+                  "memory": "354M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.87,
+                  "idleWakeupsPerSecond": 29,
+                  "workingSetMiB": 457.3
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0.3,
+                  "power": 0.6,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.04,
+                  "idleWakeupsPerSecond": 14,
+                  "workingSetMiB": 34.1
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "70M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 164.2
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 79.1
+                },
+                {
+                  "pid": 95068,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0,
+                  "power": 0.1,
+                  "memory": "21M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 78.8
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:48:41.409Z",
+              "totalPower": 4.7,
+              "totalCpu": 3.39,
+              "totalIdleWakeupsPerSecond": 151,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.07,
+                  "power": 0,
+                  "memory": "85M",
+                  "command": "Electron",
+                  "cpuPercent": 0.07,
+                  "idleWakeupsPerSecond": 5,
+                  "workingSetMiB": 196.2
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 1,
+                  "power": 1.7,
+                  "memory": "429M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.36,
+                  "idleWakeupsPerSecond": 86,
+                  "workingSetMiB": 135.8
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 50.5
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 2,
+                  "power": 2.4,
+                  "memory": "352M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 1.24,
+                  "idleWakeupsPerSecond": 40,
+                  "workingSetMiB": 457.4
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0.3,
+                  "power": 0.6,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.04,
+                  "idleWakeupsPerSecond": 15,
+                  "workingSetMiB": 34.1
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "70M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 2,
+                  "workingSetMiB": 164.2
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 3,
+                  "workingSetMiB": 79.1
+                },
+                {
+                  "pid": 95068,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 78.8
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:48:43.147Z",
+              "totalPower": 10,
+              "totalCpu": 7.59,
+              "totalIdleWakeupsPerSecond": 141,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.2,
+                  "power": 0.2,
+                  "memory": "86M+",
+                  "command": "Electron",
+                  "cpuPercent": 0.24,
+                  "idleWakeupsPerSecond": 7,
+                  "workingSetMiB": 198
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 1.7,
+                  "power": 2.9,
+                  "memory": "547M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.45,
+                  "idleWakeupsPerSecond": 89,
+                  "workingSetMiB": 134.3
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0.07,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.07,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 50.7
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 2.4,
+                  "power": 2.8,
+                  "memory": "351M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.81,
+                  "idleWakeupsPerSecond": 25,
+                  "workingSetMiB": 456.9
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0.3,
+                  "power": 0.6,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.04,
+                  "idleWakeupsPerSecond": 15,
+                  "workingSetMiB": 34.1
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 2.9,
+                  "power": 3.4,
+                  "memory": "87M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.95,
+                  "idleWakeupsPerSecond": 4,
+                  "workingSetMiB": 185.7
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 79.1
+                },
+                {
+                  "pid": 95068,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0.1,
+                  "memory": "21M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 78.8
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:48:44.854Z",
+              "totalPower": 6.1,
+              "totalCpu": 6.53,
+              "totalIdleWakeupsPerSecond": 198,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.3,
+                  "power": 0.3,
+                  "memory": "86M+",
+                  "command": "Electron",
+                  "cpuPercent": 0.13,
+                  "idleWakeupsPerSecond": 6,
+                  "workingSetMiB": 198
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 2.5,
+                  "power": 2.5,
+                  "memory": "408M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.79,
+                  "idleWakeupsPerSecond": 113,
+                  "workingSetMiB": 142.8
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 50.7
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 3,
+                  "power": 3,
+                  "memory": "358M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 1.8,
+                  "idleWakeupsPerSecond": 31,
+                  "workingSetMiB": 464
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0.3,
+                  "power": 0.3,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.04,
+                  "idleWakeupsPerSecond": 14,
+                  "workingSetMiB": 34.1
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.41,
+                  "power": 0,
+                  "memory": "87M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.41,
+                  "idleWakeupsPerSecond": 29,
+                  "workingSetMiB": 186.2
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 79.1
+                },
+                {
+                  "pid": 95068,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 4,
+                  "workingSetMiB": 78.8
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:48:46.552Z",
+              "totalPower": 6.7,
+              "totalCpu": 6.72,
+              "totalIdleWakeupsPerSecond": 148,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.2,
+                  "power": 0.2,
+                  "memory": "86M+",
+                  "command": "Electron",
+                  "cpuPercent": 0.06,
+                  "idleWakeupsPerSecond": 6,
+                  "workingSetMiB": 181.5
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 1.4,
+                  "power": 1.4,
+                  "memory": "439M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.39,
+                  "idleWakeupsPerSecond": 81,
+                  "workingSetMiB": 129.4
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 50.4
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 2.9,
+                  "power": 2.9,
+                  "memory": "358M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.38,
+                  "idleWakeupsPerSecond": 29,
+                  "workingSetMiB": 392.2
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0.3,
+                  "power": 0.3,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.04,
+                  "idleWakeupsPerSecond": 15,
+                  "workingSetMiB": 32.5
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 1.9,
+                  "power": 1.9,
+                  "memory": "87M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.04,
+                  "idleWakeupsPerSecond": 13,
+                  "workingSetMiB": 171.4
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 2,
+                  "workingSetMiB": 79.1
+                },
+                {
+                  "pid": 95068,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 2,
+                  "workingSetMiB": 78.9
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:48:48.418Z",
+              "totalPower": 3.8,
+              "totalCpu": 3.88,
+              "totalIdleWakeupsPerSecond": 152,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.06,
+                  "power": 0,
+                  "memory": "86M",
+                  "command": "Electron",
+                  "cpuPercent": 0.06,
+                  "idleWakeupsPerSecond": 8,
+                  "workingSetMiB": 158.4
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 0.8,
+                  "power": 0.8,
+                  "memory": "425M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.25,
+                  "idleWakeupsPerSecond": 86,
+                  "workingSetMiB": 115.1
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 38.2
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 1.6,
+                  "power": 1.6,
+                  "memory": "358M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.37,
+                  "idleWakeupsPerSecond": 26,
+                  "workingSetMiB": 381.4
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0.3,
+                  "power": 0.3,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.04,
+                  "idleWakeupsPerSecond": 15,
+                  "workingSetMiB": 32.5
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 1.1,
+                  "power": 1.1,
+                  "memory": "87M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.18,
+                  "idleWakeupsPerSecond": 14,
+                  "workingSetMiB": 171.2
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 71.2
+                },
+                {
+                  "pid": 95068,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 2,
+                  "workingSetMiB": 78.9
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:48:50.115Z",
+              "totalPower": 5.1,
+              "totalCpu": 5.12,
+              "totalIdleWakeupsPerSecond": 150,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.2,
+                  "power": 0.2,
+                  "memory": "86M",
+                  "command": "Electron",
+                  "cpuPercent": 0.03,
+                  "idleWakeupsPerSecond": 2,
+                  "workingSetMiB": 153.7
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 1,
+                  "power": 1,
+                  "memory": "316M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.22,
+                  "idleWakeupsPerSecond": 85,
+                  "workingSetMiB": 114.1
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 38.2
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 3.4,
+                  "power": 3.4,
+                  "memory": "356M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.84,
+                  "idleWakeupsPerSecond": 28,
+                  "workingSetMiB": 381.7
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0.4,
+                  "power": 0.4,
+                  "memory": "14M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.04,
+                  "idleWakeupsPerSecond": 15,
+                  "workingSetMiB": 32.5
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.1,
+                  "power": 0.1,
+                  "memory": "87M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.13,
+                  "idleWakeupsPerSecond": 16,
+                  "workingSetMiB": 171.2
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 70.3
+                },
+                {
+                  "pid": 95068,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 3,
+                  "workingSetMiB": 78.9
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:48:51.871Z",
+              "totalPower": 6.5,
+              "totalCpu": 6.52,
+              "totalIdleWakeupsPerSecond": 146,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.3,
+                  "power": 0.3,
+                  "memory": "86M",
+                  "command": "Electron",
+                  "cpuPercent": 0.06,
+                  "idleWakeupsPerSecond": 7,
+                  "workingSetMiB": 153.9
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 1.6,
+                  "power": 1.6,
+                  "memory": "328M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.21,
+                  "idleWakeupsPerSecond": 84,
+                  "workingSetMiB": 114.2
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "15M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 38.4
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 4.2,
+                  "power": 4.2,
+                  "memory": "356M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.41,
+                  "idleWakeupsPerSecond": 33,
+                  "workingSetMiB": 382.5
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0.3,
+                  "power": 0.3,
+                  "memory": "14M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.04,
+                  "idleWakeupsPerSecond": 15,
+                  "workingSetMiB": 32.7
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.1,
+                  "power": 0.1,
+                  "memory": "87M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.02,
+                  "idleWakeupsPerSecond": 3,
+                  "workingSetMiB": 171.2
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 70.3
+                },
+                {
+                  "pid": 95068,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 2,
+                  "workingSetMiB": 78.9
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:48:53.589Z",
+              "totalPower": 5.4,
+              "totalCpu": 5.32,
+              "totalIdleWakeupsPerSecond": 160,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.4,
+                  "power": 0.5,
+                  "memory": "86M",
+                  "command": "Electron",
+                  "cpuPercent": 0.08,
+                  "idleWakeupsPerSecond": 24,
+                  "workingSetMiB": 153.4
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 1.2,
+                  "power": 1.2,
+                  "memory": "289M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.23,
+                  "idleWakeupsPerSecond": 83,
+                  "workingSetMiB": 110.3
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "15M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 38.8
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 3.2,
+                  "power": 3.2,
+                  "memory": "355M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.54,
+                  "idleWakeupsPerSecond": 27,
+                  "workingSetMiB": 377
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0.4,
+                  "power": 0.4,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.04,
+                  "idleWakeupsPerSecond": 15,
+                  "workingSetMiB": 32.8
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.1,
+                  "power": 0.1,
+                  "memory": "87M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.03,
+                  "idleWakeupsPerSecond": 6,
+                  "workingSetMiB": 156
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 2,
+                  "workingSetMiB": 67.8
+                },
+                {
+                  "pid": 95068,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 2,
+                  "workingSetMiB": 67.7
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:48:55.323Z",
+              "totalPower": 4.8,
+              "totalCpu": 4.82,
+              "totalIdleWakeupsPerSecond": 180,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.3,
+                  "power": 0.3,
+                  "memory": "86M",
+                  "command": "Electron",
+                  "cpuPercent": 0.09,
+                  "idleWakeupsPerSecond": 51,
+                  "workingSetMiB": 153.5
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 0.9,
+                  "power": 0.9,
+                  "memory": "278M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.21,
+                  "idleWakeupsPerSecond": 84,
+                  "workingSetMiB": 110.2
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "15M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 38.8
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 3.3,
+                  "power": 3.3,
+                  "memory": "355M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.42,
+                  "idleWakeupsPerSecond": 24,
+                  "workingSetMiB": 376.8
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0.2,
+                  "power": 0.2,
+                  "memory": "14M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.04,
+                  "idleWakeupsPerSecond": 15,
+                  "workingSetMiB": 32.8
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.1,
+                  "power": 0.1,
+                  "memory": "88M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.02,
+                  "idleWakeupsPerSecond": 3,
+                  "workingSetMiB": 156
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 67.8
+                },
+                {
+                  "pid": 95068,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 2,
+                  "workingSetMiB": 67.7
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:48:57.025Z",
+              "totalPower": 25,
+              "totalCpu": 25.12,
+              "totalIdleWakeupsPerSecond": 265,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.07,
+                  "power": 0,
+                  "memory": "86M-",
+                  "command": "Electron",
+                  "cpuPercent": 0.07,
+                  "idleWakeupsPerSecond": 20,
+                  "workingSetMiB": 153.6
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 0.8,
+                  "power": 0.8,
+                  "memory": "236M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.16,
+                  "idleWakeupsPerSecond": 84,
+                  "workingSetMiB": 110.2
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 38.9
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 13.9,
+                  "power": 13.9,
+                  "memory": "243M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.4,
+                  "idleWakeupsPerSecond": 149,
+                  "workingSetMiB": 377
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0.02,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.02,
+                  "idleWakeupsPerSecond": 8,
+                  "workingSetMiB": 32.9
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 10.3,
+                  "power": 10.3,
+                  "memory": "74M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.02,
+                  "idleWakeupsPerSecond": 2,
+                  "workingSetMiB": 156.1
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 67.8
+                },
+                {
+                  "pid": 95068,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 67.7
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:48:58.764Z",
+              "totalPower": 11.1,
+              "totalCpu": 6.57,
+              "totalIdleWakeupsPerSecond": 304,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.12,
+                  "power": 0.1,
+                  "memory": "86M",
+                  "command": "Electron",
+                  "cpuPercent": 0.12,
+                  "idleWakeupsPerSecond": 6,
+                  "workingSetMiB": 155.1
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 2.1,
+                  "power": 3.7,
+                  "memory": "504M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.43,
+                  "idleWakeupsPerSecond": 81,
+                  "workingSetMiB": 118.2
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 38.9
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 3.5,
+                  "power": 7.3,
+                  "memory": "251M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 2.78,
+                  "idleWakeupsPerSecond": 207,
+                  "workingSetMiB": 296.8
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 32.9
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.85,
+                  "power": 0,
+                  "memory": "74M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.85,
+                  "idleWakeupsPerSecond": 6,
+                  "workingSetMiB": 146.3
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 2,
+                  "workingSetMiB": 67.8
+                },
+                {
+                  "pid": 95068,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 67.7
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:49:00.482Z",
+              "totalPower": 11.1,
+              "totalCpu": 6.21,
+              "totalIdleWakeupsPerSecond": 336,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.3,
+                  "power": 0.3,
+                  "memory": "86M",
+                  "command": "Electron",
+                  "cpuPercent": 0.27,
+                  "idleWakeupsPerSecond": 4,
+                  "workingSetMiB": 156.9
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 1.9,
+                  "power": 3.4,
+                  "memory": "504M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.38,
+                  "idleWakeupsPerSecond": 112,
+                  "workingSetMiB": 117.1
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 38.9
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 4,
+                  "power": 7.3,
+                  "memory": "251M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.55,
+                  "idleWakeupsPerSecond": 219,
+                  "workingSetMiB": 297.5
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0,
+                  "power": 0.1,
+                  "memory": "14M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 32.9
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "74M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 146.3
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 67.8
+                },
+                {
+                  "pid": 95068,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 67.7
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:49:02.203Z",
+              "totalPower": 10.8,
+              "totalCpu": 7.52,
+              "totalIdleWakeupsPerSecond": 343,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.3,
+                  "power": 0.4,
+                  "memory": "86M",
+                  "command": "Electron",
+                  "cpuPercent": 0.28,
+                  "idleWakeupsPerSecond": 15,
+                  "workingSetMiB": 157.1
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 2.1,
+                  "power": 2.9,
+                  "memory": "507M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.36,
+                  "idleWakeupsPerSecond": 110,
+                  "workingSetMiB": 117.9
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "14M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 38.9
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 4.1,
+                  "power": 6.5,
+                  "memory": "252M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.58,
+                  "idleWakeupsPerSecond": 216,
+                  "workingSetMiB": 294.4
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 33.1
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "74M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 145
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 1,
+                  "power": 1,
+                  "memory": "22M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 67.8
+                },
+                {
+                  "pid": 95068,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 67.7
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:49:03.878Z",
+              "totalPower": 3.6,
+              "totalCpu": 3.18,
+              "totalIdleWakeupsPerSecond": 358,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.37,
+                  "power": 0,
+                  "memory": "87M+",
+                  "command": "Electron",
+                  "cpuPercent": 0.37,
+                  "idleWakeupsPerSecond": 20,
+                  "workingSetMiB": 157.4
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 1,
+                  "power": 1.4,
+                  "memory": "467M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.56,
+                  "idleWakeupsPerSecond": 113,
+                  "workingSetMiB": 116.7
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 39
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 1.7,
+                  "power": 2.2,
+                  "memory": "253M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.74,
+                  "idleWakeupsPerSecond": 221,
+                  "workingSetMiB": 295.2
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 33.1
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.02,
+                  "power": 0,
+                  "memory": "74M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.02,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 145.2
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.08,
+                  "power": 0,
+                  "memory": "22M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.08,
+                  "idleWakeupsPerSecond": 2,
+                  "workingSetMiB": 70.6
+                },
+                {
+                  "pid": 95068,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 67.7
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:49:05.550Z",
+              "totalPower": 24.2,
+              "totalCpu": 16.82,
+              "totalIdleWakeupsPerSecond": 340,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.3,
+                  "power": 0.4,
+                  "memory": "87M",
+                  "command": "Electron",
+                  "cpuPercent": 0.35,
+                  "idleWakeupsPerSecond": 15,
+                  "workingSetMiB": 158.2
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 2.3,
+                  "power": 4.8,
+                  "memory": "469M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.41,
+                  "idleWakeupsPerSecond": 108,
+                  "workingSetMiB": 118.1
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 39
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 14.2,
+                  "power": 19,
+                  "memory": "243M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.52,
+                  "idleWakeupsPerSecond": 216,
+                  "workingSetMiB": 296.6
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 33.1
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.02,
+                  "power": 0,
+                  "memory": "74M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.02,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 145.4
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "22M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 70.6
+                },
+                {
+                  "pid": 95068,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 67.7
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:49:07.254Z",
+              "totalPower": 12.4,
+              "totalCpu": 5.71,
+              "totalIdleWakeupsPerSecond": 346,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.2,
+                  "power": 0.2,
+                  "memory": "87M+",
+                  "command": "Electron",
+                  "cpuPercent": 0.31,
+                  "idleWakeupsPerSecond": 16,
+                  "workingSetMiB": 158.6
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 2.1,
+                  "power": 4.1,
+                  "memory": "425M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.4,
+                  "idleWakeupsPerSecond": 110,
+                  "workingSetMiB": 117.1
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 39
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 3.4,
+                  "power": 8.1,
+                  "memory": "243M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 1.45,
+                  "idleWakeupsPerSecond": 219,
+                  "workingSetMiB": 291.8
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 33.1
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "74M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 145.4
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "22M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 70.6
+                },
+                {
+                  "pid": 95068,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "21M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 67.7
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:49:08.959Z",
+              "totalPower": 13.5,
+              "totalCpu": 6.61,
+              "totalIdleWakeupsPerSecond": 341,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.2,
+                  "power": 0.4,
+                  "memory": "87M",
+                  "command": "Electron",
+                  "cpuPercent": 0.31,
+                  "idleWakeupsPerSecond": 12,
+                  "workingSetMiB": 159.7
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 1.9,
+                  "power": 3.8,
+                  "memory": "429M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.42,
+                  "idleWakeupsPerSecond": 107,
+                  "workingSetMiB": 117
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 39
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 3.3,
+                  "power": 8.1,
+                  "memory": "244M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.56,
+                  "idleWakeupsPerSecond": 221,
+                  "workingSetMiB": 292.7
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 33.1
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "74M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 145.4
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "22M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 70.6
+                },
+                {
+                  "pid": 95068,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 1.2,
+                  "power": 1.2,
+                  "memory": "22M+",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 67.7
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:49:10.624Z",
+              "totalPower": 10.5,
+              "totalCpu": 4.91,
+              "totalIdleWakeupsPerSecond": 341,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.2,
+                  "power": 0.5,
+                  "memory": "87M",
+                  "command": "Electron",
+                  "cpuPercent": 0.32,
+                  "idleWakeupsPerSecond": 13,
+                  "workingSetMiB": 160
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 1.7,
+                  "power": 3.3,
+                  "memory": "353M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.4,
+                  "idleWakeupsPerSecond": 107,
+                  "workingSetMiB": 117
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 39
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 2.9,
+                  "power": 6.7,
+                  "memory": "245M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.56,
+                  "idleWakeupsPerSecond": 218,
+                  "workingSetMiB": 293.2
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 33.1
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "74M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 145.4
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "22M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 70.6
+                },
+                {
+                  "pid": 95068,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.1,
+                  "power": 0,
+                  "memory": "22M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.1,
+                  "idleWakeupsPerSecond": 2,
+                  "workingSetMiB": 70.5
+                }
+              ]
+            },
+            {
+              "capturedAt": "2026-04-04T23:49:12.330Z",
+              "totalPower": 12.5,
+              "totalCpu": 5.31,
+              "totalIdleWakeupsPerSecond": 345,
+              "processes": [
+                {
+                  "pid": 93295,
+                  "type": "Browser",
+                  "serviceName": null,
+                  "cpu": 0.2,
+                  "power": 0.3,
+                  "memory": "87M",
+                  "command": "Electron",
+                  "cpuPercent": 0.3,
+                  "idleWakeupsPerSecond": 16,
+                  "workingSetMiB": 160.3
+                },
+                {
+                  "pid": 93296,
+                  "type": "GPU",
+                  "serviceName": "GPU",
+                  "cpu": 1.8,
+                  "power": 4,
+                  "memory": "418M-",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.38,
+                  "idleWakeupsPerSecond": 108,
+                  "workingSetMiB": 117.1
+                },
+                {
+                  "pid": 93297,
+                  "type": "Utility",
+                  "serviceName": "network.mojom.NetworkService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 39
+                },
+                {
+                  "pid": 93298,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 3.3,
+                  "power": 8.2,
+                  "memory": "245M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.54,
+                  "idleWakeupsPerSecond": 220,
+                  "workingSetMiB": 293.9
+                },
+                {
+                  "pid": 93864,
+                  "type": "Utility",
+                  "serviceName": "audio.mojom.AudioService",
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "14M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 33.1
+                },
+                {
+                  "pid": 94056,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0.01,
+                  "power": 0,
+                  "memory": "74M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0.01,
+                  "idleWakeupsPerSecond": 1,
+                  "workingSetMiB": 145.4
+                },
+                {
+                  "pid": 94586,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "22M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 70.6
+                },
+                {
+                  "pid": 95068,
+                  "type": "Tab",
+                  "serviceName": null,
+                  "cpu": 0,
+                  "power": 0,
+                  "memory": "22M",
+                  "command": "Electron Helper",
+                  "cpuPercent": 0,
+                  "idleWakeupsPerSecond": 0,
+                  "workingSetMiB": 70.5
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "extraMetrics": {
+        "electronAppMetrics": {
+          "totalWorkingSetMiB": 802.6,
+          "totalCpuPercent": 2.2,
+          "totalIdleWakeupsPerSecond": 350,
+          "processes": [
+            {
+              "type": "Browser",
+              "serviceName": null,
+              "pid": 93295,
+              "cpuPercent": 0.15,
+              "idleWakeupsPerSecond": 20,
+              "workingSetMiB": 160.9,
+              "privateMiB": null
+            },
+            {
+              "type": "GPU",
+              "serviceName": "GPU",
+              "pid": 93296,
+              "cpuPercent": 0.59,
+              "idleWakeupsPerSecond": 107,
+              "workingSetMiB": 117.6,
+              "privateMiB": null
+            },
+            {
+              "type": "Utility",
+              "serviceName": "network.mojom.NetworkService",
+              "pid": 93297,
+              "cpuPercent": 0.01,
+              "idleWakeupsPerSecond": 0,
+              "workingSetMiB": 39,
+              "privateMiB": null
+            },
+            {
+              "type": "Tab",
+              "serviceName": null,
+              "pid": 93298,
+              "cpuPercent": 1.42,
+              "idleWakeupsPerSecond": 222,
+              "workingSetMiB": 306.2,
+              "privateMiB": null
+            },
+            {
+              "type": "Utility",
+              "serviceName": "audio.mojom.AudioService",
+              "pid": 93864,
+              "cpuPercent": 0,
+              "idleWakeupsPerSecond": 0,
+              "workingSetMiB": 33.1,
+              "privateMiB": null
+            },
+            {
+              "type": "Tab",
+              "serviceName": null,
+              "pid": 94056,
+              "cpuPercent": 0.03,
+              "idleWakeupsPerSecond": 1,
+              "workingSetMiB": 145.8,
+              "privateMiB": null
+            }
+          ]
+        }
+      },
+      "coldStartMs": 4339,
+      "tempHome": "/var/folders/bb/4jkzmx8s2g9c6hyl1bp72dtw0000gp/T/spectrum-benchmark-electron-oc8CjB",
+      "dbPath": "/var/folders/bb/4jkzmx8s2g9c6hyl1bp72dtw0000gp/T/spectrum-benchmark-electron-oc8CjB/Library/Application Support/spectrum/spectrum.db"
+    }
+  ]
+}
