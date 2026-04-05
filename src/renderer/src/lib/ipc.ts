@@ -220,6 +220,8 @@ export const browserApi = {
     workspaceId: string
     projectId: string
     webContentsId: number
+    url?: string
+    panelTitle?: string
   }) => invoke<boolean>(BROWSER_CHANNELS.WEBVIEW_READY, input),
   webviewDestroyed: (input: {
     panelId?: string

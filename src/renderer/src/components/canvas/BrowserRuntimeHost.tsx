@@ -508,7 +508,9 @@ export function BrowserRuntimeHost({ hostEnabled }: BrowserRuntimeHostProps) {
               panelId: panel.panelId,
               workspaceId: panel.workspaceId,
               projectId: activeProjectId,
-              webContentsId
+              webContentsId,
+              url: runtimeUrlByPanelIdRef.current.get(panel.panelId) ?? normalizedUrl,
+              panelTitle: panel.panelTitle
             })
             .catch(() => {})
         }

@@ -20,6 +20,7 @@ interface BrowserPanelProps {
   panelId: string
   workspaceId: string
   projectId: string
+  panelTitle?: string
   initialUrl?: string
   autoFocus: boolean
   isResizing: boolean
@@ -44,6 +45,7 @@ export function BrowserPanel({
   panelId,
   workspaceId,
   projectId,
+  panelTitle,
   initialUrl,
   autoFocus,
   isResizing,
@@ -233,7 +235,9 @@ export function BrowserPanel({
           panelId,
           workspaceId,
           projectId,
-          webContentsId
+          webContentsId,
+          url: currentUrl,
+          panelTitle
         })
         .catch(() => {})
     }
@@ -297,6 +301,7 @@ export function BrowserPanel({
     hydrationState,
     isElectron,
     panelId,
+    panelTitle,
     projectId,
     updatePanelLayout,
     workspaceId

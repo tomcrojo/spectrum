@@ -31,6 +31,8 @@ interface WebviewReadyPayload {
   workspaceId: string
   projectId: string
   webContentsId: number
+  url?: string
+  panelTitle?: string
 }
 
 interface WebviewDestroyedPayload {
@@ -68,7 +70,9 @@ export function registerBrowserHandlers(): void {
       ensureBrowserPanelState({
         panelId: payload.panelId,
         workspaceId: payload.workspaceId,
-        projectId: payload.projectId
+        projectId: payload.projectId,
+        url: payload.url,
+        panelTitle: payload.panelTitle
       })
     if (panel.workspaceId !== payload.workspaceId || panel.projectId !== payload.projectId) {
       throw new Error('Webview registration does not match panel scope')

@@ -501,6 +501,7 @@ function WorkspacePanelImpl({
               panelId={panelId}
               workspaceId={workspaceId}
               projectId={projectId}
+              panelTitle={panelTitle}
               initialUrl={initialUrl}
               autoFocus={isFocused}
               isResizing={isResizing}
