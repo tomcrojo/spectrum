@@ -9,6 +9,21 @@ import { getProjectThemeStyle } from '@renderer/lib/project-colors'
 import { DEFAULT_PROJECT_COLOR, type Project, type ProjectColor } from '@shared/project.types'
 import { projectsApi } from '@renderer/lib/ipc'
 
+const placeholderSections = [
+  {
+    title: 'Variables & Secrets',
+    description: 'Project-scoped runtime variables will land here once secrets management is wired.'
+  },
+  {
+    title: 'Decisions',
+    description: 'Architecture notes and tradeoffs will become the long-term memory for each project.'
+  },
+  {
+    title: 'Notes',
+    description: 'Freeform notes will sit alongside decisions, separate from the chat and canvas.'
+  }
+] as const
+
 export function ProjectPage() {
   const { activeProjectId, showProjectPage, setShowProjectPage } = useUiStore()
   const [project, setProject] = useState<Project | null>(null)
@@ -77,55 +92,34 @@ export function ProjectPage() {
             onColorChange={handleColorChange}
           />
 
-          <div className="space-y-4">
-            {/* Workspace card — elevated treatment */}
-            <section className="project-theme-card rounded-xl px-3.5 py-3.5">
+          <div className="mt-6">
+            <section className="project-theme-card rounded-xl px-3.5 py-3.5 mb-5">
               <WorkspaceList projectId={project.id} />
             </section>
 
-            {/* Tasks — full card treatment */}
-            <section className="project-theme-card rounded-xl px-3.5 py-3.5">
+            <section className="border-t border-border/40 py-5">
               <TaskList projectId={project.id} />
             </section>
 
-            {/* Future sections — grouped in a muted card */}
-            <section className="project-theme-card rounded-xl px-3.5 py-3.5 opacity-60">
-              <div className="space-y-4">
-                <div>
-                  <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">
-                    Variables & Secrets
-                  </h3>
-                  <p className="text-[12px] leading-relaxed text-text-muted">
-                    Project-scoped runtime variables will land here once secrets management is wired.
-                  </p>
-                </div>
-
-                <div className="h-px bg-border/40" />
-
-                <div>
-                  <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">
-                    Decisions
-                  </h3>
-                  <p className="text-[12px] leading-relaxed text-text-muted">
-                    Architecture notes and tradeoffs will become the long-term memory for each project.
-                  </p>
-                </div>
-
-                <div className="h-px bg-border/40" />
-
-                <div>
-                  <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">
-                    Notes
-                  </h3>
-                  <p className="text-[12px] leading-relaxed text-text-muted">
-                    Freeform notes will sit alongside decisions, separate from the chat and canvas.
-                  </p>
-                </div>
+            <section className="border-t border-border/40 py-5 opacity-65">
+              <div className="space-y-0">
+                {placeholderSections.map((section, index) => (
+                  <div
+                    key={section.title}
+                    className={index === 0 ? '' : 'border-t border-border/30 pt-4 mt-4'}
+                  >
+                    <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                      {section.title}
+                    </h3>
+                    <p className="max-w-[34ch] text-[12px] leading-relaxed text-text-muted">
+                      {section.description}
+                    </p>
+                  </div>
+                ))}
               </div>
             </section>
 
-            {/* Danger zone */}
-            <section className="px-1.5 pt-2">
+            <section className="border-t border-border/40 pt-5">
               <ProjectDangerZone project={project} />
             </section>
           </div>

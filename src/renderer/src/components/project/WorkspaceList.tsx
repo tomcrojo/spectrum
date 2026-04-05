@@ -524,12 +524,13 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
     )
   }
 
-  const renderSectionHeader = (title: string, copy: string) => (
-    <div className="mb-3 flex items-start justify-between gap-3">
-      <div className="flex items-center gap-2">
+  const renderSectionHeader = (title: string, copy: string, action?: ReactNode) => (
+    <div className="mb-3 flex items-center justify-between gap-3">
+      <div className="min-w-0 flex items-center gap-2">
         <h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">{title}</h3>
         <InfoTooltip copy={copy} />
       </div>
+      {action ? <div className="shrink-0">{action}</div> : null}
     </div>
   )
 
@@ -876,23 +877,28 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
       </section>
 
       <section className="pt-5">
-        {renderSectionHeader('Archived Workspaces', 'History shelf. Kept out of the main loop, but still recoverable.')}
-
         {archivedEntries.length === 0 ? (
-          <p className="px-1 py-1 text-xs text-text-muted">
-            No archived workspaces.
-          </p>
+          <>
+            {renderSectionHeader('Archived Workspaces', 'History shelf. Kept out of the main loop, but still recoverable.')}
+            <p className="px-1 py-1 text-xs text-text-muted">
+              No archived workspaces.
+            </p>
+          </>
         ) : (
           <Dialog>
-            <DialogTrigger asChild>
-              <UiButton
-                variant="link"
-                size="sm"
-                className="h-auto px-1 py-0 text-sm font-medium text-text-secondary hover:text-text-primary"
-              >
-                View archived workspaces ({archivedEntries.length})
-              </UiButton>
-            </DialogTrigger>
+            {renderSectionHeader(
+              'Archived Workspaces',
+              'History shelf. Kept out of the main loop, but still recoverable.',
+              <DialogTrigger asChild>
+                <UiButton
+                  variant="link"
+                  size="sm"
+                  className="h-auto whitespace-nowrap px-1 py-0 text-xs font-medium text-text-secondary hover:text-text-primary"
+                >
+                  Open archive ({archivedEntries.length})
+                </UiButton>
+              </DialogTrigger>
+            )}
             <DialogContent className="max-w-2xl gap-4">
               <DialogHeader className="pr-10">
                 <DialogTitle>Archived Workspaces</DialogTitle>
@@ -901,46 +907,74 @@ export function WorkspaceList({ projectId }: WorkspaceListProps) {
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="max-h-[min(65vh,44rem)] space-y-2 overflow-y-auto pr-1">
-                {archivedEntries.map((entry) => (
-                  <div
-                    key={entry.workspaceId}
-                    className="rounded-[1.15rem] border border-border/65 bg-bg-raised/22 px-4 py-3"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <div className="truncate text-sm font-medium text-text-primary">
+              <div className="max-h-[min(65vh,44rem)] overflow-y-auto pr-1">
+                <div className="overflow-hidden rounded-[1rem] border border-border/65 bg-bg-raised/16">
+                  <div className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)_auto] items-center gap-3 border-b border-border/65 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">
+                    <span>Name</span>
+                    <span>Last Edited</span>
+                    <span className="text-right">Actions</span>
+                  </div>
+
+                  <div className="divide-y divide-border/50">
+                    {archivedEntries.map((entry) => (
+                      <div
+                        key={entry.workspaceId}
+                        className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)_auto] items-center gap-3 px-4 py-2.5 transition-colors hover:bg-bg-hover/30"
+                      >
+                        <div className="min-w-0 flex items-center gap-2">
+                          <div className="min-w-0 truncate text-sm font-medium text-text-primary">
                             {entry.workspaceName}
                           </div>
                           {renderPanelPreview(entry.panels)}
                         </div>
-                        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
-                          <span>
-                            Last edited {formatWorkspaceLastEditedAt(entry.lastPanelEditedAt, archivedTimestampFormat, timestampNow)}
-                          </span>
+
+                        <div className="min-w-0 truncate text-[11px] text-text-muted">
+                          Last edited {formatWorkspaceLastEditedAt(entry.lastPanelEditedAt, archivedTimestampFormat, timestampNow)}
+                        </div>
+
+                        <div className="flex items-center justify-end gap-1">
+                          <ActionIconButton
+                            label="Restore to Saved"
+                            onClick={() => void handleRestoreToSaved(entry.workspaceId)}
+                            className="h-8 w-8 rounded-lg"
+                          >
+                            <svg className="h-4 w-4" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                              <path
+                                d="M6 2.25V7.25M6 7.25L3.9 5.15M6 7.25L8.1 5.15M2.5 9.5H9.5"
+                                stroke="currentColor"
+                                strokeWidth="1.35"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </ActionIconButton>
+
+                          <ActionIconButton
+                            label="Restore and Load"
+                            onClick={() => void handleRestoreAndLoad(entry.workspaceId)}
+                            className="h-8 w-8 rounded-lg"
+                          >
+                            <svg className="h-4 w-4" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                              <path
+                                d="M2.75 2.5H6.5M2.75 6H9.25M2.75 9.5H6.5"
+                                stroke="currentColor"
+                                strokeWidth="1.35"
+                                strokeLinecap="round"
+                              />
+                              <path
+                                d="M7 3.25L9.5 6L7 8.75"
+                                stroke="currentColor"
+                                strokeWidth="1.35"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </ActionIconButton>
                         </div>
                       </div>
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => void handleRestoreToSaved(entry.workspaceId)}
-                      >
-                        Restore to Saved
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => void handleRestoreAndLoad(entry.workspaceId)}
-                      >
-                        Restore and Load
-                      </Button>
-                    </div>
+                    ))}
                   </div>
-                ))}
+                </div>
               </div>
             </DialogContent>
           </Dialog>
